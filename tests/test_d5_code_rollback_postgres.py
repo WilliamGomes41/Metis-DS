@@ -140,7 +140,11 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             # never interpret this legacy scenario as a rollback of proof-v3.
             state = outcome['state']
             if name == 'current':
-                assert state.pop('workflow_recovery_version') == 13
+                assert state.pop('workflow_recovery_version') == 14
+                # This old-binary comparison covers pre-deletion work only.
+                # Never discard nonempty deletion history to manufacture parity.
+                assert state['workflow_tables'].pop('test_document_deletions') == []
+                assert state['workflow_tables'].pop('deleted_test_snapshots') == []
                 assert all(not row['envelope_payload'].get('prose_transitions')
                            for row in raw['state']['workflow_tables']['documents'])
                 # v12 now exports the complete existing decision payload. The

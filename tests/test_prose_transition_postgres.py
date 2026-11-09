@@ -170,7 +170,7 @@ def test_stop_wins_against_provider_in_flight_and_retains_preparation(tmp_path, 
 def test_restore_retains_stop_and_requires_capable_storage(tmp_path, production_console, monkeypatch, layout):
     from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
-    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state, WORKFLOW_RECOVERY_VERSION
     from tests.postgres_support import database, install_schema
     from tests.production_support import production_application
     monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', layout)
@@ -181,7 +181,7 @@ def test_restore_retains_stop_and_requires_capable_storage(tmp_path, production_
     legacy['archived_diagnostic'] = {'prose_transitions': ['unrelated diagnostic key']}
     legacy['workflow_tables']['documents'][0]['envelope_payload']['audit_payload'] = {
         'prose_transitions': ['unrelated audit key']}
-    assert _upgrade_workflow_state(legacy) == {**legacy, 'workflow_recovery_version': 13}
+    assert _upgrade_workflow_state(legacy) == {**legacy, 'workflow_recovery_version': WORKFLOW_RECOVERY_VERSION}
     receipt = transition.stop(console, **request(console, actor, sid, attempt))
     archive = source.export_state()
     for version in (7, 11, 12):

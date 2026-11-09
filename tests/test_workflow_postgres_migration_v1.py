@@ -26,6 +26,29 @@ from src.workflows.workflow_postgres_migration_v1 import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_test_reset_migration_keeps_workflow_only_installation_usable_and_fences_later_lineage(complete_postgres):
+    import psycopg
+    from psycopg.rows import dict_row
+    from tests.postgres_support import database
+    from src.workflows.workflow_postgres_migration_v1 import observe_schema
+    paths = migration_paths(ROOT)
+    with database(complete_postgres.dsn) as config:
+        with psycopg.connect(config.dsn, autocommit=True, row_factory=dict_row) as con:
+            con.execute((ROOT / 'db/schema_v2.sql').read_text())
+            assert apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))['status'] == 'PASS'
+            assert con.execute("SELECT to_regclass('public.source_snapshots') AS name").fetchone()['name'] is None
+            from src.documents.test_document_deletion_v1 import _storage
+            from src.operations_console_v1 import ConsoleError
+            with pytest.raises(ConsoleError, match='storage_not_ready'):
+                _storage(con)
+            con.execute((ROOT / 'db/migrations/001_canonical_source_lineage.sql').read_text())
+            assert 'public.source_snapshots.refuse_deleted_test_source' in observe_schema(con)['missing_triggers']
+            assert apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))['status'] == 'PASS'
+            # With canonical lineage present the source fence is mandatory.
+            con.execute('DROP TRIGGER refuse_deleted_test_source ON public.source_snapshots')
+            assert 'public.source_snapshots.refuse_deleted_test_source' in observe_schema(con)['missing_triggers']
+
+
 class FakeConnection:
     def __init__(self) -> None:
         self.applied: list[str] = []
@@ -78,7 +101,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-28:] == (
+    assert MIGRATION_NAMES[-29:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -107,6 +130,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "036_human_annotation_build.sql",
         "037_human_annotation_revisions.sql",
         "038_prose_transitions.sql",
+        "039_test_document_deletion.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64
@@ -166,13 +190,14 @@ def test_registered_plan_installs_stop_guards_and_verifies_their_enabled_relatio
     paths = migration_paths(ROOT)
     with psycopg.connect(complete_postgres.dsn, row_factory=dict_row) as con:
         for table, trigger in REQUIRED_TRIGGERS:
-            con.execute(f'DROP TRIGGER {trigger} ON workflow.{table}')
+            relation = table if '.' in table else 'workflow.'+table
+            con.execute(f'DROP TRIGGER {trigger} ON {relation}')
         assert set(observe_schema(con)['missing_triggers']) == {
             f'{table}.{trigger}' for table, trigger in REQUIRED_TRIGGERS}
         con.commit()
         result = apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
         assert result['status'] == 'PASS'
-        assert result['applied'][-2:] == ['037_human_annotation_revisions.sql', '038_prose_transitions.sql']
+        assert result['applied'][-3:] == ['037_human_annotation_revisions.sql', '038_prose_transitions.sql', '039_test_document_deletion.sql']
         con.execute('ALTER TABLE workflow.processing_attempts DISABLE TRIGGER guard_prose_transition_attempt')
         observed = observe_schema(con)
         assert observed['status'] == 'BLOCKED'

@@ -151,6 +151,24 @@
       ]
     ],
     [
+      "/documents/test-delete",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/documents/test-delete",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/documents/test-delete/receipt",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/formation-problems",
       [
         "GET"

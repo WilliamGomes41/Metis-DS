@@ -50,7 +50,7 @@ def test_pre_topic_upgrade_preserves_other_authorities_and_input() -> None:
     before = deepcopy(state)
     upgraded = _upgrade_workflow_state(state)
     assert state == before
-    assert upgraded["workflow_recovery_version"] == 13  # Also pins explicit prose execution stops.
+    assert upgraded["workflow_recovery_version"] == 14  # Also retains test-deletion fences.
     assert upgraded["api_access_tables"] == before["api_access_tables"]
     for table in ("accounts", "audit_records"):
         assert upgraded["workflow_tables"][table] == before["workflow_tables"][table]
