@@ -73,7 +73,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         envelope = console.list_envelopes()[0]
         sid = envelope["snapshot_id"]
         assert "Document veilig ontvangen" in response.text
-        assert "Status: nog niet gestart" in response.text
+        assert "Bron openen voor annotatie" in response.text
         assert not console._envelope(sid).get("processing_attempts")
         started = client.post("/source-selection/start", data={"document": sid,
             "command_id": "selection-diagnostics", "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
