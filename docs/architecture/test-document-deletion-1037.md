@@ -36,6 +36,10 @@ vergrendeld. Een annotatiebewerking met hetzelfde aantal annotaties maakt een
 oude bevestiging ongeldig. Broncontroles en publicatieweigeringen gebruiken
 dezelfde snapshotvergrendeling als verwijderen; databasefences weigeren late
 registratie voor een reeds verwijderd document.
+De lockvolgorde begint bij de bestaande autorisatiegrens, zodat een gelijktijdige
+rolwijziging vóór de accountcontrole kan afronden. Bezette document- en
+publicatiereserveringen worden direct geweigerd. Het verwijder-event blijft aan
+het publisher-account gekoppeld via de bestaande auditresolutie.
 
 De SQL-fences blijven actief na uitschakelen van de functie of terugrollen van
 applicatiecode. Workflowbackup 14 neemt de registraties op. Een oude archivevorm

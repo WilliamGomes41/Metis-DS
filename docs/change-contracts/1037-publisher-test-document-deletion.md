@@ -74,8 +74,9 @@ Cleanup/decommission criteria: turn the setting off after the test/build phase; 
 Failure blast radius: one confirmed stored LogicalDocument; table locks are short SQL-only critical sections; no external source I/O under them.
 Adversarial proof matrix: wrong/revoked role, mode off, missing confirmation, changed version/release membership, running legacy/operational attempts, shared release/source ownership, rollback after partial SQL, exact duplicate/conflicting commands, concurrent publication/ingest, stale direct snapshot inserts, restart/reconciliation and current/legacy recovery exports.
 
-Lock order: existing local kernel store lock, publisher account row, workflow
-documents table write lock, operational processing-attempt table write lock
+Lock order: existing local kernel store lock, shared authorization advisory lock,
+publisher account row, review-ledger lock, workflow documents table write lock,
+operational processing-attempt table write lock
 with NOWAIT, lineage document rows FOR UPDATE NOWAIT, canonical
 logical-publication advisory lock 2110023, canonical tables in their normal
 publication write order and snapshot
@@ -84,6 +85,9 @@ table lock excludes concurrent lineage inserts; canonical locks serialize
 direct/legacy writers too. No heavy extraction or Blob I/O occurs inside this
 transaction. Receipt and deleted-snapshot fences commit with all row deletions.
 No temporary dual read/write or destructive schema migration is introduced.
+All document/canonical table and row reservations use NOWAIT; canonical logical
+and snapshot advisory reservations use try-lock. An exact duplicate receipt is
+returned after authorization and before those deletion-specific reservations.
 
 ## Verification and separate adversarial review
 
@@ -165,6 +169,15 @@ history, canonical sharing, feature disable/rollback and backup import.
   succeeds. A late real registration and a refusal insert against the deleted
   snapshot are rejected. The held-row, same-count edit and in-flight registration
   scenarios were first reproduced red, then passed with the repair.
+- A later review exposed blocking document-table acquisition and an unbound
+  deletion-ledger actor. Native document/canonical table and canonical-advisory
+  contention now gives the controlled busy result; an already-completed exact
+  command still returns its receipt under contention. A real concurrent role
+  change reproduced an authorization/account deadlock. The established shared
+  authorization lock is now taken before the account row and the current role
+  is rechecked afterwards. The event uses the locked account's username through
+  the existing review-store actor resolver, preserving actor_account_id. All five
+  failures were first reproduced red and are covered by the native end set.
 
 Source files and the global hash chain are intentionally retained, as disclosed
 in the confirmation. Full suite/CI outcomes remain required before release.

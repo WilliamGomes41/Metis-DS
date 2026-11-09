@@ -163,24 +163,24 @@ def delete(console, *, actor_id, snapshot_id, command_id, expected_plan, confirm
     with console._store_write_lock():
         with workflow_transaction(store) as con:
             _storage(con)
-            account = con.execute('SELECT roles,retirement FROM workflow.accounts WHERE account_id=%s FOR UPDATE',
+            console.workflow_review_store._lock_authorizations(con)
+            account = con.execute('SELECT username,roles,retirement FROM workflow.accounts WHERE account_id=%s FOR UPDATE',
                                   (actor_id,)).fetchone()
             if account is None or account['retirement'] is not None or 'publisher' not in account['roles']:
                 raise ConsoleError('publisher_role_required')
-            console.workflow_review_store._lock_authorizations(con)
-            console.workflow_review_store._lock_review_ledger(con)
-            con.execute('LOCK TABLE workflow.documents IN SHARE ROW EXCLUSIVE MODE')
             previous = con.execute('SELECT request_hash,result FROM workflow.test_document_deletions WHERE command_id=%s',
                                    (command_id,)).fetchone()
             if previous:
                 if previous['request_hash'] != request_hash:
                     raise ConsoleError('test_document_deletion_command_conflict')
                 return previous['result']
+            console.workflow_review_store._lock_review_ledger(con)
             # The document table excludes inline attempt starts. Operational
             # attempts have their own writer boundary; their document row lock
             # alone is compatible with the table lock above. NOWAIT refuses an
             # already-active writer instead of reversing its row-lock order.
             try:
+                con.execute('LOCK TABLE workflow.documents IN SHARE ROW EXCLUSIVE MODE NOWAIT')
                 con.execute('LOCK TABLE workflow.processing_attempts IN SHARE ROW EXCLUSIVE MODE NOWAIT')
             except LockNotAvailable as exc:
                 raise ConsoleError('test_document_deletion_busy') from exc
@@ -192,9 +192,14 @@ def delete(console, *, actor_id, snapshot_id, command_id, expected_plan, confirm
                     'ORDER BY snapshot_id FOR UPDATE NOWAIT', (selected['logical_document_id'],)).fetchall()
             except LockNotAvailable as exc:
                 raise ConsoleError('test_document_deletion_busy') from exc
-            con.execute('SELECT pg_advisory_xact_lock(2110023,hashtext(%s))', (selected['logical_document_id'],))
-            for table in CANONICAL_TABLES:
-                con.execute('LOCK TABLE public.'+table+' IN SHARE ROW EXCLUSIVE MODE')
+            if not con.execute('SELECT pg_try_advisory_xact_lock(2110023,hashtext(%s)) AS locked',
+                               (selected['logical_document_id'],)).fetchone()['locked']:
+                raise ConsoleError('test_document_deletion_busy')
+            try:
+                for table in CANONICAL_TABLES:
+                    con.execute('LOCK TABLE public.'+table+' IN SHARE ROW EXCLUSIVE MODE NOWAIT')
+            except LockNotAvailable as exc:
+                raise ConsoleError('test_document_deletion_busy') from exc
             plan = _inventory(con, snapshot_id)
             for sid in plan['snapshot_ids']:
                 if not con.execute('SELECT pg_try_advisory_xact_lock(%s,hashtext(%s)) AS locked',
@@ -237,7 +242,7 @@ def delete(console, *, actor_id, snapshot_id, command_id, expected_plan, confirm
             con.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
             con.execute('DELETE FROM workflow.documents WHERE snapshot_id=ANY(%s)', (ids,))
             console.workflow_review_store.append_event(event_type='test_document_deleted',
-                object_id=plan['logical_document_id'],object_version='',actor=actor_id,
+                object_id=plan['logical_document_id'],object_version='',actor=account['username'],
                 details={'command_id':command_id,'logical_document_id':plan['logical_document_id'],
                          'snapshot_count':len(ids),'release_count':len(releases)})
         # Reload only after the authoritative commit. A refresh failure cannot

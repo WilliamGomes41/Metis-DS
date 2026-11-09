@@ -61,9 +61,15 @@ def test_published_document_reset_is_durable_idempotent_and_preserves_review_cha
                       'public.canonical_object_versions'):
             assert con.execute('SELECT count(*) AS n FROM '+table).fetchone()['n'] == 0
         assert con.execute('SELECT count(*) AS n FROM workflow.deleted_test_snapshots').fetchone()['n'] == 1
+        event = con.execute("SELECT actor_account_id FROM workflow.review_events WHERE event_type='test_document_deleted'").fetchone()
+        assert event['actor_account_id']==request['actor_id']
     resumed = restart_production(console)
     assert resumed.list_envelopes() == []
     assert deletion.delete(resumed, **request) == result
+    with console.workflow_document_store._connect() as writer:
+        writer.execute("SET LOCAL idle_in_transaction_session_timeout='5s'")
+        writer.execute('LOCK TABLE workflow.documents IN ROW EXCLUSIVE MODE')
+        assert deletion.delete(resumed, **request)==result
     assert deletion.receipt(resumed, actor_id=request['actor_id'], command_id=request['command_id']) == result
     with pytest.raises(ConsoleError, match='command_conflict'):
         deletion.delete(resumed, **{**request,'reason':'Een ander verzoek met dezelfde sleutel.'})
@@ -223,7 +229,7 @@ def test_attempt_cannot_commit_running_after_deletion_inventory(production_conso
         assert pending[0].result(timeout=10)=='document_absent'
 
 
-@pytest.mark.parametrize('writer',['attempt','document'])
+@pytest.mark.parametrize('writer',['attempt','document','document-table','canonical-table','canonical-advisory'])
 def test_uncommitted_writer_refuses_deletion_without_deadlock(production_console,tmp_path,monkeypatch,writer):
     from contextlib import contextmanager
     monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
@@ -240,6 +246,13 @@ def test_uncommitted_writer_refuses_deletion_without_deadlock(production_console
     with console.workflow_document_store._connect() as worker:
         if writer=='document':
             worker.execute('SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE',(fresh,))
+        elif writer=='document-table':
+            worker.execute('UPDATE workflow.documents SET title=title WHERE snapshot_id=%s',(fresh,))
+        elif writer=='canonical-table':
+            worker.execute('LOCK TABLE public.publication_registry IN ROW EXCLUSIVE MODE')
+        elif writer=='canonical-advisory':
+            logical = console._envelope(sid)['logical_document_id']
+            worker.execute('SELECT pg_advisory_xact_lock(2110023,hashtext(%s))',(logical,))
         else:
             worker.execute("INSERT INTO workflow.processing_attempts "
                 "(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
@@ -252,6 +265,49 @@ def test_uncommitted_writer_refuses_deletion_without_deadlock(production_console
     assert console.canonical_publication_store.active_publication_rows()
     with console.workflow_document_store._connect() as con:
         assert con.execute('SELECT count(*) AS n FROM workflow.test_document_deletions').fetchone()['n']==0
+
+
+def test_authorization_change_locks_before_account_and_refuses_delete(production_console,tmp_path,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from queue import Queue
+    from time import monotonic, sleep
+    import psycopg
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
+    console, accounts, sid, release, source = published(production_console,tmp_path)
+    request = command(console,accounts,sid)
+    original = deletion.workflow_transaction
+    pids = Queue()
+    @contextmanager
+    def bounded_transaction(store):
+        with original(store) as con:
+            con.execute("SET LOCAL lock_timeout='3s'")
+            pids.put(con.info.backend_pid)
+            yield con
+    monkeypatch.setattr(deletion,'workflow_transaction',bounded_transaction)
+    dsn = console.workflow_document_store.config.dsn
+    with ThreadPoolExecutor(1) as pool, psycopg.connect(dsn) as changer:
+        changer.execute("SET LOCAL lock_timeout='2s'")
+        console.workflow_review_store._lock_authorizations(changer)
+        pending = pool.submit(deletion.delete,console,**request)
+        try:
+            pid = pids.get(timeout=5)
+            deadline = monotonic()+5
+            with psycopg.connect(dsn,autocommit=True) as observer:
+                while True:
+                    row = observer.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s',(pid,)).fetchone()
+                    if row and row[0]=='Lock': break
+                    assert monotonic()<deadline, 'delete did not reach the authorization boundary'
+                    sleep(.01)
+            changer.execute("UPDATE workflow.accounts SET roles=ARRAY['researcher']::text[] WHERE account_id=%s",(request['actor_id'],))
+            changer.commit()
+        finally:
+            changer.rollback()
+        with pytest.raises(ConsoleError,match='publisher_role_required'):
+            pending.result(timeout=5)
+    with psycopg.connect(dsn) as con:
+        assert con.execute('SELECT count(*) FROM workflow.documents WHERE snapshot_id=%s',(sid,)).fetchone()[0]==1
+        assert con.execute('SELECT count(*) FROM workflow.test_document_deletions').fetchone()[0]==0
 
 
 def test_annotation_edit_with_same_head_count_invalidates_confirmation(production_console,tmp_path,monkeypatch):
