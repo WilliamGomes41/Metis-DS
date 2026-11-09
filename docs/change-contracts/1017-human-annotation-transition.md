@@ -135,9 +135,17 @@ architectuurgrenzen PASS, `git diff --check` PASS en gerichte controle van
 21 lokale document-/codeverwijzingen PASS. Productcode is ongewijzigd;
 geen console-, PostgreSQL-, browser- of volledige regressiesuite gedraaid.
 
-Release-controlpreflight met de twee documentpaden rapporteert BLOCKED:
-de bestaande controle vraagt gewijzigde testmarkers/evidencepaden voor
-scope/belofte, slop en releasebewijs. Er is geen producttest toegevoegd die
-alleen deze documenttekst weerspiegelt. Deze branch is daarom een
-voorbereidingsartefact, geen merge-/releaseklare PR. Dit is een
-repositorycheck, geen automatische autorisatieafwijzing.
+De eerste release-controlpreflight met alleen de twee documentpaden was
+BLOCKED: gewijzigde testmarkers/evidencepaden ontbraken voor scope/belofte,
+slop en releasebewijs. PR #1033 reproduceerde deze fout in CI.
+`tests/test_human_annotation_transition_docs.py` controleert nu de lokale
+documentlinks en de bron-/scriptpaden uit de inventaris en registreert dat
+gerichte documentbewijs bij de bestaande releasecheck. Deze controles bewijzen
+geen productgedrag, cutover of praktijkacceptatie. CI-regels zijn ongewijzigd.
+
+Hercontrole na herstel: twee gerichte documenttests via `unittest` PASS,
+release-control met beide documenten en het nieuwe testpad PASS,
+repositorypreflight PASS (2311 bestanden), architectuurgrenzen, compileall en
+diffcheck PASS. De aanvullende lokale pytest-run kon niet starten omdat pytest
+in deze omgeving niet geïnstalleerd is; dat is geen test-PASS. De GitHub-CI-run
+op de nieuwe PR-head blijft het bewijs voor de volledige suite.
