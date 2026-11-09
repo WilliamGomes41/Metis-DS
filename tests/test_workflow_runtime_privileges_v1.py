@@ -138,6 +138,20 @@ def test_test_document_delete_grants_are_only_requested_when_explicitly_enabled(
     assert _observe(con,role,test_document_deletion=True)['status'] == 'PASS'
 
 
+def test_delete_profile_works_with_view_checks_disabled_and_no_prior_view_grants(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con,role,skip={'view_checks'})
+    assert _observe(con,role)['status'] == 'PASS'
+    for sql in _observe(con,role,test_document_deletion=True)['grants']:
+        con.execute(sql)
+    assert _observe(con,role,test_document_deletion=True)['status'] == 'PASS'
+    # DELETE ... WHERE reads snapshot_id even when there is nothing to delete.
+    # Execute as the real narrow runtime role, not as the test administrator.
+    with con.transaction():
+        con.execute(f'SET LOCAL ROLE "{role}"')
+        con.execute("DELETE FROM workflow.view_checks WHERE snapshot_id='nonexistent-test-document'")
+
+
 def test_deliberately_narrow_grants_do_not_fail(runtime_role):
     con, role = runtime_role
     _grant_expected(con, role)

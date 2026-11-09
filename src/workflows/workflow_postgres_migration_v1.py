@@ -378,12 +378,14 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
                 target = f"workflow.{name}" if kind == "r" else f"SEQUENCE workflow.{name}"
                 grants.append(f'GRANT {", ".join(lacking)} ON {target} TO "{role}";')
         if test_document_deletion:
-            from src.documents.test_document_deletion_v1 import DELETE_TABLES
-            for relation in DELETE_TABLES:
-                if not connection.execute('SELECT has_table_privilege(%s,%s,\'DELETE\') AS ok',
-                                          (role,relation)).fetchone()['ok']:
-                    missing.append(relation+':DELETE')
-                    grants.append(f'GRANT DELETE ON {relation} TO "{role}";')
+            from src.documents.test_document_deletion_v1 import DELETE_PRIVILEGES
+            for relation, privileges in DELETE_PRIVILEGES.items():
+                lacking = [p for p in privileges if not connection.execute(
+                    'SELECT has_table_privilege(%s,%s,%s) AS ok',
+                    (role,relation,p)).fetchone()['ok']]
+                if lacking:
+                    missing.extend(relation+':'+p for p in lacking)
+                    grants.append(f'GRANT {", ".join(lacking)} ON {relation} TO "{role}";')
     except Exception as exc:
         raise WorkflowMigrationError("workflow_runtime_privilege_observation_failed") from exc
     return {"status": "PASS" if not missing and not absent else "BLOCKED", "runtime_role": role,

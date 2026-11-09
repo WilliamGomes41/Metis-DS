@@ -19,6 +19,7 @@ CANONICAL_TABLES = ('source_snapshots', 'canonical_object_versions', 'canonical_
     'publication_releases', 'publication_release_items', 'publication_registry', 'audit_events')
 DELETE_TABLES = tuple('public.' + name for name in CANONICAL_TABLES) + (
     'workflow.documents', 'workflow.publication_refusals', 'workflow.view_checks')
+DELETE_PRIVILEGES = {table: ('SELECT', 'DELETE') for table in DELETE_TABLES}
 TRIGGERS = {('workflow.documents', 'refuse_deleted_test_document'),
             ('workflow.review_events', 'guard_test_deletion_ledger'),
             ('source_snapshots', 'refuse_deleted_test_source')}
@@ -49,8 +50,9 @@ def _storage(con):
         ([name for _, name in TRIGGERS],)).fetchall()}
     if guards != TRIGGERS:
         raise ConsoleError('test_document_deletion_storage_not_ready')
-    if any(not con.execute('SELECT has_table_privilege(current_user,%s,\'DELETE\') AS ok',
-                           (table,)).fetchone()['ok'] for table in DELETE_TABLES):
+    if any(not con.execute('SELECT has_table_privilege(current_user,%s,%s) AS ok',
+                           (table, privilege)).fetchone()['ok']
+           for table, privileges in DELETE_PRIVILEGES.items() for privilege in privileges):
         raise ConsoleError('test_document_deletion_grants_required')
 
 

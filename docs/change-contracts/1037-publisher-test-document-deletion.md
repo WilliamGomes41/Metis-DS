@@ -67,7 +67,7 @@ Why local patching is insufficient: removing the published-delete guard alone wo
 Current authority/writer/reader map: workflow documents/concurrency/operational-input stores own receipt/object/task/review state; PostgresCanonicalPublicationStore owns canonical versions/releases/source bindings and registry; AzureBlobSourceStore owns frozen bytes; workflow review store owns the global hash chain. Readers include console Documenten/Review/annotations, Product API, MCP, startup release reconciliation and workflow backup/restore. Ingest, successor, review/build activation and publication/recovery are alternate writers. The new operation coordinates SQL in one existing database; it does not create a second publication authority.
 Supported runtime topologies: native PostgreSQL production composition in Azure and local native PostgreSQL tests; legacy-inline and operational input/task layouts. Mismatched stores/databases and missing storage capability are refused. File-only mutation is unsupported.
 Persisted-state impact: additive migration 039 creates append-only deletion receipts and deleted-snapshot IDs plus insertion fences on workflow documents and canonical source snapshots. No existing row is changed by installing the migration.
-Compatibility/migration plan: expand schema and deploy default-off feature first; optional runtime DELETE grants are verified explicitly for test deletion. Enable only during testing. Tombstone triggers keep stale/older writers from resurrecting already deleted snapshots.
+Compatibility/migration plan: expand schema and deploy default-off feature first; optional runtime SELECT/DELETE grants are verified explicitly for test deletion. Enable only during testing. Tombstone triggers keep stale/older writers from resurrecting already deleted snapshots.
 Rollback/recovery plan: disable the feature to stop new deletes; never remove tombstones on code rollback. Versioned recovery carries them. A native pre-deletion workflow-chain backup/restore proof through the existing PG/Blob backup owner demonstrates data recovery; code rollback alone does not restore deleted data.
 Cutover trigger: migration/grant preflight, passing native/browser/full CI and human release review; explicit app setting enables the action.
 Cleanup/decommission criteria: turn the setting off after the test/build phase; retain receipt/fences and supported recovery readers while deleted snapshot IDs could be replayed.
@@ -123,6 +123,10 @@ history, canonical sharing, feature disable/rollback and backup import.
 - Chromium proved required confirmation, wrong-title rejection with retained
   reason input, whole-lineage receipt/reload, API absence and the unrelated
   document remaining available at desktop/mobile sizes and 200% text zoom.
+- A real narrow runtime role with view checks disabled reproduced a permission
+  failure: DELETE with a snapshot condition also needs SELECT. The optional
+  grant profile now checks both privileges; the same SQL succeeds after the
+  reported grants, without enabling view checks or widening normal grants.
 
 Source files and the global hash chain are intentionally retained, as disclosed
 in the confirmation. Full suite/CI outcomes remain required before release.

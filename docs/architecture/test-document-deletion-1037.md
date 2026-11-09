@@ -43,7 +43,9 @@ De normale containerreleaseprocedure blijft gelden. Eerst migratie 039 via het
 gecontroleerde migratieplan toepassen. De migratie verwijdert geen bestaande
 gegevens. Gebruik bij het controleren van de runtimegrants expliciet
 `verify --runtime-role <rol> --test-document-deletion`; alleen dit profiel vraagt
-de extra DELETE-grants op de canonical tabellen en operationele documentregels.
+de ontbrekende SELECT- en DELETE-grants op de canonical tabellen en operationele
+documentregels. SELECT is ook nodig voor de verwijdervoorwaarden op
+`view_checks` wanneer die functie uitstaat en er nog geen leesrechten zijn.
 De verifier voert GRANT-statements niet uit.
 
 Na succesvolle review en release kan de beheerder
