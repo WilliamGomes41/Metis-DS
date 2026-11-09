@@ -99,9 +99,14 @@ def test_whole_lineage_reset_removes_annotations_and_serving_but_preserves_other
     public = TestClient(create_product_app('real',paths=paths(tmp_path/'api'),tenant_registry=registry(docs=('*',)),
         canonical_publication_store=console.canonical_publication_store,immutable_source_store=source))
     assert public.get('/v1/knowledge/'+old_objects[0]['canonical_json']['object_id'],headers=headers()).status_code == 200
+    peer = restart_production(console)
+    assert first in peer._envelopes  # Its startup mirror deliberately predates deletion.
     result = deletion.delete(console,**command(console,accounts,first))
     assert set(result['snapshot_ids']) == {first,second,draft}
     assert result['versions'] == 3 and result['publications'] == 2
+    assert {e['snapshot_id'] for e in peer.list_envelopes()} == {other}
+    with pytest.raises(ConsoleError,match='unknown_snapshot'):
+        peer._envelope(first)
     resumed = restart_production(console)
     assert {e['snapshot_id'] for e in resumed.list_envelopes()} == {other}
     assert resumed.canonical_publication_store.active_publication_rows() == other_rows

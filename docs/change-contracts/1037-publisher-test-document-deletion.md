@@ -144,6 +144,12 @@ history, canonical sharing, feature disable/rollback and backup import.
   executing migration SQL. Normal verification conditionally requires the
   source fence when its canonical table exists; deletion preflight always
   requires all fences. Both review findings were first reproduced red.
+- A review suggestion assumed the base console's startup maps served native
+  document reads. The production PostgreSQL mixin already overrides both list
+  and document lookup to read the database. A peer kernel created before
+  deletion, deliberately retaining its stale startup map, immediately sees
+  only the unrelated document and refuses the deleted snapshot. Both input
+  layouts pass; no new process-shared invalidation mechanism is needed.
 
 Source files and the global hash chain are intentionally retained, as disclosed
 in the confirmation. Full suite/CI outcomes remain required before release.
