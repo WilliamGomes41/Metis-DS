@@ -1,6 +1,7 @@
 """Publisher test reset at the native workflow/canonical boundary.
 
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
+# release-control-evidence: slop
 # release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
 """
 from copy import deepcopy
@@ -10,6 +11,7 @@ import pytest
 from src.documents import test_document_deletion_v1 as deletion
 from src.operations_console_v1 import ConsoleError
 from tests.production_support import restart_production
+from tests.test_workflow_runtime_privileges_v1 import runtime_role  # noqa: F401 - shared fixture
 from tests.test_vsa_publish_readiness_ui_v1 import _console_with_document, _complete_review
 from tests.test_vsa_publish_readiness_ui_v1 import HTML_FIXTURE, TEST_PASSWORD
 
@@ -513,3 +515,116 @@ def test_denied_test_reset_has_no_effect(production_console, tmp_path, monkeypat
     assert console.canonical_publication_store.active_publication_rows() == before
     with console.workflow_document_store._connect() as con:
         assert con.execute('SELECT count(*) AS n FROM workflow.test_document_deletions').fetchone()['n'] == 0
+
+
+@pytest.mark.parametrize('rebuild_fk', [False, True], ids=['original-fk', 'index-cascades-first'])
+@pytest.mark.parametrize('storage', ['legacy', 'v1'])
+def test_whole_document_reset_with_relational_attempt_index(
+        production_console, tmp_path, monkeypatch, runtime_role, rebuild_fk, storage):
+    """Real HTTP confirmation must not depend on FK creation order or input layout."""
+    from psycopg import sql
+    import psycopg
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    from tests.test_formation_repair_workplace import form_data
+    from tests.test_workflow_runtime_privileges_v1 import _grant_expected, _observe
+
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION', 'on')
+    console, accounts, sid, release, source = published(production_console, tmp_path)
+    monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', storage)
+    successor = receive(console, accounts, prior=sid)
+    form_source(console, accounts, successor)
+    other = receive(console, accounts, title='Andere documentlijn')
+    store = console.workflow_document_store
+    with store._connect() as con:
+        assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s',
+                           (successor,)).fetchone()['n'] > 0
+        assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempt_inputs WHERE snapshot_id=%s',
+                           (successor,)).fetchone()['n'] > 0
+        if rebuild_fk:
+            # Same FK semantics, different creation order, e.g. after an older upgrade.
+            con.execute('ALTER TABLE workflow.processing_attempts DROP CONSTRAINT processing_attempts_snapshot_id_fkey')
+            con.execute('ALTER TABLE workflow.processing_attempts ADD CONSTRAINT processing_attempts_snapshot_id_fkey '
+                        'FOREIGN KEY(snapshot_id) REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE')
+
+    admin, role = runtime_role
+    _grant_expected(admin, role)
+    for statement in _observe(admin, role, test_document_deletion=True)['grants']:
+        admin.execute(statement)
+    assert _observe(admin, role, test_document_deletion=True)['status'] == 'PASS'
+    connect = psycopg.connect
+    def runtime_connect(*args, **kwargs):
+        con = connect(*args, **kwargs)
+        previous = con.autocommit
+        con.autocommit = True
+        con.execute(sql.SQL('SET ROLE {}').format(sql.Identifier(role)))
+        con.autocommit = previous
+        return con
+
+    with monkeypatch.context() as runtime:
+        runtime.setattr(psycopg, 'connect', runtime_connect)
+        with TestClient(application_for(console)) as client:
+            client.post('/login', data={'username':accounts['publisher']['username'], 'password':TEST_PASSWORD})
+            page = client.get('/documents/test-delete', params={'document':sid})
+            assert page.status_code == 200
+            fields = {**form_data(page, '/documents/test-delete'), 'reason':'Relationale verwerkingstest opruimen.',
+                      'confirm_title':console._envelope(sid)['title'], 'confirmed_test':'yes'}
+            response = client.post('/documents/test-delete', data=fields)
+            assert response.status_code == 200 and 'Testdocument verwijderd' in response.text
+            assert client.post('/documents/test-delete', data=fields).status_code == 200
+    resumed = restart_production(console)
+    assert [env['snapshot_id'] for env in resumed.list_envelopes()] == [other]
+    with store._connect() as con:
+        for table in ('processing_attempts', 'processing_attempt_inputs', 'document_inputs'):
+            assert con.execute('SELECT count(*) AS n FROM workflow.' + table + ' WHERE snapshot_id=ANY(%s)',
+                               ([sid, successor],)).fetchone()['n'] == 0
+        assert con.execute('SELECT count(*) AS n FROM workflow.test_document_deletions').fetchone()['n'] == 1
+    assert resumed.canonical_publication_store.active_publication_rows() == []
+
+
+def test_attempt_index_upgrade_preserves_history_guards_and_repairs_existing_cascade(
+        production_console, tmp_path, monkeypatch):
+    """An existing database is repaired without deleting or rewriting any stored input."""
+    from pathlib import Path
+    import psycopg
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION', 'on')
+    console, accounts, sid, release, source = published(production_console, tmp_path)
+    monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
+    successor = receive(console, accounts, prior=sid)
+    form_source(console, accounts, successor)
+    store = console.workflow_document_store
+    root = Path(__file__).resolve().parents[1]
+    old = (root/'db/migrations/030_operational_document_inputs.sql').read_text()
+    start = old.index('CREATE OR REPLACE FUNCTION workflow.guard_processing_attempt_input()')
+    end = old.index('$body$;', start) + len('$body$;')
+    migration = (root/'db/migrations/040_attempt_index_document_cascade.sql').read_text()
+    with store._connect() as con:
+        con.execute(old[start:end])
+        con.execute('ALTER TABLE workflow.processing_attempts DROP CONSTRAINT processing_attempts_snapshot_id_fkey')
+        con.execute('ALTER TABLE workflow.processing_attempts ADD CONSTRAINT processing_attempts_snapshot_id_fkey '
+                    'FOREIGN KEY(snapshot_id) REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE')
+        before = con.execute('SELECT to_jsonb(i) AS record FROM workflow.processing_attempt_inputs i ORDER BY attempt_id').fetchall()
+    rows = console.canonical_publication_store.active_publication_rows()
+    request = command(console, accounts, sid)
+    with pytest.raises(psycopg.errors.RaiseException, match='^document_inputs_attempt_index_immutable'):
+        deletion.delete(console, **request)
+    assert console.canonical_publication_store.active_publication_rows() == rows
+    with store._connect() as con:
+        assert con.execute('SELECT count(*) AS n FROM workflow.test_document_deletions').fetchone()['n'] == 0
+        assert con.execute('SELECT count(*) AS n FROM workflow.deleted_test_snapshots').fetchone()['n'] == 0
+        con.execute(migration)
+        con.execute(migration)  # Idempotent upgrade, no stored input changes.
+        assert con.execute('SELECT to_jsonb(i) AS record FROM workflow.processing_attempt_inputs i ORDER BY attempt_id').fetchall() == before
+    for statement in (
+        'DELETE FROM workflow.processing_attempt_inputs WHERE snapshot_id=%s',
+        "UPDATE workflow.processing_attempt_inputs SET state='forged' WHERE snapshot_id=%s",
+        'TRUNCATE workflow.processing_attempt_inputs',
+    ):
+        with pytest.raises(psycopg.errors.RaiseException, match='document_inputs_attempt_index_'):
+            with store._connect() as con:
+                con.execute(statement, (successor,) if '%s' in statement else None)
+    with store._connect() as con:
+        assert con.execute('SELECT to_jsonb(i) AS record FROM workflow.processing_attempt_inputs i ORDER BY attempt_id').fetchall() == before
+    assert deletion.delete(console, **request)['deleted']
+    assert console.list_envelopes() == []
