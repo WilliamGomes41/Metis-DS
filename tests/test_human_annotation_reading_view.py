@@ -1,4 +1,7 @@
 """The annotation reader presents one document while retaining exact anchors."""
+# release-control-evidence: scope/belofte — every supplied block is readable in document order.
+# release-control-evidence: slop — no repeated per-block selection controls in the reader.
+# release-control-evidence: releasebewijs — the reader regression below checks both facts.
 from html.parser import HTMLParser
 
 from src.vorming.human_annotation_ui_v1 import source_document_html
