@@ -25,6 +25,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
+from src.vorming.document_spec_v1 import document_spec
 from src.vorming.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json as bounded_post_json
 
 # Per execution, including worker threads; never persisted as document authority.
@@ -1036,29 +1037,6 @@ def semantic_units_before_review(
         model_limits=model_limits,
     )
     return units
-
-
-def document_spec(*, document_id, title, family, class_, content_kind, units):
-    """Structural envelope shared by producers; candidate units come from their owner."""
-    objects: list[dict[str, Any]] = [
-        {
-            "object_id": f"{document_id}-document",
-            "object_type": "document",
-            "text": title,
-            "review_track": "technical",
-        }
-    ]
-    objects.extend(units)
-    spec = {
-        "spec_version": "console-ingest-1.0",
-        "document_id": document_id,
-        "object_version": "1.0",
-        "target_group": [],
-        "care_setting": [],
-        "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
-        "objects": objects,
-    }
-    return spec
 
 
 def semantic_spec_from_fragments(

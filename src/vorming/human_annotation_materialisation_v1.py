@@ -2,6 +2,7 @@
 from collections import defaultdict
 from copy import deepcopy
 
+from src.vorming.document_spec_v1 import document_spec
 from src.vorming.human_annotation_preview_v1 import inspect_document
 from src.vorming.human_annotation_contract_v1 import MODE
 from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates, resolve_source_selection
@@ -46,7 +47,6 @@ def build_objects(seal, entries, *, fragments):
     units += [unit for _, unit in _coverage_remainders(_reconstructed_blocks(fragments),
         document_id=context['document_id'], selected_ranges_by_block=occupied,
         assessments=inspection['source_assessments'], context_spans=context_spans, source_version=source_version)]
-    from src.vorming.pre_review_semantic_v1 import document_spec
     from src.operations_console_v1 import canonical_source_manifest, transform_generic
     from src.vorming.admission_gate_v1 import apply_admission_gate
     from src.vorming.passage_register_v1 import apply_passage_register
