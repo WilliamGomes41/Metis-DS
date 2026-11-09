@@ -34,7 +34,14 @@ const assert = require('node:assert/strict');
   m.document = new URL(page.url()).searchParams.get('document');
   assert.ok(m.document);
   await page.reload();
+  assert.match(await page.getByRole('status').innerText(),/Document veilig ontvangen/);
   assert.equal(await page.locator('form[action="/source-selection/start"]').count(),0);
+  for (const width of [1440,390]) {
+    await page.setViewportSize({width,height:1000});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth<=window.innerWidth));
+    await page.screenshot({path:`${output}/annotation-entry-${width}.png`,fullPage:true});
+  }
+  await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
   await page.locator('[data-source-block]').first().waitFor();
   const block = page.locator('[data-source-block]').filter({hasText:'Controleer'});

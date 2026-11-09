@@ -570,24 +570,22 @@ def test_structural_dependency_does_not_revoke_an_unchanged_claim_review(product
     assert [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id] == first_binding
 
 
-@pytest.mark.parametrize('klasse,kind,target', [('beslisboom','html','/source-selection'), ('richtlijn','pdf','/annotations')])
-def test_upload_entry_follows_source_class(production_console, tmp_path, klasse, kind, target):
+@pytest.mark.parametrize('klasse,target', [('beslisboom','/source-selection'), ('richtlijn','/annotations')])
+def test_upload_entry_follows_source_class(production_console, tmp_path, klasse, target):
+    import fitz
     from starlette.testclient import TestClient
     from tests.production_support import application_for
     console = production_console(root=tmp_path)
     console.create_account(username='tree-author', password='tree-author-secret', roles=('researcher','reviewer'))
-    data = b'<html><body><p>Brontekst</p></body></html>'
-    if kind == 'pdf':
-        import fitz
-        with fitz.open() as pdf:
-            pdf.new_page().insert_text((72,72), 'Brontekst voor menselijke annotatie.')
-            data = pdf.tobytes()
+    with fitz.open() as pdf:
+        pdf.new_page().insert_text((72,72), 'Brontekst voor menselijke annotatie.')
+        data = pdf.tobytes()
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username':'tree-author', 'password':'tree-author-secret'})
         response = client.post('/ingest', data={'ingest_kind':'new','title':'Bron',
             'version':'1.0','date':'2026-11-09','class_':klasse,'family':'test',
             'review_mode':'choice','review_option':'uploader_sole'},
-            files={'file':('source.'+kind, data, 'application/pdf' if kind == 'pdf' else 'text/html')},
+            files={'file':('source.pdf', data, 'application/pdf')},
             follow_redirects=False)
         assert response.status_code == 303, response.text
         assert response.headers['location'].startswith(target+'?document=')

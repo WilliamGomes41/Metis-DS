@@ -41,7 +41,7 @@ def durable(console, sid):
     return deepcopy((console._envelope(sid), console.snapshot_objects(sid), console.object_review_bindings(sid)))
 
 
-def test_one_start_form_and_legacy_navigation_do_not_start_work(tmp_path, production_console, monkeypatch):
+def test_annotation_entry_and_legacy_navigation_do_not_start_work(tmp_path, production_console, monkeypatch):
     console, sid, author, _, calls, _, _ = received(tmp_path, production_console, monkeypatch)
     client = TestClient(console._metis_test_application)
     login(client)
@@ -65,8 +65,8 @@ def test_one_start_form_and_legacy_navigation_do_not_start_work(tmp_path, produc
     forms = StartForm(page.text).forms
     assert page.status_code == 200 and '<h1>Vorming</h1>' in page.text
     assert 'Nog geen verwerkingsresultaat' in page.text
-    assert len(forms) == 1 and forms[0]['document'] == sid
-    assert forms[0]['expected_revision'] == console.objects_revision(sid)
+    assert not forms
+    assert f'href="/annotations?document={sid}">Bron openen voor annotatie</a>' in page.text
     assert reads == [sid], 'Combined details must not repeat the status/deep check'
     assert durable(console, sid) == before and not calls
 

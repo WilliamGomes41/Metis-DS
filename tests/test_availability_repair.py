@@ -96,15 +96,15 @@ def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backen
         receipt=upload(client,reviewer)
         assert receipt.status_code==303,receipt.text
         sid=console.list_envelopes()[0]['snapshot_id']
-        assert receipt.headers['location']==f'/source-selection?document={sid}&received=yes'
+        assert receipt.headers['location']==f'/annotations?document={sid}&received=yes'
         assert calls==[]
         assert console._envelope(sid).get('processing_attempts',[])==[]
         assert console.snapshot_objects(sid)==[]
         assert upload(client,reviewer).headers['location']==receipt.headers['location']
         assert len(console.list_envelopes())==1
         selected=client.get(receipt.headers['location'])
-        assert f'data-source-document="{sid}" data-selected="true"' in selected.text
-        assert 'Status: nog niet gestart' in selected.text and '>Starten</button>' in selected.text
+        assert 'Bron openen voor annotatie' in selected.text
+        assert 'action="/source-selection/start"' not in selected.text
     restarted=state(tmp_path, production_console=production_console);bind(restarted,failure);app=production_app(restarted)
     before=deepcopy(restarted._envelope(sid))
     with TestClient(app,base_url='https://testserver') as client:
@@ -348,7 +348,7 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
         if path=='/publish':assert client.get(path,params=query).status_code==403
 
 
-def test_installed_layout_receipt_and_automatic_selection(tmp_path, *, production_console):
+def test_installed_layout_receipt_opens_annotation_for_uploaded_source(tmp_path, *, production_console):
     import re
     console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console)
     with TestClient(installed_app(console),base_url='https://testserver') as client:
@@ -359,8 +359,8 @@ def test_installed_layout_receipt_and_automatic_selection(tmp_path, *, productio
         receipt=upload(client,reviewer)
         selected=client.get(receipt.headers['location'])
         sid=console.list_envelopes()[0]['snapshot_id']
-        assert f'<option value="{sid}" selected>' in selected.text
-        assert f'data-source-document="{sid}" data-selected="true"' in selected.text
+        assert f'name="document" value="{sid}"' in selected.text
+        assert 'Bron openen voor annotatie' in selected.text
         nav=re.search(r'<nav class="rooms">(.*?)</nav>',selected.text,re.S).group(1)
         labels=re.findall(r'<a[^>]*>(.*?)</a>',nav)
         assert labels[:5]==['Inleveren','Vorming','Review','Publicatie','Documenten']
