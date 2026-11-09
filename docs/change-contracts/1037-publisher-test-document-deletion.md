@@ -91,3 +91,34 @@ publication, lifecycle and recovery regressions; repository/release checks.
 Review the finished diff separately against alternate writers, FK cascades,
 shared objects, layouts, identity isolation, stale state and recovery omissions.
 Record observed outcomes in the PR; green CI alone is not lifecycle proof.
+
+### Separate adversarial review, 2026-11-09
+
+Reviewed the finished operation separately against ingest, successor creation,
+publication/withdrawal, current/legacy workers, both input layouts, global review
+history, canonical sharing, feature disable/rollback and backup import.
+
+- An initial physical `xmin` preview token changed on a harmless startup
+  projection refresh. The final preview binds domain membership/identities,
+  counts and publication/registry contents instead. Independent-kernel duplicate
+  execution now proves one receipt and one delete event.
+- Mixed-release membership is explicitly refused. An older canonical-only
+  snapshot is included through exact publication lineage and disclosed in the
+  preview; no missing source-version number is invented.
+- Native SQL fault injection before document cascade proved complete rollback
+  of canonical serving, workflow, receipt and fences.
+- Direct old workflow/source snapshot inserts are refused after deletion even
+  with the test feature off. A fresh upload can open empty annotation work with
+  no inherited approval bindings.
+- Native pre-deletion backup restoration recovered the publication; post-delete
+  backup restoration preserved absence and fences. Relabelling deletion-bearing
+  state as an older recovery version is rejected by the current reader.
+- A deliberate test-mode bypass in an isolated disposable checkout caused the
+  actual published-document deletion denial test to fail with DID NOT RAISE.
+  The faulty copy was removed; no mutation entered the delivered branch.
+- Chromium proved required confirmation, wrong-title rejection with retained
+  reason input, whole-lineage receipt/reload, API absence and the unrelated
+  document remaining available at desktop/mobile sizes and 200% text zoom.
+
+Source files and the global hash chain are intentionally retained, as disclosed
+in the confirmation. Full suite/CI outcomes remain required before release.

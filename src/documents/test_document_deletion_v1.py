@@ -32,7 +32,7 @@ def _authorize(console, actor_id):
     if not enabled():
         raise ConsoleError('test_document_deletion_disabled')
     store = getattr(console, 'workflow_document_store', None)
-    canonical = console.canonical_publication_store
+    canonical = getattr(console, 'canonical_publication_store', None)
     if (store is None or not isinstance(canonical, PostgresCanonicalPublicationStore)
             or store.config != canonical.config):
         raise ConsoleError('test_document_deletion_database_mismatch')
@@ -114,6 +114,7 @@ def _inventory(con, snapshot_id):
                            'WHERE release_id=ANY(%s) ORDER BY object_id', (releases,)).fetchall()
     plan = {'snapshot_id':snapshot_id, 'logical_document_id':logical, 'title':selected['title'],
         'snapshot_ids':snapshots, 'versions':versions, 'release_ids':releases,
+        'historical_snapshot_ids':sorted(set(snapshots)-{r['snapshot_id'] for r in documents}),
         'canonical_objects':objects, 'registry':registry, 'running_snapshots':running}
     plan['fingerprint'] = stable_hash(plan)
     return plan
@@ -180,7 +181,7 @@ def delete(console, *, actor_id, snapshot_id, command_id, expected_plan, confirm
             if plan['running_snapshots']:
                 raise ConsoleError('test_document_deletion_processing_running')
             result = {'deleted':True,'command_id':command_id,'logical_document_id':plan['logical_document_id'],
-                'snapshot_ids':plan['snapshot_ids'],'versions':len(plan['versions']),
+                'snapshot_ids':plan['snapshot_ids'],'versions':len(plan['snapshot_ids']),
                 'publications':len(plan['release_ids']),'canonical_objects':len(plan['canonical_objects']),
                 'recorded_at':datetime.now(timezone.utc).isoformat(),
                 'retained':['control_history','source_files_and_backups']}

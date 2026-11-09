@@ -192,6 +192,26 @@ def test_mixed_release_is_refused_without_removing_other_document(production_con
     assert {e['snapshot_id'] for e in console.list_envelopes()} == {sid,other}
 
 
+def test_canonical_only_historical_snapshot_is_included_in_confirmed_lineage(production_console,tmp_path,monkeypatch):
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
+    console, accounts, sid, release, source = published(production_console,tmp_path)
+    from tests.test_logical_document_withdrawal_v1 import _object
+    env = console._envelope(sid)
+    console.canonical_publication_store.persist_published_release(logical_document_id=env['logical_document_id'],
+        working_revision_id='historical-working-revision',snapshot_id='historical-snapshot',
+        release_id='historical-release',release_version='0.9-historical',release_owner='historical-publisher',
+        source_sha256='a'*64,source_locator='g2://sha256/'+'a'*64+'/history.html',
+        published_at='2026-01-01T00:00:00+00:00',preserve_newer_registry=True,
+        objects=[_object(object_id='historical-object',version='0.9',document_id='historical-document',
+                         checksum='a'*64,text='Historische publicatie.')])
+    plan = deletion.preview(console,actor_id=accounts['publisher']['account_id'],snapshot_id=sid)
+    assert plan['historical_snapshot_ids'] == ['historical-snapshot']
+    result = deletion.delete(console,**command(console,accounts,sid))
+    assert result['versions'] == 2 and result['publications'] == 2
+    assert set(result['snapshot_ids']) == {sid,'historical-snapshot'}
+    assert console.canonical_publication_store.active_publication_rows() == []
+
+
 def test_http_publisher_confirmation_and_denied_roles(production_console,tmp_path,monkeypatch):
     monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
     console, accounts, sid, release, source = published(production_console,tmp_path)

@@ -53,6 +53,8 @@ def install(app, console, require, page, nav, esc):
         versions = ''.join('<li><strong>Bronversie '+esc(r['source_version'])+'</strong> — '+esc(r['title'])+
             '<p>Passages: '+str(r['objects'])+' · Annotaties: '+str(r['annotations'])+' · Beoordelingen: '+str(r['reviews'])+'</p></li>'
             for r in plan['versions'])
+        if plan['historical_snapshot_ids']:
+            versions += '<li><strong>Historische bronversies uit het publicatiearchief: '+str(len(plan['historical_snapshot_ids']))+'</strong></li>'
         disabled = bool(plan['running_snapshots'])
         if disabled:
             message = MESSAGES['test_document_deletion_processing_running']
