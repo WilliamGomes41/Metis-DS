@@ -125,3 +125,9 @@ de AI-modeluitleg) slagen. Acht screenshots op 1440/390 px, licht/donker,
 toetsenbordnavigatie en JavaScript-uitval zijn gecontroleerd; de AI-uitleg op
 beide breedtes is visueel bekeken. Geen overflow of nieuwe pagina-indeling.
 Screenshots zijn tijdelijke technische bewijsartefacten, geen productiebeeld.
+
+Bronlinkcontrole vond dat de uitleg nog naar een oudere repositoryrevisie wees,
+waarin het nieuwe diagram niet bestaat. De vaste verwijzingsrevisie is nu
+`6c2e156048d526221d5c34a29d8ce665fc95fba1`; alle modelbronnen bestaan op die
+commit en de nieuwe diagramlink is ook via GitHub opgehaald. Dit is een
+repositoryreferentie, geen claim over de actieve productiedeployment.
