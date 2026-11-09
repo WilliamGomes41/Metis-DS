@@ -55,7 +55,7 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-type').selectOption('explanation');
   await page.getByText('Betekenis van de uitspraak aanwijzen',{exact:true}).click();
-  const input = page.locator('[data-source-input]').first();
+  const input = page.locator('#annotation-source-input');
   for (const [field,text] of [['subject_span','De kwetsbare huid'],['predicate_span','verklaart'],['supported_object','de pijn']]) {
     await page.locator('#annotation-field').selectOption(field);
     await input.evaluate((element,text) => {
@@ -78,7 +78,8 @@ const assert = require('node:assert/strict');
   // A duplicate stays unsaved and points back to the original; recovery never
   // silently merges the selections or discards the local context choices.
   await page.locator('#annotation-new').click();
-  await page.locator('[data-select-block]').first().click();
+  await page.locator('[data-source-block]').first().click();
+  await page.locator('#annotation-select-block').click();
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-type').selectOption('explanation');
   await page.locator('#annotation-conflict-link').waitFor({state:'visible'});

@@ -88,6 +88,84 @@ def location_label(block):
     return ' · '.join(labels)
 
 
+def source_document_html(blocks):
+    """Read the pinned blocks as one document without changing their anchors."""
+    parts = []
+    page = None
+    page_open = toc_open = toc_row_open = False
+
+    def source_text(block):
+        identity = escape(block['block_id'], quote=True)
+        return ('<span class="annotation-source-text" data-source-block="' + identity +
+                '" id="' + identity + '" tabindex="0" title="' +
+                escape(location_label(block), quote=True) + '">' + escape(block['text']) + '</span>')
+
+    for index, block in enumerate(blocks):
+        text = block['text']
+        path = block.get('section_path') or []
+        in_toc = bool(path and path[0].casefold() == 'inhoudsopgave')
+        current_page = next((loc['page'] for loc in block.get('locations') or [] if loc.get('page')), None)
+        if in_toc != toc_open:
+            if toc_row_open:
+                parts.append('</p>')
+                toc_row_open = False
+            if page_open:
+                parts.append('</section>')
+                page_open = False
+            if toc_open:
+                parts.append('</details>')
+            if in_toc:
+                parts.append('<details class="annotation-toc"><summary>Inhoudsopgave</summary>')
+            toc_open = in_toc
+            page = None
+        if not page_open or page != current_page:
+            if toc_row_open:
+                parts.append('</p>')
+                toc_row_open = False
+            if page_open:
+                parts.append('</section>')
+            page = current_page
+            page_label = 'Pagina ' + str(page) if page else 'Brontekst'
+            page_id = 'source-page-' + str(page) if page else 'source-page-unknown'
+            parts.append('<section class="annotation-page" id="' + page_id + '" aria-label="' +
+                         escape(page_label, quote=True) + '"><p class="annotation-page-label">' +
+                         escape(page_label) + '</p>')
+            page_open = True
+        span = source_text(block)
+        if in_toc and not block.get('heading'):
+            continuation = text.lstrip().startswith('.') or text.strip().isdigit() or (
+                text.strip().replace(' ', '').isdigit())
+            if not toc_row_open or not continuation:
+                if toc_row_open:
+                    parts.append('</p>')
+                parts.append('<p class="annotation-toc-row">')
+                toc_row_open = True
+            else:
+                parts.append(' ')
+            parts.append(span)
+        elif block.get('heading') and block['heading'] == text:
+            if toc_row_open:
+                parts.append('</p>')
+                toc_row_open = False
+            level = min(5, max(2, len(path) + 1))
+            parts.append(f'<h{level} class="annotation-document-heading">{span}</h{level}>')
+        else:
+            next_page = next((loc['page'] for loc in blocks[index + 1].get('locations') or []
+                              if loc.get('page')), None) if index + 1 < len(blocks) else None
+            page_number = bool(page and text.strip() == str(page) and next_page != page)
+            style = ('annotation-page-number' if page_number else
+                     'annotation-list-item' if text.lstrip().startswith(('·', '•')) else
+                     'annotation-paragraph')
+            parts.append('<p class="' + style + '">' + span + '</p>')
+    if toc_row_open:
+        parts.append('</p>')
+    if page_open:
+        parts.append('</section>')
+    if toc_open:
+        parts.append('</details>')
+    return ''.join(parts)
+
+
 def install(app, console, require, page, nav, esc, *, dispatcher):
     @app.get('/annotations', response_class=HTMLResponse)
     def editor(request: Request, document: str = '', overview: bool = False):
@@ -179,26 +257,25 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     body += '<p>Afsluiten is pas mogelijk als alle annotaties en de bronafhandeling gereed zijn.'+(' De opgeslagen bouwopdracht blijft hierboven bereikbaar.' if current else '')+'</p>'
             body += '<p><a class="btn-secondary" href="'+escape(back,quote=True)+'">Verder aanwijzen</a></p>'
             return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
-        blocks = ''.join('<section class="annotation-source-block" tabindex="-1" id="'+esc(b['block_id'])+'"><p class="muted">'+esc(' / '.join(b['section_path']))+'</p>'
-            '<p class="muted">'+esc(location_label(b))+'</p>'
-            '<p data-source-block="'+esc(b['block_id'])+'" tabindex="0">'+esc(b['text'])+'</p>'
-            '<details><summary>Tekstselectie met toetsenbord of touch</summary><label>Brontekst om aan te wijzen<textarea readonly data-source-input="'+esc(b['block_id'])+'" rows="4">'+esc(b['text'])+'</textarea></label></details>'
-            '<button class="btn-secondary" type="button" data-select-block="'+esc(b['block_id'])+'">Dit hele tekstblok aanwijzen</button>'
-            '<a class="annotation-mobile-link" href="#annotation-controls">Naar huidige annotatie</a></section>' for b in state['blocks'])
+        blocks = source_document_html(state['blocks'])
+        pages = list(dict.fromkeys(loc['page'] for block in state['blocks']
+            for loc in block.get('locations') or [] if loc.get('page')))
+        page_options = ''.join('<option value="source-page-'+str(p)+'">Pagina '+str(p)+'</option>' for p in pages)
         role_options = ''.join('<option value="'+key+'">'+label+'</option>' for key,label in LABELS.items())
         from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
         type_options = '<option value="">Type kiezen</option>'+''.join('<option value="'+key+'">'+label+'</option>' for key,label in TYPES.items() if key in CLOSED_OBJECT_TYPES)+'<option value="source_disposition">Dit bronstuk verantwoorden</option>'
         data = json.dumps(state,ensure_ascii=False).replace('<','\\u003c')
-        body = intro + '''<p>Selecteer tekst met de muis of met Shift en de pijltjestoetsen binnen één tekstblok. Voeg een volgend bereik uit een andere alinea toe aan dezelfde annotatie.</p>
+        body = intro + '''<p>Markeer tekst in het document en kies in de selectiekaart de functie van het bereik. Meerdere passages kun je aan dezelfde annotatie koppelen.</p>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
-<div class="annotation-workplace"><div aria-label="Bron in leesvolgorde">'''+blocks+'''</div>
-<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><label for="annotation-entry">Opgeslagen annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
+<div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
+<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Jouw selectiekaart</h2><label for="annotation-entry">Opgeslagen annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
 <section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h2 id="annotation-current-version"></h2><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
 <label for="annotation-type">Type uitspraak</label><select id="annotation-type">'''+type_options+'''</select>
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
 <label for="annotation-role">Functie van het volgende bereik</label><select id="annotation-role">'''+role_options+'''</select>
 <label for="annotation-function">Functie van onderbouwing</label><select id="annotation-function"><option value="supported_by">Onderbouwt de uitspraak</option><option value="explains">Verklaart de uitspraak</option></select>
 <label><input type="checkbox" id="annotation-essential"> Dit bereik is essentieel voor de betekenis</label>
+<details class="annotation-selection-help"><summary>Tekstselectie met toetsenbord of touch</summary><p>Raak een passage in het document aan of zet er de focus op. Selecteer daarna tekst hieronder.</p><label for="annotation-source-input">Huidige passage</label><textarea readonly id="annotation-source-input" rows="4"></textarea></details><button class="btn-secondary" type="button" id="annotation-select-block">Hele passage aanwijzen</button>
 <button class="btn-secondary" type="button" id="annotation-add">Geselecteerde tekst toevoegen</button><button class="btn-secondary" type="button" id="annotation-discard">Aanwijzing terugnemen</button><p id="annotation-selection" aria-live="polite"></p>
 <ol id="annotation-ranges"></ol><label><input type="checkbox" id="annotation-na">Onderbouwing is niet van toepassing</label>
 <div id="annotation-required-links" aria-live="polite"></div>
@@ -222,7 +299,20 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <p>Concepten worden automatisch bewaard na een korte pauze. Alleen de melding ‘opgeslagen’ bevestigt serveropslag.</p>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button></aside></div>
 <script type="application/json" id="annotation-data">'''+data+'''</script><script src="/annotations/editor.js" defer></script>'''
-        css = '<style>.annotation-workplace{display:grid;grid-template-columns:minmax(0,2fr) minmax(18rem,1fr);gap:2rem}.annotation-source-block{margin-block:2rem;max-width:72ch}.annotation-source-block p[data-source-block]{line-height:1.7;white-space:pre-wrap}.annotation-workplace aside{align-self:start;position:sticky;top:1rem;max-height:90vh;overflow:auto}.annotation-workplace label{display:block;margin-top:1rem}.annotation-workplace select{max-width:100%}.annotation-workplace textarea{width:100%;max-width:100%;box-sizing:border-box}.annotation-workplace .btn-secondary{min-height:2.75rem;white-space:normal}.annotation-workplace li{overflow-wrap:anywhere;margin-block:1rem}.annotation-workplace .actions{display:flex;flex-wrap:wrap;gap:.75rem}.annotation-workplace [hidden]{display:none!important}.annotation-workplace ::selection{background:var(--accent-soft,#dbeafe)}#annotation-controls,.annotation-source-block{scroll-margin-top:6rem}.annotation-mobile-nav,.annotation-mobile-link{display:none}@media(max-width:800px){.annotation-mobile-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin-block:1rem;background:var(--surface,#fff);padding:.75rem;border:1px solid var(--border,#b7dbe4);border-radius:12px}.annotation-mobile-link{display:block;margin-block:.75rem}.annotation-workplace{grid-template-columns:1fr}.annotation-workplace aside{position:static;max-height:none}}</style>'
+        css = '''<style>
+.annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
+.annotation-document{min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;max-height:calc(100vh - 8rem);overflow:auto}
+.annotation-document-tools{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:.75rem;padding:.75rem 1.5rem;background:var(--wit);border-bottom:1px solid var(--line)}
+.annotation-document-tools label{margin:0 0 0 auto!important}.annotation-document-tools select{width:auto;max-width:10rem}
+.annotation-page{max-width:76ch;margin:0 auto;padding:2rem 2.25rem;border-bottom:1px solid var(--line)}
+.annotation-page-label,.annotation-page-number{font-size:.84rem;color:var(--muted)}.annotation-page-label{margin:0 0 1.75rem}.annotation-page-number{text-align:right;margin:1rem 0 0}
+.annotation-document-heading{color:var(--paars);line-height:1.35;margin:2rem 0 .65rem}.annotation-page>.annotation-document-heading:first-of-type{margin-top:0}
+.annotation-paragraph,.annotation-list-item{font-size:1rem;line-height:1.75;margin:.25rem 0 1.15rem;overflow-wrap:anywhere}.annotation-list-item{padding-left:1.25rem;text-indent:-1rem;margin-bottom:.45rem}
+.annotation-source-text{border-radius:2px;cursor:text;scroll-margin-top:5rem}.annotation-source-text:focus-visible{outline:2px solid var(--paars);outline-offset:3px}.annotation-source-text mark{color:inherit;background:var(--water-soft);border-radius:2px}.annotation-source-text mark[data-current]{background:color-mix(in srgb,var(--paars) 25%,var(--wit))}
+.annotation-toc{padding:1rem 1.5rem;border-bottom:1px solid var(--line)}.annotation-toc>summary{font-weight:700;color:var(--paars);cursor:pointer}.annotation-toc .annotation-page{padding-inline:.75rem}.annotation-toc-row{line-height:1.6;margin:.35rem 0;overflow-wrap:anywhere}
+.annotation-workplace aside{align-self:start;position:sticky;top:1rem;max-height:90vh;overflow:auto;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;padding:1.25rem}.annotation-workplace aside h2{color:var(--paars)}.annotation-workplace label{display:block;margin-top:1rem}.annotation-workplace select{max-width:100%}.annotation-workplace textarea{width:100%;max-width:100%;box-sizing:border-box}.annotation-workplace .btn-secondary{min-height:2.75rem;white-space:normal}.annotation-workplace li{overflow-wrap:anywhere;margin-block:1rem}.annotation-workplace .actions{display:flex;flex-wrap:wrap;gap:.75rem}.annotation-workplace [hidden]{display:none!important}.annotation-workplace ::selection{background:var(--water-soft)}#annotation-controls{scroll-margin-top:6rem}.annotation-mobile-nav{display:none}
+@media(max-width:800px){.annotation-mobile-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin-block:1rem;background:var(--wit);padding:.75rem;border:1px solid var(--line);border-radius:12px}.annotation-workplace{grid-template-columns:1fr}.annotation-document{max-height:65vh}.annotation-page{padding:1.25rem}.annotation-workplace aside{position:static;max-height:none}}
+</style>'''
         return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>'+css,title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
 
     @app.get('/annotations/editor.js')
