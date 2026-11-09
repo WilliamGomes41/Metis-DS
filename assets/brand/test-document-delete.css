@@ -1,0 +1,27 @@
+.test-document-delete {
+  max-width: 65ch;
+  overflow-wrap: anywhere;
+}
+.test-document-delete form {
+  display: grid;
+  gap: 1rem;
+  max-width: 40rem;
+}
+.test-document-delete label:not(.check) {
+  display: grid;
+  gap: .4rem;
+}
+.test-document-delete input,
+.test-document-delete textarea,
+.test-document-delete .check span {
+  min-width: 0;
+}
+.test-document-delete li { margin-block: 1rem; }
+.test-document-delete li p { margin-block: .4rem; }
+.test-document-delete .btn-primary {
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}

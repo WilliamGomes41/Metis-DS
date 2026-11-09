@@ -60,7 +60,7 @@ MODELS = (
         ("Een bewijsverwijzing is geen goedkeuring of publicatiebesluit.",
          "Bestaande documenten worden alleen via expliciete voorbereiding en versiecontrole omgezet. Deze uitleg bewijst geen productiecutover."),
         "De documentstore beheert actuele documentgegevens. De bestaande bewijs- en bronowners bewaken de oorspronkelijke inhoud; de bevoegde beoordelaar en publisher behouden hun eigen besluiten.",
-        "Het compositiediagram en het wijzigingscontract leggen de leesgrenzen, opslagovergang en herstelvoorwaarden vast.",
+        "Het compositiediagram en het wijzigingscontract leggen de leesgrenzen, opslagovergang en herstelvoorwaarden vast. Alleen tijdens expliciet ingeschakeld testen kan een publisher een hele testdocumentlijn, inclusief publicaties, verwijderen. De kernel voert dat atomair uit; een verwijderregistratie voorkomt dat oude taken de verwijderde bronversies terugzetten. De bestaande controlehistorie en het bewaarbeleid voor bronbestanden blijven gelden.",
         (Reference("Compositie van documentopslag", "docs/architecture/operational-document-inputs-950.md"),
          Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md"),
          Reference("Leesgrenzen van Review", "docs/architecture/review-input-scopes-951.md"),

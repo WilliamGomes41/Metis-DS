@@ -44,14 +44,20 @@ MIGRATION_NAMES = (
     "036_human_annotation_build.sql",
     "037_human_annotation_revisions.sql",
     "038_prose_transitions.sql",
+    "039_test_document_deletion.sql",
 )
 REQUIRED_TRIGGERS = frozenset({
+    ("public.source_snapshots", "refuse_deleted_test_source"),
+    ("documents", "refuse_deleted_test_document"),
+    ("test_document_deletions", "guard_test_deletion_history"),
+    ("deleted_test_snapshots", "guard_deleted_test_snapshot_history"),
     ("documents", "guard_prose_transition_document"),
     ("document_inputs", "guard_prose_transition_inputs"),
     ("processing_attempts", "guard_prose_transition_attempt"),
 })
 REQUIRED_TABLES = frozenset(
     {
+        "test_document_deletions", "deleted_test_snapshots",
         "annotation_sets", "annotation_versions", "annotation_heads", "annotation_commands",
         "annotation_seals", "annotation_build_commands",
         "document_inputs", "document_processing_records", "processing_archive_inputs",
@@ -128,6 +134,8 @@ REQUIRED_COLUMNS = frozenset(
 # (#930). `GRANT ... ON ALL TABLES` misses later tables, so verify checks these explicitly.
 _S, _I, _U, _D = "SELECT", "INSERT", "UPDATE", "DELETE"
 RUNTIME_TABLE_PRIVILEGES = {
+    "test_document_deletions": (_S, _I),
+    "deleted_test_snapshots": (_S, _I),
     "annotation_seals": (_S, _I),
     "annotation_build_commands": (_S, _I),
     "annotation_sets": (_S, _I, _U),
@@ -271,9 +279,10 @@ def observe_schema(connection: Any) -> dict[str, Any]:
         ).fetchall()
         tables = {str(row["table_name"]) for row in table_rows}
         trigger_rows = connection.execute(
-            "SELECT c.relname AS table_name,t.tgname AS trigger_name FROM pg_trigger t "
+            "SELECT CASE WHEN n.nspname='public' THEN 'public.'||c.relname ELSE c.relname END AS table_name,t.tgname AS trigger_name FROM pg_trigger t "
             "JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
-            "WHERE n.nspname='workflow' AND NOT t.tgisinternal AND t.tgenabled IN ('O','A')"
+            "WHERE (n.nspname='workflow' OR (n.nspname='public' AND c.relname='source_snapshots')) "
+            "AND NOT t.tgisinternal AND t.tgenabled IN ('O','A')"
         ).fetchall()
         columns = {(str(row["table_name"]), str(row["column_name"])) for row in column_rows}
         counts: dict[str, int] = {}
@@ -305,7 +314,7 @@ def observe_schema(connection: Any) -> dict[str, Any]:
 
 
 def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool = False,
-                               compact_cards: bool = False) -> dict[str, Any]:
+                               compact_cards: bool = False, test_document_deletion: bool = False) -> dict[str, Any]:
     """Report missing runtime grants and the targeted GRANT lines; never grants anything."""
     if not role.strip():
         raise WorkflowMigrationError("workflow_runtime_role_required")
@@ -367,6 +376,13 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
                 missing += [f"{name}:{p}" for p in lacking]
                 target = f"workflow.{name}" if kind == "r" else f"SEQUENCE workflow.{name}"
                 grants.append(f'GRANT {", ".join(lacking)} ON {target} TO "{role}";')
+        if test_document_deletion:
+            from src.documents.test_document_deletion_v1 import DELETE_TABLES
+            for relation in DELETE_TABLES:
+                if not connection.execute('SELECT has_table_privilege(%s,%s,\'DELETE\') AS ok',
+                                          (role,relation)).fetchone()['ok']:
+                    missing.append(relation+':DELETE')
+                    grants.append(f'GRANT DELETE ON {relation} TO "{role}";')
     except Exception as exc:
         raise WorkflowMigrationError("workflow_runtime_privilege_observation_failed") from exc
     return {"status": "PASS" if not missing and not absent else "BLOCKED", "runtime_role": role,

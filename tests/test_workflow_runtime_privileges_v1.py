@@ -61,6 +61,7 @@ def test_every_serial_sequence_of_a_registered_table_is_expected():
 def test_runtime_sql_writes_are_covered_by_the_expectation():
     """Every write the console code issues on a registered table is an expected privilege."""
     code = "\n".join(p.read_text() for p in (ROOT / "src").rglob("*.py"))
+    from src.documents.test_document_deletion_v1 import DELETE_TABLES
     for table, privileges in {**RUNTIME_TABLE_PRIVILEGES, **OPTIONAL_TABLE_PRIVILEGES}.items():
         name = rf"(?:workflow\.)?{table}\b"
         used = {"SELECT"}
@@ -72,7 +73,9 @@ def test_runtime_sql_writes_are_covered_by_the_expectation():
             used.add("UPDATE")
         if re.search(rf"DELETE FROM {name}", code):
             used.add("DELETE")
-        assert used <= set(privileges), (table, used - set(privileges))
+        # The test-only reset has a separate, opt-in DELETE grant profile.
+        allowed = set(privileges) | ({'DELETE'} if 'workflow.'+table in DELETE_TABLES else set())
+        assert used <= allowed, (table, used - allowed)
 
 
 @pytest.fixture()
@@ -121,6 +124,18 @@ def _grant_expected(con, role, *, skip=(), optional=True, sequences=True):
             con.execute(f'GRANT {", ".join(privileges)} ON workflow.{table} TO "{role}"')
     for sequence in RUNTIME_SEQUENCE_PRIVILEGES if sequences else ():
         con.execute(f'GRANT USAGE ON SEQUENCE workflow.{sequence} TO "{role}"')
+
+
+def test_test_document_delete_grants_are_only_requested_when_explicitly_enabled(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con,role)
+    assert _observe(con,role)['status'] == 'PASS'
+    required = _observe(con,role,test_document_deletion=True)
+    assert required['status'] == 'BLOCKED'
+    assert 'public.canonical_object_versions:DELETE' in required['missing_privileges']
+    assert 'workflow.view_checks:DELETE' in required['missing_privileges']
+    for sql in required['grants']: con.execute(sql)
+    assert _observe(con,role,test_document_deletion=True)['status'] == 'PASS'
 
 
 def test_deliberately_narrow_grants_do_not_fail(runtime_role):

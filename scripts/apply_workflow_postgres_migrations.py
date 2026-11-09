@@ -33,6 +33,8 @@ def main() -> int:
     parser.add_argument("--view-check", action="store_true", help="verify: the view check is enabled, so require view_checks grants")
     parser.add_argument("--compact-cards", action="store_true",
                         help="verify: CONSOLE_REVIEW_CARD_READS=compact, so require the migration 027 tables")
+    parser.add_argument("--test-document-deletion", action="store_true",
+                        help="verify: test document removal is enabled, so require its DELETE grants")
     args = parser.parse_args()
     paths = migration_paths(ROOT)
     digest = migration_digest(paths)
@@ -56,7 +58,8 @@ def main() -> int:
                 result = observe_schema(connection)
                 if args.runtime_role:
                     privileges = observe_runtime_privileges(connection, args.runtime_role, view_check=args.view_check,
-                                                            compact_cards=args.compact_cards)
+                                                            compact_cards=args.compact_cards,
+                                                            test_document_deletion=args.test_document_deletion)
                     result["runtime_privileges"] = privileges
                     if privileges["status"] != "PASS":
                         result["status"] = "BLOCKED"
