@@ -44,9 +44,18 @@ $$;
 DROP TRIGGER IF EXISTS refuse_deleted_test_document ON workflow.documents;
 CREATE TRIGGER refuse_deleted_test_document BEFORE INSERT ON workflow.documents
     FOR EACH ROW EXECUTE FUNCTION workflow.refuse_deleted_test_snapshot();
-DROP TRIGGER IF EXISTS refuse_deleted_test_source ON public.source_snapshots;
-CREATE TRIGGER refuse_deleted_test_source BEFORE INSERT ON public.source_snapshots
-    FOR EACH ROW EXECUTE FUNCTION workflow.refuse_deleted_test_snapshot();
+-- Workflow-only installations may not have canonical lineage migration 001 yet.
+-- Keep those existing workflows usable; deletion stays blocked until the source
+-- table and its fence are installed and verified by rerunning this migration.
+DO $$
+BEGIN
+    IF to_regclass('public.source_snapshots') IS NOT NULL THEN
+        DROP TRIGGER IF EXISTS refuse_deleted_test_source ON public.source_snapshots;
+        CREATE TRIGGER refuse_deleted_test_source BEFORE INSERT ON public.source_snapshots
+            FOR EACH ROW EXECUTE FUNCTION workflow.refuse_deleted_test_snapshot();
+    END IF;
+END;
+$$;
 
 -- Older backup exporters still retain the global review ledger. Its deletion
 -- event must never be restored without the receipt and every snapshot fence.
@@ -75,4 +84,6 @@ END;
 $$;
 DROP TRIGGER IF EXISTS guard_test_deletion_ledger ON workflow.review_events;
 CREATE CONSTRAINT TRIGGER guard_test_deletion_ledger AFTER INSERT OR UPDATE ON workflow.review_events
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.guard_test_deletion_ledger();
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    WHEN (NEW.event_type='test_document_deleted' OR NEW.event_payload->>'event_type'='test_document_deleted')
+    EXECUTE FUNCTION workflow.guard_test_deletion_ledger();

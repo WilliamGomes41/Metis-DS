@@ -127,6 +127,11 @@ history, canonical sharing, feature disable/rollback and backup import.
   failure: DELETE with a snapshot condition also needs SELECT. The optional
   grant profile now checks both privileges; the same SQL succeeds after the
   reported grants, without enabling view checks or widening normal grants.
+- A workflow-only installation exposed an absent canonical lineage table.
+  Migration 039 now leaves that existing topology usable; test deletion remains
+  blocked until migration 001 and the source fence are present. Rerunning 039
+  installs the fence once lineage exists. The deferred ledger guard is queued
+  only for deletion events, preserving the normal review write path.
 
 Source files and the global hash chain are intentionally retained, as disclosed
 in the confirmation. Full suite/CI outcomes remain required before release.

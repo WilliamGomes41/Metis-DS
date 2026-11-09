@@ -47,6 +47,10 @@ de ontbrekende SELECT- en DELETE-grants op de canonical tabellen en operationele
 documentregels. SELECT is ook nodig voor de verwijdervoorwaarden op
 `view_checks` wanneer die functie uitstaat en er nog geen leesrechten zijn.
 De verifier voert GRANT-statements niet uit.
+Bij een installatie met alleen workflowtabellen mag de bestaande workflow
+doorgaan. De verwijderfunctie vereist daarnaast canonical bronlijnmigratie 001;
+voer 039 daarna opnieuw uit om ook de bronfence te installeren. Ontbreekt die
+fence, dan blijven verificatie en de verwijderopdracht geblokkeerd.
 
 Na succesvolle review en release kan de beheerder
 `CONSOLE_TEST_DOCUMENT_DELETION=on` instellen. Zet deze instelling na de testfase
