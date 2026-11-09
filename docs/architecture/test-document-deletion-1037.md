@@ -51,9 +51,11 @@ weigert de import van dat event zonder bijbehorende receipt en snapshotfences.
 
 ## Installeren en later uitschakelen
 
-De normale containerreleaseprocedure blijft gelden. Eerst migratie 039 via het
-gecontroleerde migratieplan toepassen. De migratie verwijdert geen bestaande
-gegevens. Gebruik bij het controleren van de runtimegrants expliciet
+De normale containerreleaseprocedure blijft gelden. Pas migraties 039 en 040 via het gecontroleerde migratieplan toe. Deze
+migraties verwijderen geen bestaande gegevens. Migratie 040 herstelt de
+cascadebeveiliging voor de verwerkingsindex: verwijderen van het hele document
+werkt bij beide FK-volgorden; losse indexverwijdering blijft geweigerd zolang
+document en verwerkingstaak bestaan. Gebruik bij het controleren van de runtimegrants expliciet
 `verify --runtime-role <rol> --test-document-deletion`; alleen dit profiel vraagt
 de ontbrekende SELECT- en DELETE-grants op de canonical tabellen en operationele
 documentregels. SELECT is ook nodig voor de verwijdervoorwaarden op
