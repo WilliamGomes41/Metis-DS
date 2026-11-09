@@ -208,13 +208,22 @@ class FormationEvidence:
         if fragments is None:
             fail('source_basis_missing')
         objects = build_objects(seal, entries, fragments=fragments)
+        candidates = objects
+        if seal.get('revision_basis'):
+            from src.review.revision_workflow import apply_annotation_revisions
+            objects = apply_annotation_revisions(candidates, seal['revision_basis'],
+                snapshot_id=envelope['snapshot_id'], fragments=fragments, context=seal['context'])
         members = [('input', '0', seal), ('source', '0', {'reference': summary['source_ref'], 'extraction_header': extraction_header})]
         members += [('annotation', entry['annotation_id'], entry) for entry in entries]
+        if seal.get('revision_basis'):
+            members += [('candidate', obj['object_id'], obj) for obj in candidates]
         members += [('result', obj['object_id'], obj) for obj in objects]
         records = tuple((role, key, stable_json_hash(value), encoded(value)) for role, key, value in sorted(members))
         header = {'layout': 2, 'variant': 'human-annotation-v1', 'source': source_binding(envelope),
                   'extraction_hash': seal['extraction_hash'], 'capture': summary,
                   'manifest': [[role, key, digest] for role, key, digest, _ in records]}
+        if seal.get('revision_basis'):
+            header['application'] = 'human-annotation-revision-v1'
         return PreparedFormationEvidence(encoded(header), records)
 
     def _validate_human_members(self, header, members):
@@ -233,6 +242,18 @@ class FormationEvidence:
         from src.vorming.human_annotation_materialisation_v1 import build_objects
         objects = build_objects(seal, entries, fragments=stored_extraction(
             {**header['source'], 'prepared_source_extraction': extraction}))
+        candidates = {key:value for role, key, value in members if role == 'candidate'}
+        if seal.get('revision_basis'):
+            if header.get('application') != 'human-annotation-revision-v1':
+                fail('human_revision_contract_invalid')
+            if candidates != {obj['object_id']:obj for obj in objects}:
+                fail('human_candidate_changed')
+            from src.review.revision_workflow import apply_annotation_revisions
+            objects = apply_annotation_revisions(objects, seal['revision_basis'],
+                snapshot_id=seal['snapshot_id'], fragments=stored_extraction(
+                    {**header['source'], 'prepared_source_extraction': extraction}), context=seal['context'])
+        elif candidates or 'application' in header:
+            fail('human_candidate_changed')
         actual = {key:value for role, key, value in members if role == 'result'}
         if actual != {obj['object_id']:obj for obj in objects}:
             fail('human_result_changed')
@@ -464,6 +485,15 @@ def assert_human_activation(con, envelope, reference, *, objects):
             or latest.get('annotation_seal_id') != current['annotation_seal_id']
             or latest.get('expected_revision') != seal['objects_revision']):
         fail('activation_changed')
+    if seal.get('revision_basis'):
+        from src.review.revision_workflow import current_revisions
+        actual = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (envelope['snapshot_id'],)).fetchall()]
+        if current_revisions(actual, snapshot_id=envelope['snapshot_id']) != seal['revision_basis']['objects']:
+            fail('human_predecessor_changed')
+        prior = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s', (envelope['snapshot_id'],)).fetchone()
+        if prior['formation_evidence_id'] != seal['revision_basis']['proof_id']:
+            fail('human_predecessor_changed')
+        objects = current_revisions(objects, snapshot_id=envelope['snapshot_id'])
     expected = {key:digest for role, key, digest in header['manifest'] if role == 'result'}
     if len(objects) != len(expected) or {obj['object_id']:stable_json_hash(obj) for obj in objects} != expected:
         fail('human_result_changed')

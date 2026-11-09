@@ -9,6 +9,12 @@ from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_HUMAN, _reconstruct
 
 
 def build_objects(seal, entries, *, fragments):
+    from src.vorming.source_accountability_v1 import VERSION, CONTAINERS_VERSION
+    # Missing policy is the immutable HA-2 producer contract. Never reinterpret
+    # existing seals while new seals opt into the existing T10 source policy.
+    source_version = seal.get('source_accountability_version', VERSION)
+    if source_version not in {VERSION, CONTAINERS_VERSION}:
+        raise ValueError('annotation_source_policy_invalid')
     inspection = inspect_document(entries, fragments=fragments)
     if inspection['findings']:
         raise ValueError('annotation_document_incomplete')
@@ -39,7 +45,7 @@ def build_objects(seal, entries, *, fragments):
     # never KnowledgeCandidates or an automatic source-role confirmation.
     units += [unit for _, unit in _coverage_remainders(_reconstructed_blocks(fragments),
         document_id=context['document_id'], selected_ranges_by_block=occupied,
-        assessments=inspection['source_assessments'], context_spans=context_spans)]
+        assessments=inspection['source_assessments'], context_spans=context_spans, source_version=source_version)]
     from src.vorming.pre_review_semantic_v1 import document_spec
     from src.operations_console_v1 import canonical_source_manifest, transform_generic
     from src.vorming.admission_gate_v1 import apply_admission_gate

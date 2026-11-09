@@ -11,7 +11,7 @@ from src.review.revision_window_v1 import RevisionWindow
 from src.review.revision_workflow import current_revisions, LINEAGE_CONTRACT, historical_revision_inputs
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 
-CONTRACT = 'object-revision-frontier-v1/' + LINEAGE_CONTRACT + '/' + KERNEL_VERSION
+CONTRACT = 'object-revision-frontier-v1/' + LINEAGE_CONTRACT + '/' + KERNEL_VERSION + '/human-selection-v1'
 CONFLICT = 'snapshot_object_write_conflict'
 
 

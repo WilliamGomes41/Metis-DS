@@ -60,6 +60,17 @@ def summary_rows(obj, objects, descriptor=None, *, review_path='richtlijn'):
         if label:
             rows[label].append((str(item.get('text') or ''),
                                 '' if item.get('status') == 'bound' else 'Nog te controleren', ''))
+    human = (obj.get('metadata') or {}).get('human_annotation')
+    if human:
+        for entry in ((obj.get('metadata') or {}).get('source_bound_context') or {}).get('entries', []):
+            label = {'population':'Doelgroep', 'condition':'Voorwaarde', 'exception':'Uitzondering',
+                'evidence':'Onderbouwing', 'explanation':'Toelichting', 'context':'Context',
+                'actor':'Uitvoerder', 'scope':'Toepassingssituatie', 'timing':'Tijdstip',
+                'list_introduction':'Bronstructuur', 'row_header':'Bronstructuur', 'column_header':'Bronstructuur'}.get(entry.get('annotation_role'))
+            text = str(entry.get('text') or '')
+            if label and text and not any(value[0] == text for value in rows.get(label, [])):
+                function = {'supported_by':'Onderbouwt de uitspraak', 'explains':'Verklaart de uitspraak'}.get(entry.get('evidence_function'), '')
+                rows.setdefault(label, []).append((text, function, 'aangewezen bronpassage'))
     relations = descriptor.relations if descriptor is not None else ()
     for item in relations:
         label = {'applies_if': 'Voorwaarde', 'except_if': 'Uitzondering', 'supported_by': 'Onderbouwing', 'explains': 'Onderbouwing'}.get(item.get('relation_type'))
@@ -112,6 +123,9 @@ def _context_evidence(obj, objects, snapshot_id, revision, shown):
     by_id = {row['object_id']: row for row in objects}
     owner = '/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'],
                                               'review_revision': revision}) + '#passage-context'
+    annotation = (obj.get('metadata') or {}).get('human_annotation')
+    if annotation:
+        owner = '/annotations?' + urlencode({'document': snapshot_id, 'annotation': annotation['annotation_id']})
     rows = []
     if context['issues']:
         rows.append('<p class="ko-notice" role="alert">Een koppeling verwijst naar gewijzigde of ontbrekende tekst. '
@@ -134,8 +148,9 @@ def _context_evidence(obj, objects, snapshot_id, revision, shown):
             else:
                 rows.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
         rows.append('</section>')
-    rows.append('<p><a href="' + escape(owner, quote=True)
-                + '">Broncontext vastleggen of aanpassen in Vorming</a></p>')
+    rows.append('<p><a href="' + escape(owner, quote=True) + '">'
+                + ('Oorspronkelijke annotatie en bronbereiken bekijken' if annotation else
+                   'Broncontext vastleggen of aanpassen in Vorming') + '</a></p>')
     unseen = any(str(link.get('text') or '') not in shown for link in context['links'])
     return ''.join(rows), bool(unseen or context['issues'])
 
@@ -163,7 +178,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     from src.operations_console_app import _object_type_label, _source_bound_fields_html, new_review_interaction_id
     from src.review.review_assessment_v1 import displayed_review_descriptor
     from src.review.knowledge_object_state_v1 import derive_ko_state
-    from src.review.review_duty_v1 import reviewer_route_for
+    from src.review.review_duty_v1 import reviewer_route_for, exact_current_approver_ids
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     draft = draft or {}
     origin_changed = bool(origin_revision and origin_revision != inputs.revision)
@@ -173,7 +188,11 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     path = review_path_for_klasse(inputs.envelope['class'])
     route = reviewer_route_for(obj, review_path=path, reviewer_id=account['account_id'],
                               bindings=inputs.bindings, fragments=inputs.fragments)
-    reading = task == 'inventory'
+    annotation = (obj.get('metadata') or {}).get('human_annotation')
+    from src.vorming.human_annotation_projection_v1 import has_literal_support
+    literal_support = has_literal_support(obj, inputs.fragments)
+    reading = task == 'inventory' or bool(annotation and
+        account['account_id'] in exact_current_approver_ids(obj, inputs.bindings))
     canonical_task = str((route or {}).get('canonical_task') or '')
     second = canonical_task == 'second_review'
     if not reading and (second or task == 'second_review'):
@@ -185,6 +204,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
                        and descriptor.can_confirm and not conflict)
     repair = '/source-selection?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': 'repair',
                                               'review_revision': inputs.revision})
+    if annotation:
+        repair = '/annotations?' + urlencode({'document': sid, 'annotation': annotation['annotation_id']})
     parent = next((row for row in inputs.objects if row['object_id'] == descriptor.parent_id), None)
     if parent is not None:
         from src.vorming.heading_parent_list_v1 import heading_visible_text
@@ -260,6 +281,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + context_html + _additional_relations(descriptor) + _source_bound_fields_html(obj)
             + '</details></section></div><div class="ko-result-actions">'
             + '<a href="' + escape(inventory, quote=True) + '">Alle passages en beoordelingen bekijken</a>'
+            + ('<a href="' + escape(repair, quote=True) + '">Bronselectie corrigeren</a>'
+               if not published and annotation else '')
             + ('<a href="' + escape(review, quote=True) + '">Dit kennisobject beoordelen</a>'
                if not published and route and route.get('actionable') else '') + '</div></div>')
         return review_page_shell(account, body, title='Kennisobject')
@@ -272,7 +295,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     body = ('<header class="ko-page-heading"><h1>' + heading + '</h1>'
             + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task=task or canonical_task, overview_url=overview_url)
             + '<p class="ko-progress">Te beoordelen passage <span aria-hidden="true">·</span> '
-            '<strong data-ko-state>' + escape(state or 'Broncontext') + '</strong>'
+            + ('Versie ' + escape(descriptor.object_version) + ' <span aria-hidden="true">·</span> ' if annotation else '')
+            + '<strong data-ko-state>' + escape(state or 'Broncontext') + '</strong>'
             + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '')
             + (' <span data-required-second-review>Er is een onafhankelijke tweede beoordeling nodig.</span>' if required_second and not second else '') + '</p></header>'
             + notice + '<div class="ko-review-layout" data-document-assessment="'
@@ -290,15 +314,17 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + ('<p class="ko-evidence-choice"><label><input type="checkbox" name="evidence_not_applicable" value="yes"'
                + (' checked' if draft.get('evidence_not_applicable') else '')
                + '> Onderbouwing is voor dit kennisobject niet van toepassing.</label></p>'
-               if not any(row.get('relation_type') in {'supported_by', 'explains'}
+               if not literal_support and not any(row.get('relation_type') in {'supported_by', 'explains'}
                           and row.get('resolution') == 'current' for row in descriptor.relations) else '')
             + _question('applicable', 'Is dit toepasbaar?', draft.get('applicable'))
             + _question('complete', 'Is dit compleet?', draft.get('complete'))
             + _question('placed_correctly', 'Staat dit op de juiste plek?', draft.get('placed_correctly'), subline=place)
-            + '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">Open de gerichte correctie</a>.</p>'
+            + '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">'
+            + ('Bronselectie corrigeren' if annotation else 'Open de gerichte correctie') + '</a>.</p>'
             '<div class="ko-actions"><button class="ko-primary" type="submit" name="review_action" value="approve"'
             + ('' if can_approve else ' disabled') + '>Goedkeuren en opslaan</button>'
-            '<a href="' + escape(repair, quote=True) + '">Correctie nodig</a>'
+            '<a href="' + escape(repair, quote=True) + '">'
+            + ('Bronselectie corrigeren' if annotation else 'Correctie nodig') + '</a>'
             '<button class="ko-text-button" type="submit" name="review_action" value="later" formnovalidate>Later beoordelen</button></div>'
             + rejection + '</form></section></div>'
             + _assessment_script())

@@ -75,7 +75,7 @@ def knowledge_revision(obj):
             or is_structural_projection(obj) or is_source_record(obj)):
         return False
     semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
-    return semantic.get("selection_origin") == "proposal_selected"
+    return semantic.get("selection_origin") in {"proposal_selected", "human_annotation"}
 
 
 def historical_revision_inputs(rows):
@@ -148,13 +148,23 @@ def revise_object(previous, proposed, *, snapshot_id, reason, actor, force=False
     provenance["previous_object_version"] = old_version
     provenance["revision_reason"] = str(reason)
     provenance["revision_patch_hash"] = stable_hash(edge)
+    reset_review_state(result)
+    return stamp_canonical_hashes(result)
+
+
+def reset_review_state(result):
+    """Withdraw current first/second-review mirrors; never grant authority.
+
+    Revision preparation and saved source corrections share this existing
+    owner's rule. Callers still own authorization, exact binding invalidation
+    and the atomic native commit.
+    """
     governance = result.setdefault("governance", {})
     governance.update(validation_status="needs_review", validated_by=None,
                       validation_date=None, review_snapshot_hash=None, publication_status="unpublished")
     required = bool((result.get("risk") or {}).get("requires_second_review"))
     governance["second_review"] = {"required": required, "status": "pending" if required else "not_required",
                                    "reviewer": None, "review_date": None, "snapshot_hash": None}
-    return stamp_canonical_hashes(result)
 
 
 def _unchanged_revision(previous, proposed):
@@ -326,6 +336,90 @@ def reprocessed_history(previous, generated, *, snapshot_id, actor):
     for row in previous + generated:
         order.setdefault(row["object_id"], len(order))
     return sorted(retained, key=lambda row: order[row["object_id"]])
+
+
+def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, context):
+    """Apply materialised source to explicit original annotations, never match text.
+
+    The materialiser owns its raw output. This existing revision owner alone
+    retains an already activated canonical identity and makes its successor.
+    ``basis`` is immutable sealed input, validated against actual stored rows by
+    FormationEvidence and native activation. It is never a browser object patch.
+    """
+    from src.vorming.human_annotation_projection_v1 import context_record
+    from src.vorming.admission_gate_v1 import apply_admission_gate
+    from src.vorming.passage_register_v1 import apply_passage_register
+    if (set(basis) != {'version', 'proof_id', 'actor_id', 'objects'}
+            or basis.get('version') != 'human-annotation-revision-v1'):
+        raise ValueError('annotation_revision_contract_invalid')
+    previous = basis['objects']
+    by_id = {row['object_id']: row for row in previous}
+    by_annotation = {}
+    prior_ids = {row['object_id'] for row in previous}
+    for row in previous:
+        ref = (row.get('metadata') or {}).get('human_annotation')
+        if ref:
+            if ref['annotation_id'] in by_annotation:
+                raise ValueError('annotation_identity_conflict')
+            by_annotation[ref['annotation_id']] = row
+    seen, result, unchanged = set(), [], {}
+    producer_metadata = ('semantic_passage', 'human_annotation', 'source_bound_fields',
+        'source_bound_context', 'source_accountability', 'recommendation_semantics_evidence')
+    for raw in generated:
+        ref = (raw.get('metadata') or {}).get('human_annotation')
+        old = by_annotation.get(ref['annotation_id']) if ref else None
+        if old is None:
+            if ref and raw['object_id'] in prior_ids:
+                raise ValueError('annotation_identity_conflict')
+            prior = by_id.get(raw['object_id']) if not ref else None
+            # Unchanged source/structure is still reviewer-owned work. A full
+            # set build must not erase its exact source-role confirmations.
+            same_source = prior and all(prior.get(key) == raw.get(key) for key in ('content', 'source'))
+            same_producer = same_source and all((prior.get('metadata') or {}).get(key) ==
+                (raw.get('metadata') or {}).get(key) for key in producer_metadata)
+            if same_producer:
+                unchanged[prior['object_id']] = prior
+                result.append(deepcopy(prior))
+            else:
+                result.append(deepcopy(raw))
+            continue
+        seen.add(ref['annotation_id'])
+        if ref == old['metadata']['human_annotation']:
+            unchanged[old['object_id']] = old
+            result.append(deepcopy(old))
+            continue
+        proposed = deepcopy(old)
+        for field in ('content', 'source', 'provenance', 'proposed_object_type', 'proposed_recommendation_semantics'):
+            if field in raw:
+                proposed[field] = deepcopy(raw[field])
+            else:
+                proposed.pop(field, None)
+        for field in producer_metadata:
+            if field in raw['metadata']:
+                proposed['metadata'][field] = deepcopy(raw['metadata'][field])
+            else:
+                proposed['metadata'].pop(field, None)
+        # A prior final assessment is evidence for its old tuple. Confirmed
+        # classification/relations/semantics remain reviewer-owned choices.
+        proposed['metadata'].pop('review_passage', None)
+        proposed['metadata'].pop('passage_register', None)
+        bound = proposed['metadata'].get('source_bound_context')
+        if bound:
+            proposed['metadata']['source_bound_context'] = context_record(bound['entries'], obj=proposed)
+        revised = revise_object(old, proposed, snapshot_id=snapshot_id,
+            actor=basis['actor_id'], reason='human annotation correction')
+        if bound:
+            revised['metadata']['source_bound_context'] = context_record(bound['entries'], obj=revised)
+        stamp_canonical_hashes(revised)
+        result.append(revised)
+    if set(by_annotation) - seen:
+        raise ValueError('annotation_replacement_required')
+    if len({row['object_id'] for row in result}) != len(result):
+        raise ValueError('annotation_identity_conflict')
+    result = apply_admission_gate(result, klasse=context['class'], fragments=fragments,
+        document_version=context['version'], source_hash=context['sha256'])
+    return [deepcopy(unchanged[row['object_id']]) if row['object_id'] in unchanged else row
+            for row in apply_passage_register(result)]
 
 def _rebind_relations(result, previous, staged_version):
     """Rebuild IDs for the new source endpoint, never infer a new target."""

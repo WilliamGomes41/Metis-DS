@@ -1604,7 +1604,8 @@ def _source_bound_fields_html(obj: dict[str, Any]) -> str:
     record = (obj.get("metadata") or {}).get(KEY)
     if record is None:
         return ""
-    if record.get("version") == "source-bound-fields-v3":
+    from src.vorming.human_annotation_contract_v1 import FIELDS_VERSION
+    if record.get("version") in {"source-bound-fields-v3", FIELDS_VERSION}:
         from src.vorming.source_bound_fields_v3 import FIELDS
     labels = {
         "actor_span": "Uitvoerder", "target_group_span": "Doelgroep", "scope_span": "Toepassingsbereik",

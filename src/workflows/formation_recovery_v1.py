@@ -90,6 +90,10 @@ def upgrade_legacy(state):
             row['current_seal_id']=None
         for row in section['tables']['formation_evidence_roots']:
             row['annotation_seal_id']=None
+    if section is not None and section.get('version')==4:
+        # Only the reader capability changes. No fabricated correction basis,
+        # annotation-to-object binding, receipt or review decision is added.
+        section['version']=5
     return result
 
 
@@ -100,7 +104,7 @@ def validate(state):
                for d in (state.get('workflow_tables') or {}).get('documents', [])):
             fail('missing_reexport_required')
         return None
-    if (not isinstance(section, dict) or section.get('version') != 4
+    if (not isinstance(section, dict) or section.get('version') != 5
             or set(section.get('tables') or {}) != set(TABLES + FACT_TABLES)
             or not isinstance(section.get('documents'), list)):
         fail('shape_invalid')
@@ -119,7 +123,7 @@ def validate(state):
 def export(con):
     if not available(con):
         return None
-    return {'version':4,
+    return {'version':5,
             'documents':[_json_safe(dict(r)) for r in con.execute(
                 'SELECT '+','.join(DOCUMENT_COLUMNS)+' FROM workflow.documents ORDER BY snapshot_id').fetchall()],
             'tables':{table:[_json_safe(dict(r)) for r in con.execute(
@@ -165,7 +169,7 @@ def _validate_annotations(con):
             require_input_storage(con)
         heads = con.execute('SELECT * FROM workflow.annotation_heads WHERE snapshot_id=%s',(sid,)).fetchall()
         commands = con.execute('SELECT * FROM workflow.annotation_commands WHERE snapshot_id=%s',(sid,)).fetchall()
-        if len(versions) != source['generation'] or len(commands) != source['generation']:
+        if len(versions) != source['generation'] or len(commands) < source['generation']:
             fail('annotation_history_incomplete')
         latest, history = {}, {}
         for row in versions:
@@ -186,20 +190,40 @@ def _validate_annotations(con):
         generations, seen, first = set(), set(), {}
         for row in commands:
             result = row['result']
-            if set(result) != {'annotation_id','revision','generation','status'}:
+            required = {'annotation_id','revision','generation','status'}
+            if not required <= set(result) or set(result) - required - {'input_precondition','objects_revision','unchanged'}:
                 fail('annotation_command_invalid')
             key, revision, generation = result['annotation_id'],result['revision'],result['generation']
             if type(revision) is not int or type(generation) is not int:
                 fail('annotation_command_invalid')
             version = history.get((key,revision))
-            if (version is None or row['actor_id'] != version['author_id'] or result['status'] != version['status']
-                    or generation in generations or (key,revision) in seen):
+            unchanged = result.get('unchanged', False)
+            if type(unchanged) is not bool or (unchanged and 'input_precondition' not in result):
+                fail('annotation_command_invalid')
+            if (version is None or (not unchanged and row['actor_id'] != version['author_id']) or result['status'] != version['status']
+                    or (not unchanged and (generation in generations or (key,revision) in seen))):
+                fail('annotation_command_invalid')
+            precondition = result.get('input_precondition')
+            expected_revision = revision if unchanged else revision-1
+            expected_generation = generation if unchanged else generation-1
+            if precondition is not None and (not isinstance(precondition, dict)
+                    or set(precondition) != {'entry_revision','generation','objects_revision'}
+                    or precondition['entry_revision'] != expected_revision
+                    or precondition['generation'] != expected_generation
+                    or not isinstance(precondition['objects_revision'], str)):
                 fail('annotation_command_invalid')
             expected = stable_hash({'actor_id':row['actor_id'],'annotation_id':key,'expected_revision':revision-1,
                 'expected_generation':generation-1,'extraction_hash':source['extraction_hash'],
                 'normalization':source['normalization'],'selection':version['payload']})
+            if precondition is not None:
+                expected = stable_hash({'request':stable_hash({'actor_id':row['actor_id'],'annotation_id':key,
+                    'expected_revision':expected_revision,'expected_generation':expected_generation,
+                    'extraction_hash':source['extraction_hash'],'normalization':source['normalization'],
+                    'selection':version['payload']}), 'objects_revision':precondition['objects_revision']})
             if row['request_hash'] != expected:
                 fail('annotation_command_invalid')
+            if unchanged:
+                continue
             generations.add(generation)
             seen.add((key,revision))
             first[key] = min(first.get(key,generation),generation)

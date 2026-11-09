@@ -22,8 +22,9 @@ def producer_contract():
     from src.vorming.source_containers_v1 import VERSION as containers
     from src.vorming.source_bound_fields_v2 import VERSION as bound_context
     from src.vorming.decision_unit_construction_v1 import CONTRACT as unit
+    from src.vorming.human_annotation_contract_v1 import CONTEXT_VERSION as human_context
     return {'version': CONTRACT, 'source_views': contract(), 'context': context,
-            'containers': containers, 'bound_context': bound_context, 'unit': unit}
+            'containers': containers, 'bound_context': bound_context, 'unit': unit, 'human_context':human_context}
 
 
 class ReviewObjectFacts(Mapping):
@@ -91,7 +92,7 @@ def source_input(obj):
     return {k: deepcopy(obj.get(k)) for k in ('object_id', 'source', 'content', 'semantic_passage')} | {
         'source_fragments': deepcopy((obj.get('provenance') or {}).get('source_fragments')),
         'metadata': {k: deepcopy(md.get(k)) for k in ('semantic_passage', 'source_accountability',
-                    'source_bound_context', 'decision_unit_construction', 'result_bundle')},
+                    'source_bound_context', 'human_annotation', 'source_bound_fields', 'decision_unit_construction', 'result_bundle')},
     }
 
 
@@ -102,6 +103,7 @@ def prepare_source_proof(obj, fragments):
     from src.vorming.source_accountability_v1 import evidence_of
     from src.vorming.source_containers_v1 import accounting_reason, bound_context_valid
     from src.vorming.decision_unit_construction_v1 import unit_issues
+    from src.vorming.human_annotation_projection_v1 import has_literal_support
 
     evidence = evidence_of(obj)
     literal = False
@@ -119,6 +121,7 @@ def prepare_source_proof(obj, fragments):
         'literal_text_hash': stable_hash(str((obj.get('content') or {}).get('clean_text') or '')),
         'source_refs_hash': _refs_equality_hash((obj.get('provenance') or {}).get('source_fragments')),
         'bound_context': bound_context_valid(obj, fragments=fragments),
+        'human_support': has_literal_support(obj, fragments),
         'evidence': {k: deepcopy(v) for k, v in evidence.items() if k not in {'text', 'binding_hash'}},
         'metadata_reason': accounting_reason(evidence['text']) if evidence else None,
         'unit_issues': unit_issues(obj),

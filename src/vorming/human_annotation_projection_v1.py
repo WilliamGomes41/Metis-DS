@@ -165,3 +165,22 @@ def validate_object_fields(obj, fragments):
                         proposed_type=obj.get('proposed_object_type') or 'unclassified',context=context)
     if record!=rebuilt:
         raise ValueError('source_bound_fields_invalid')
+
+
+def has_literal_support(obj, fragments=None):
+    """Literal evidence is a relation in this claim, never a second KO/approval.
+
+    Commands resolve the actual pinned source. Intrinsic readfacts carry only
+    the existing owner's checked primitive, under its producer contract.
+    """
+    from src.review.review_card_facts_v1 import ReviewObjectFacts
+    if isinstance(obj, ReviewObjectFacts):
+        return obj.proof.get('human_support') is True
+    if not (obj.get('metadata') or {}).get(REFERENCE_KEY) or fragments is None:
+        return False
+    try:
+        entries = validate_context(obj, fragments, (obj.get('source') or {}).get('source_checksum'))
+    except (ValueError, KeyError, TypeError):
+        return False
+    return any(entry.get('annotation_role') == 'evidence' and entry.get('text')
+               and entry.get('evidence_function') in {'supported_by', 'explains'} for entry in entries)

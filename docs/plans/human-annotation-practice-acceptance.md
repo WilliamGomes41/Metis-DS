@@ -3,6 +3,8 @@
 Status: voorbereiding bij #1017/MET-61. **Geen uitgevoerde praktijktoets.**
 Technische HTML-/Unicode-fixtures bewijzen geen klinische volledigheid of lagere
 menselijke werklast. HA-2a is evenmin de volledige upload-tot-API/MCP-ketenproef.
+Het [technische HA-3-bewijs](../change-contracts/1016-human-annotation-review-evidence.md)
+vervangt deze toets niet.
 
 ## Vastleggen vóór deelname
 
@@ -29,6 +31,14 @@ afronden, de daadwerkelijk vereiste beoordeling doorlopen en bevoegd publiceren.
 Controleer daarna de publieke API en de geautoriseerde MCP-projectie, en laat een onafhankelijke beoordelaar
 het resultaat met de vooraf bevroren referentie vergelijken. Leg een verschil
 pas als fout vast na adjudicatie; bewaar de vindplaats en reden.
+
+Neem na de eerste bouw ook een doelbewuste correctie van het oorspronkelijke
+bronobject op: wijzig een voorwaarde of bewijsfunctie in dezelfde annotatie,
+pauzeer/hervat en bouw de nieuwe versie. Laat de bevoegde reviewer de nieuwe
+versie beoordelen en controleer dat ongeraakte oordelen niet opnieuw worden
+gevraagd. Noteer de oude en nieuwe versie, getroffen afhankelijkheden en tijd.
+De correctieproef gebruikt ongepubliceerd werk; reeds gepubliceerd werk volgt
+de bestaande expliciete opvolgercyclus.
 
 Keuze A: noodzakelijke voorwaarden en uitzonderingen blijven brongebonden
 context bij dezelfde claim. De referentie moet ook context uit een andere alinea

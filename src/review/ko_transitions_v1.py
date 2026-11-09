@@ -118,10 +118,11 @@ def confirmed_support(obj: dict[str, Any], objects: Iterable[dict[str, Any]]) ->
     return linked
 
 
-def supporting_evidence(obj, objects, *, not_applicable=False):
+def supporting_evidence(obj, objects, *, not_applicable=False, fragments=None):
     if type(not_applicable) is not bool:
         _refuse('supporting_evidence_choice_invalid')
-    linked = confirmed_support(obj, objects)
+    from src.vorming.human_annotation_projection_v1 import has_literal_support
+    linked = confirmed_support(obj, objects) or has_literal_support(obj, fragments)
     if not_applicable:
         if linked:
             _refuse('supporting_evidence_choice_conflict',
@@ -160,7 +161,7 @@ def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
     if event in {'approve', 'approve_second'}:
         evidence = {'assessment': require_assessment(assessment),
                     'supporting_evidence': supporting_evidence(prepared or current, objects,
-                        not_applicable=evidence_not_applicable)}
+                        not_applicable=evidence_not_applicable, fragments=fragments)}
     if prepared is not None:
         transition.target(prepared, review_path=review_path, bindings=after_bindings,
                           fragments=fragments)

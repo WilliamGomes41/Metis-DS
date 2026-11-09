@@ -4170,6 +4170,8 @@ class OperationsConsole:
         if target is None:
             raise ConsoleError("unknown_object")
         correction_input = deepcopy(target)
+        if (target.get('metadata') or {}).get('human_annotation'):
+            raise ConsoleError('annotation_source_owned')
         correction_input['governance']['validation_status'] = 'revise'
         revised = create_revision(
             correction_input,
@@ -4367,6 +4369,8 @@ class OperationsConsole:
         if index < 0:
             raise ConsoleError("unknown_object")
         target = current[index]
+        if (target.get('metadata') or {}).get('human_annotation'):
+            raise ConsoleError('annotation_source_owned')
         proposal = admission_of(target).get("expand_merge") or {}
         parts = list(proposal.get("parts") or [])
         if (

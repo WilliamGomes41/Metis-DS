@@ -515,7 +515,13 @@ def install(app, console, require, page, nav, esc):
         if document:
             from src.vorming.human_annotation_v1 import owns_source
             if owns_source(console, document):
-                return RedirectResponse('/annotations?' + urlencode({'document':document}), status_code=303)
+                params = {'document': document}
+                if object:
+                    obj = console._current_object(document, object)
+                    ref = (obj.get('metadata') or {}).get('human_annotation')
+                    if ref:
+                        params['annotation'] = ref['annotation_id']
+                return RedirectResponse('/annotations?' + urlencode(params), status_code=303)
         if task == 'structure' and document:
             return render_structure(console, actor, document, q=q, page=review_page)
         if task == 'graph' and document:
