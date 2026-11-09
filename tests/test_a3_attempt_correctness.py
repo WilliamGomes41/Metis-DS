@@ -117,7 +117,7 @@ def test_budget_exhausted_resume_with_progress_does_not_consume_retry_budget():
 def changed_contract(tmp_path, monkeypatch, *, production_console):
     state, sid, actor, *_ = system(tmp_path, production_console=production_console)
     assert state.processing_status(sid)['resume_allowed']  # resumable under the stored contract
-    import src.vorming.pre_review_semantic_v1 as semantic
+    import src.vorming.semantic_proposal_contract_v1 as semantic
     monkeypatch.setattr(semantic, 'STRENGTH_BINDING_VERSION', 'recommendation-strength-binding-v999')
     return state, sid, actor
 

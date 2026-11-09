@@ -362,7 +362,7 @@ def _safe_source_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, An
 
 def current_reconstruction_identity(fragments: list[dict[str, Any]]) -> dict[str, str]:
     """Identity of a map derived by the code that is running now. Not historical evidence."""
-    from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+    from src.vorming.prepared_source_views_v1 import candidate_fragments as _candidate_fragments, evidence_fragments as _evidence_fragments
     from src.vorming.semantic_passage_v1 import semantic_source_blocks
     from src.vorming.semantic_replay_v1 import stable_json_hash
     from src.vorming.source_reconstruction_v1 import RECONSTRUCTION_VERSION

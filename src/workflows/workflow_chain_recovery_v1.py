@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 12  # 12: sealed human corrections and exact/no-op receipts (#1016)
+WORKFLOW_RECOVERY_VERSION = 13  # 13: durable prose execution retirement must survive rollback/restore.
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -142,6 +142,12 @@ _CANONICAL_JSON_COLUMNS = {
 }
 
 
+def _contains_prose_transition(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return bool(value.get('prose_transitions')) or any(_contains_prose_transition(v) for v in value.values())
+    return isinstance(value, list) and any(_contains_prose_transition(v) for v in value)
+
+
 def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     """Upgrade legacy workflow recovery state without inventing domain decisions."""
     version = int(state.get("workflow_recovery_version") or 0)
@@ -153,6 +159,14 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
             raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
         validate(state)
         return deepcopy(dict(state))
+    if _contains_prose_transition(state):
+        raise PublicationChainRecoveryError('workflow_prose_transition_reexport_required')
+    if version == 12:
+        # Version 12 predates the prose retirement capability. Do not let a
+        # relabelled archive hide new policy from an older restore reader.
+        upgraded = deepcopy(dict(state))
+        upgraded['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION
+        return _upgrade_workflow_state(upgraded)
     if version in {10, 11} and state.get('formation_recovery') is None:
         raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
     if version in {7,8,9,10,11}:
@@ -678,6 +692,9 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                 with con.transaction():
                     self._verify_workflow_schema(con)
                     has_entra = bool(con.execute("SELECT to_regclass('workflow.entra_identities') AS name").fetchone()["name"])
+                    if _contains_prose_transition(state):
+                        from src.vorming.prose_transition_v1 import require_storage
+                        require_storage(con)
                     if state.get("entra_identities") and not has_entra:
                         raise PublicationChainRecoveryError("entra_restore_schema_required")
                     if has_entra:

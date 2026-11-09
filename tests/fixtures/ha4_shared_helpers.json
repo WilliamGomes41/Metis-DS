@@ -1,0 +1,356 @@
+{
+  "source_commit": "70b1c72374c6b4aa7038def91f439dbb3cbf89c4",
+  "fragments": [
+    {
+      "fragment_id": "f0",
+      "fragment_hash": "1d44b0c5e41422ad50158703a6944f783c104430657da680167159c2018114b0",
+      "raw_text": "Behandeling",
+      "clean_text": "Behandeling",
+      "object_type": "heading",
+      "section_path": [
+        "Behandeling"
+      ],
+      "source_locator": {
+        "locator_type": "web_line_range",
+        "locator_value": "lines:1-1"
+      }
+    },
+    {
+      "fragment_id": "f1",
+      "fragment_hash": "89c78377fee92a9d0af046f1704a2a132c8b83ca003565b6418103f9ba80e9d9",
+      "raw_text": "Sterke aanbeveling",
+      "clean_text": "Sterke aanbeveling",
+      "object_type": "paragraph",
+      "section_path": [
+        "Behandeling"
+      ],
+      "source_locator": {
+        "locator_type": "web_line_range",
+        "locator_value": "lines:2-2"
+      }
+    },
+    {
+      "fragment_id": "f2",
+      "fragment_hash": "42d7685008f04d6d2fb2df31c77201b9e164f04ddc6db2b78f6ca1e62056434a",
+      "raw_text": "Gebruik geen zalf.",
+      "clean_text": "Gebruik geen zalf.",
+      "object_type": "paragraph",
+      "section_path": [
+        "Behandeling"
+      ],
+      "source_locator": {
+        "locator_type": "web_line_range",
+        "locator_value": "lines:3-3"
+      }
+    },
+    {
+      "fragment_id": "f3",
+      "fragment_hash": "66bee8ae7d0a5da504ee8257162da97f5c7c3b01356b3077046ce15cd615d761",
+      "raw_text": "Controleer dagelijks de huid.",
+      "clean_text": "Controleer dagelijks de huid.",
+      "object_type": "paragraph",
+      "section_path": [
+        "Behandeling"
+      ],
+      "source_locator": {
+        "locator_type": "web_line_range",
+        "locator_value": "lines:4-4"
+      }
+    },
+    {
+      "fragment_id": "f4",
+      "fragment_hash": "7bc7c4b26cb66f9ee2f5252f99105b526d76d764132cfea838a8ad6d213b9918",
+      "raw_text": "Lees meer",
+      "clean_text": "Lees meer",
+      "object_type": "paragraph",
+      "section_path": [
+        "Behandeling"
+      ],
+      "source_locator": {
+        "locator_type": "web_line_range",
+        "locator_value": "lines:5-5"
+      }
+    },
+    {
+      "fragment_id": "f5",
+      "fragment_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+      "raw_text": "",
+      "clean_text": "",
+      "object_type": "paragraph",
+      "section_path": [
+        "Behandeling"
+      ],
+      "source_locator": {
+        "locator_type": "web_line_range",
+        "locator_value": "lines:6-6"
+      }
+    }
+  ],
+  "filters": {
+    "content_fragments": [
+      {
+        "fragment_id": "f0",
+        "fragment_hash": "1d44b0c5e41422ad50158703a6944f783c104430657da680167159c2018114b0",
+        "raw_text": "Behandeling",
+        "clean_text": "Behandeling",
+        "object_type": "heading",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:1-1"
+        }
+      },
+      {
+        "fragment_id": "f1",
+        "fragment_hash": "89c78377fee92a9d0af046f1704a2a132c8b83ca003565b6418103f9ba80e9d9",
+        "raw_text": "Sterke aanbeveling",
+        "clean_text": "Sterke aanbeveling",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:2-2"
+        }
+      },
+      {
+        "fragment_id": "f2",
+        "fragment_hash": "42d7685008f04d6d2fb2df31c77201b9e164f04ddc6db2b78f6ca1e62056434a",
+        "raw_text": "Gebruik geen zalf.",
+        "clean_text": "Gebruik geen zalf.",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:3-3"
+        }
+      },
+      {
+        "fragment_id": "f3",
+        "fragment_hash": "66bee8ae7d0a5da504ee8257162da97f5c7c3b01356b3077046ce15cd615d761",
+        "raw_text": "Controleer dagelijks de huid.",
+        "clean_text": "Controleer dagelijks de huid.",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:4-4"
+        }
+      },
+      {
+        "fragment_id": "f4",
+        "fragment_hash": "7bc7c4b26cb66f9ee2f5252f99105b526d76d764132cfea838a8ad6d213b9918",
+        "raw_text": "Lees meer",
+        "clean_text": "Lees meer",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:5-5"
+        }
+      },
+      {
+        "fragment_id": "f5",
+        "fragment_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "raw_text": "",
+        "clean_text": "",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:6-6"
+        }
+      }
+    ],
+    "candidate_fragments": [
+      {
+        "fragment_id": "f0",
+        "fragment_hash": "1d44b0c5e41422ad50158703a6944f783c104430657da680167159c2018114b0",
+        "raw_text": "Behandeling",
+        "clean_text": "Behandeling",
+        "object_type": "heading",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:1-1"
+        }
+      },
+      {
+        "fragment_id": "f2",
+        "fragment_hash": "42d7685008f04d6d2fb2df31c77201b9e164f04ddc6db2b78f6ca1e62056434a",
+        "raw_text": "Gebruik geen zalf.",
+        "clean_text": "Gebruik geen zalf.",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:3-3"
+        }
+      },
+      {
+        "fragment_id": "f3",
+        "fragment_hash": "66bee8ae7d0a5da504ee8257162da97f5c7c3b01356b3077046ce15cd615d761",
+        "raw_text": "Controleer dagelijks de huid.",
+        "clean_text": "Controleer dagelijks de huid.",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:4-4"
+        }
+      },
+      {
+        "fragment_id": "f4",
+        "fragment_hash": "7bc7c4b26cb66f9ee2f5252f99105b526d76d764132cfea838a8ad6d213b9918",
+        "raw_text": "Lees meer",
+        "clean_text": "Lees meer",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:5-5"
+        }
+      },
+      {
+        "fragment_id": "f5",
+        "fragment_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "raw_text": "",
+        "clean_text": "",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:6-6"
+        }
+      }
+    ],
+    "evidence_fragments": [
+      {
+        "fragment_id": "f0",
+        "fragment_hash": "1d44b0c5e41422ad50158703a6944f783c104430657da680167159c2018114b0",
+        "raw_text": "Behandeling",
+        "clean_text": "Behandeling",
+        "object_type": "heading",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:1-1"
+        }
+      },
+      {
+        "fragment_id": "f1",
+        "fragment_hash": "89c78377fee92a9d0af046f1704a2a132c8b83ca003565b6418103f9ba80e9d9",
+        "raw_text": "Sterke aanbeveling",
+        "clean_text": "Sterke aanbeveling",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:2-2"
+        }
+      },
+      {
+        "fragment_id": "f2",
+        "fragment_hash": "42d7685008f04d6d2fb2df31c77201b9e164f04ddc6db2b78f6ca1e62056434a",
+        "raw_text": "Gebruik geen zalf.",
+        "clean_text": "Gebruik geen zalf.",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:3-3"
+        }
+      },
+      {
+        "fragment_id": "f3",
+        "fragment_hash": "66bee8ae7d0a5da504ee8257162da97f5c7c3b01356b3077046ce15cd615d761",
+        "raw_text": "Controleer dagelijks de huid.",
+        "clean_text": "Controleer dagelijks de huid.",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:4-4"
+        }
+      },
+      {
+        "fragment_id": "f4",
+        "fragment_hash": "7bc7c4b26cb66f9ee2f5252f99105b526d76d764132cfea838a8ad6d213b9918",
+        "raw_text": "Lees meer",
+        "clean_text": "Lees meer",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:5-5"
+        }
+      },
+      {
+        "fragment_id": "f5",
+        "fragment_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "raw_text": "",
+        "clean_text": "",
+        "object_type": "paragraph",
+        "section_path": [
+          "Behandeling"
+        ],
+        "source_locator": {
+          "locator_type": "web_line_range",
+          "locator_value": "lines:6-6"
+        }
+      }
+    ]
+  },
+  "contracts": [
+    {
+      "flags": {},
+      "version": "source-accountability-v1/semantic-passage-v1.1.0/source-evidence-resolution-v1/recommendation-strength-binding-v6/source-occurrence-authority-v1.1.0",
+      "schema_hash": "3fbc9e076c5b93fa8e3df13414a778869c80cd8f7a368ec468467e6ae140f439"
+    },
+    {
+      "flags": {
+        "field_contract_v2": true
+      },
+      "version": "source-accountability-v1/source-bound-fields-v2/source-bound-context-v1/semantic-passage-v1.1.0/source-evidence-resolution-v1/recommendation-strength-binding-v6/source-occurrence-authority-v1.1.0",
+      "schema_hash": "739c695d932f3a926e1b3c18ebf7903b2aa4cf37bf31585bac50a2397927fb8b"
+    },
+    {
+      "flags": {
+        "field_contract_v3": true
+      },
+      "version": "source-accountability-v2/bounded-formation-v1/recoverable-formation-v1/relation-object-index-v1/target-via-relation-v1/scope-list-introduction-v1/predicate-contiguous-v1/source-bound-fields-v3/source-bound-context-v1/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/v3-verbal-strength-and-lead-in-label-v1/semantic-passage-v1.1.0/source-evidence-resolution-v1/v3-adjacent-strength-v2/owner-scoped-fields-v2/recommendation-strength-binding-v6/source-occurrence-authority-v1.1.0",
+      "schema_hash": "f5d9d29c4dc6696802917cce73bf2d3d2ad6005ce21fd71396c9789b03130155"
+    }
+  ]
+}

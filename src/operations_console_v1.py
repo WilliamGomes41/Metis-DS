@@ -2111,6 +2111,9 @@ class OperationsConsole:
         from src.vorming.bounded_formation_v1 import VERSION as TASK_VERSION
         from src.review.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._processing_envelope(snapshot_id) if envelope is None else envelope
+        from src.vorming.prose_transition_v1 import current
+        if current(envelope) is not None:
+            return False
         if envelope.get("processing_storage") == "task-v1" and any(
                 (a.get("diagnostic") or {}).get("validator_input_ref") for a in envelope.get("processing_attempts") or []):
             latest = next(reversed(envelope.get("processing_attempts") or []), {})
@@ -2949,6 +2952,9 @@ class OperationsConsole:
     def _fragments_and_spec(self, kind, path, **command):
         """Explicit mutation-only formation boundary, preserving legacy callers."""
         context = command.get("formation_context") or {}
+        if context.get('snapshot_id'):
+            from src.vorming.prose_transition_v1 import assert_execution
+            assert_execution(self._envelope(context['snapshot_id']))
         from src.vorming.human_annotation_v1 import owns_source
         if owns_source(self, context.get('snapshot_id')):
             raise ConsoleError('annotation_source_owned')

@@ -149,3 +149,20 @@ repositorypreflight PASS (2311 bestanden), architectuurgrenzen, compileall en
 diffcheck PASS. De aanvullende lokale pytest-run kon niet starten omdat pytest
 in deze omgeving niet geïnstalleerd is; dat is geen test-PASS. De GitHub-CI-run
 op de nieuwe PR-head blijft het bewijs voor de volledige suite.
+
+## Vervolgimplementatie: gedeelde helpers en expliciete stop
+
+De opdracht van 9 november vervolgt deze inventaris via
+[het stopcontract](1017-prose-transition.md) en
+[het actuele compositiediagram](../architecture/prose-transition-1017.md).
+Bronfilters wonen voortaan in `prepared_source_views_v1`, read-only semantische
+contracten in `semantic_proposal_contract_v1` en boomtransport in
+`bounded_model_call_v1`. Bron-, bewijs- en diagnoselezers importeren de oude
+prozauitvoerder niet meer. Tijdelijke re-exports houden de nog actieve oude
+uitvoering compatibel tot definitieve subtractie.
+
+Een bevoegde actor kan een exacte ongepubliceerde prozawerkrevisie expliciet
+stoppen. De bestaande attempt-/documentauthority bewaart bronwerk en een
+append-only receipt, blokkeert oude workers/retries en behoudt die blokkade
+bij herstart en herstel. Installatie stopt niets; praktijkvergelijking,
+productiecutover en definitieve verwijdering blijven afzonderlijk open.

@@ -252,7 +252,7 @@ def unresolved_rejections(envelope, *, objects=None, bindings=None, fragments=No
             or identity.get("hash") != stable_json_hash(components)
             or exact_replay_lookup(replay, expected_identity=identity).status != LOOKUP_HIT):
         return deepcopy(unverified)
-    from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+    from src.vorming.prepared_source_views_v1 import candidate_fragments as _candidate_fragments, evidence_fragments as _evidence_fragments
     from src.vorming.semantic_passage_v1 import semantic_source_blocks
     # Source-only remainders have no proposal stamp. Pin their literal inputs
     # with the same producer fingerprint; this computes blocks, never passages.

@@ -773,6 +773,18 @@
       ]
     ],
     [
+      "/source-selection/transition",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/source-selection/transition",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/telemetry",
       [
         "GET"

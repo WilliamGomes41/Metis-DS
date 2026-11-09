@@ -19,7 +19,9 @@ import sys
 import tempfile
 import time
 import uuid
-from typing import Mapping
+from typing import Mapping, Any
+from contextvars import ContextVar
+import logging
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPHandler, HTTPSHandler, Request, build_opener
 
@@ -233,3 +235,50 @@ def post_json(url: str, headers: dict, payload: dict, limits: ModelCallLimits, *
 
 if __name__ == '__main__':
     _worker(Path(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]))
+
+
+PROCESSING_REFERENCE: ContextVar[str] = ContextVar("pre_review_processing_reference", default="-")
+LOGGER = logging.getLogger("metis.provider")
+
+def logged_post_json(url, headers, payload, limits, observation=None, *, transport=None):
+    from src.operations_console_v1 import ConsoleError
+    call_id = uuid.uuid4().hex[:12]
+    started = time.monotonic()
+    LOGGER.info("METIS_PROVIDER start id=%s total=%s reference=%s", call_id, limits.total, PROCESSING_REFERENCE.get())
+    observation = observation if observation is not None else {}
+    observation["call_id"] = call_id
+    try:
+        result = (transport or post_json)(url, headers, payload, limits, observation=observation)
+    except ConsoleError as exc:
+        LOGGER.error("METIS_PROVIDER failure id=%s code=%s http=%s elapsed=%.2f reference=%s",
+                     call_id, exc.code, observation.get("http_status", "-"), time.monotonic()-started, PROCESSING_REFERENCE.get())
+        raise
+    LOGGER.info("METIS_PROVIDER success id=%s http=%s elapsed=%.2f reference=%s",
+                call_id, observation.get("http_status", "-"), time.monotonic()-started, PROCESSING_REFERENCE.get())
+    return result
+
+def extract_output_text(response: dict[str, Any]) -> str:
+    from src.operations_console_v1 import ConsoleError
+    if response.get("status") not in (None, "completed"):
+        raise ConsoleError("pre_review_llm_response_not_completed")
+    output = response.get("output")
+    if not isinstance(output, list):
+        raise ConsoleError("pre_review_llm_response_invalid")
+    texts: list[str] = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "refusal":
+                raise ConsoleError("pre_review_llm_refused")
+            if part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                texts.append(part["text"])
+    text = "".join(texts)
+    if not text.strip():
+        raise ConsoleError("pre_review_llm_response_empty")
+    return text

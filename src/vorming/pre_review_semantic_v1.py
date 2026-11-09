@@ -12,7 +12,6 @@ fallback: a failure fails the attempt and leaves prior work untouched.
 """
 from __future__ import annotations
 
-from contextvars import ContextVar
 
 import hashlib
 import json
@@ -26,10 +25,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from src.vorming.document_spec_v1 import document_spec
+from src.vorming.prepared_source_views_v1 import (content_fragments as _content_fragments, candidate_fragments as _candidate_fragments, evidence_fragments as _evidence_fragments)
+from src.vorming.semantic_proposal_contract_v1 import semantic_contract_version, semantic_contract_version_for_mode, _proposal_schema, validate_provider_proposal
+from src.vorming.bounded_model_call_v1 import extract_output_text as _extract_output_text
 from src.vorming.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json as bounded_post_json
 
 # Per execution, including worker threads; never persisted as document authority.
-_PROCESSING_REFERENCE: ContextVar[str] = ContextVar("pre_review_processing_reference", default="-")
+from src.vorming.bounded_model_call_v1 import PROCESSING_REFERENCE as _PROCESSING_REFERENCE
 
 from src.vorming.context_aware_split_v1 import heading_structure_units
 from src.vorming.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
@@ -246,162 +248,10 @@ def _post_json(
 
 
 def _bounded_provider_json(url, headers, payload, limits, observation=None):
-    call_id = uuid.uuid4().hex[:12]
-    started = time.monotonic()
-    LOGGER.info("METIS_PROVIDER start id=%s total=%s reference=%s", call_id, limits.total, _PROCESSING_REFERENCE.get())
-    observation = observation if observation is not None else {}
-    observation["call_id"] = call_id
-    try:
-        result = bounded_post_json(url, headers, payload, limits, observation=observation)
-    except ConsoleError as exc:
-        LOGGER.error("METIS_PROVIDER failure id=%s code=%s http=%s elapsed=%.2f reference=%s",
-                     call_id, exc.code, observation.get("http_status", "-"), time.monotonic()-started, _PROCESSING_REFERENCE.get())
-        raise
-    LOGGER.info("METIS_PROVIDER success id=%s http=%s elapsed=%.2f reference=%s",
-                call_id, observation.get("http_status", "-"), time.monotonic()-started, _PROCESSING_REFERENCE.get())
-    return result
+    from src.vorming.bounded_model_call_v1 import logged_post_json
+    return logged_post_json(url, headers, payload, limits, observation, transport=bounded_post_json)
 
 
-def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = False) -> dict[str, Any]:
-    span = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "block_id": {"type": "string"},
-            "literal": {"type": "string", "minLength": 1},
-            "occurrence": {"type": ["integer", "null"], "minimum": 0},
-        },
-        "required": ["block_id", "literal", "occurrence"],
-    }
-    nullable_span = {
-        "type": ["object", "null"],
-        "additionalProperties": False,
-        "properties": dict(span["properties"]),
-        "required": list(span["required"]),
-    }
-    recommendation_semantics = {
-        "type": ["object", "null"],
-        "additionalProperties": False,
-        "properties": {
-            "direction": {"type": "string", "enum": ["for", "against"]},
-            "direction_evidence": span,
-            "strength": {
-                "type": ["string", "null"],
-                "enum": ["strong", "weak", None],
-            },
-            "strength_status": {
-                "type": "string",
-                "enum": ["explicit", "not_stated", "unmapped"],
-            },
-            "strength_evidence": nullable_span,
-        },
-        "required": [
-            "direction",
-            "direction_evidence",
-            "strength",
-            "strength_status",
-            "strength_evidence",
-        ],
-    }
-    relation = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "source_spans": {"type": "array", "minItems": 1, "items": span},
-            "relation_type": {
-                "type": "string",
-                "enum": [
-                    "applies_if",
-                    "except_if",
-                    "defines",
-                    "explains",
-                    "supported_by",
-                    "supersedes",
-                ],
-            },
-            "target_spans": {"type": "array", "minItems": 1, "items": span},
-            "evidence_spans": {"type": "array", "minItems": 1, "items": span},
-        },
-        "required": [
-            "source_spans",
-            "relation_type",
-            "target_spans",
-            "evidence_spans",
-        ],
-    }
-    obj = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "spans": {"type": "array", "minItems": 1, "items": span},
-            "proposed_object_type": {
-                "type": "string",
-                "enum": sorted(ALLOWED_PROPOSED_TYPES),
-            },
-            "recommendation_semantics": recommendation_semantics,
-        },
-        "required": [
-            "spans",
-            "proposed_object_type",
-            "recommendation_semantics",
-        ],
-    }
-    if field_contract_v3:
-        # B5-h: a v3 relation names its endpoints by object index; the producer
-        # boundary (recoverable_formation_v1.prepare) maps them to the objects'
-        # own selections, so repeated span literals cannot miss an endpoint.
-        props = relation["properties"]
-        del props["source_spans"], props["target_spans"]
-        props["source_object"] = {"type": "integer", "minimum": 0}
-        props["target_object"] = {"type": "integer", "minimum": 0}
-        relation["required"] = ["source_object", "relation_type", "target_object", "evidence_spans"]
-    if field_contract_v2 or field_contract_v3:
-        from src.vorming.source_bound_fields_v3 import evidence_schema as schema_v3
-        obj["properties"]["field_evidence"] = schema_v3(span) if field_contract_v3 else evidence_schema(span)
-        obj["required"].append("field_evidence")
-        obj["properties"]["context_evidence"] = context_evidence_schema(span)
-        obj["required"].append("context_evidence")
-    result = {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "objects": {"type": "array", "items": obj},
-            "relations": {"type": "array", "items": relation},
-            "abstain_reason": {"type": ["string", "null"]},
-        },
-        "required": ["objects", "relations", "abstain_reason"],
-    }
-    if field_contract_v2 or field_contract_v3:
-        from src.vorming.source_accountability_v1 import assessment_schema
-        result["properties"]["source_assessments"] = assessment_schema(span)
-        result["required"].append("source_assessments")
-    return result
-
-
-def _extract_output_text(response: dict[str, Any]) -> str:
-    if response.get("status") not in (None, "completed"):
-        raise ConsoleError("pre_review_llm_response_not_completed")
-    output = response.get("output")
-    if not isinstance(output, list):
-        raise ConsoleError("pre_review_llm_response_invalid")
-    texts: list[str] = []
-    for item in output:
-        if not isinstance(item, dict):
-            continue
-        content = item.get("content")
-        if not isinstance(content, list):
-            continue
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-            if part.get("type") == "refusal":
-                raise ConsoleError("pre_review_llm_refused")
-            if part.get("type") == "output_text" and isinstance(part.get("text"), str):
-                texts.append(part["text"])
-    text = "".join(texts)
-    if not text.strip():
-        raise ConsoleError("pre_review_llm_response_empty")
-    return text
 
 
 def _request_payload(
@@ -444,18 +294,6 @@ def _request_payload(
         },
     }
 
-def _content_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    from src.vorming.prepared_source_views_v1 import filtered_view
-    retained = filtered_view(fragments,"content")
-    if retained is not None:
-        return retained
-    out: list[dict[str, Any]] = []
-    for fragment in fragments:
-        object_type, _proposed = extract_object_type(fragment)
-        if object_type != "heading":
-            out.append(fragment)
-    return out
-
 
 def _materialised_content(**kwargs: Any) -> list[dict[str, Any]]:
     """Selection decides. The materialiser creates the only knowledge candidates."""
@@ -475,44 +313,6 @@ def _materialised_content(**kwargs: Any) -> list[dict[str, Any]]:
     return ordered_source_projection(candidates, decisions, coverage, kwargs["fragments"])
 
 
-def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return source fragments the provider may select as KnowledgeCandidates.
-
-    Strength labels stay in source coverage/evidence but are not themselves
-    candidate passages.
-    """
-
-    from src.vorming.prepared_source_views_v1 import filtered_view
-    retained = filtered_view(fragments,"candidate")
-    if retained is not None:
-        return retained
-    out: list[dict[str, Any]] = []
-    for fragment in _content_fragments(fragments):
-        text = str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
-        if (
-            is_strength_stamp(text)
-            or is_source_strength_label(text)
-            or is_kennisplatform_chrome_text(text)
-        ):
-            continue
-        out.append(fragment)
-    return out
-
-
-def _evidence_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return source material eligible to support semantics evidence."""
-
-    from src.vorming.prepared_source_views_v1 import filtered_view
-    retained = filtered_view(fragments,"evidence")
-    if retained is not None:
-        return retained
-    return [
-        fragment
-        for fragment in fragments
-        if not is_kennisplatform_chrome_text(
-            str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
-        )
-    ]
 
 
 def _source_ordered_units(
@@ -601,36 +401,7 @@ def _replay_identity(
         model_config_hash=_stable_json_hash(SEMANTIC_MODEL_CONFIG),
     )
 
-def semantic_contract_version(*, field_contract_v2=False, field_contract_v3=False):
-    """The one semantic contract string; replay identity and reservation MOETEN share it."""
-    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/relation-object-index-v1/target-via-relation-v1/scope-list-introduction-v1/predicate-contiguous-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{V3_STRENGTH_VOCABULARY_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
 
-
-def semantic_contract_version_for_mode(mode):
-    """Read-only mapping from a stored processing mode; non-semantic modes have no contract."""
-    from src.vorming.passage_formation_policy_v1 import SEMANTIC_MODE
-    if mode == SEMANTIC_V3_MODE:
-        return semantic_contract_version(field_contract_v3=True)
-    if mode == SEMANTIC_V2_MODE:
-        return semantic_contract_version(field_contract_v2=True)
-    if mode == SEMANTIC_MODE:
-        return semantic_contract_version()
-    return None
-
-
-def validate_provider_proposal(proposal, *, field_contract_v2=False, field_contract_v3=False):
-    """Pure proposal gates shared with read-only diagnostic reproduction."""
-    if not isinstance(proposal, dict):
-        raise ConsoleError("pre_review_llm_response_invalid")
-    if str(proposal.get("abstain_reason") or "").strip():
-        raise ConsoleError("pre_review_llm_abstained")
-    if (field_contract_v2 or field_contract_v3) and isinstance(proposal.get("objects"), list):
-        for index, row in enumerate(proposal["objects"]):
-            if not isinstance(row, dict) or "context_evidence" not in row:
-                error = ConsoleError("pre_review_llm_proposal_rejected", "source_bound_context_required")
-                error.validation_finding = {"candidate_index": index, "field": "context_evidence",
-                    "proposed_object": row, "reason_code": "source_bound_context_required"}
-                raise error
 
 
 def _provider_proposal(
