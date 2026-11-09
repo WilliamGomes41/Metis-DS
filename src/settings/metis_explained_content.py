@@ -48,7 +48,7 @@ class Model:
 
 
 # References describe this inspected revision, never an inferred deployment.
-REFERENCE_REVISION = "5df87a987764bbcd60e44b34402ffe52b558118a"
+REFERENCE_REVISION = "6c2e156048d526221d5c34a29d8ce665fc95fba1"
 
 MODELS = (
     Model(
@@ -180,7 +180,7 @@ MODELS = (
         "ai", "AI-modellen voor kennisvorming",
         "Welke ondersteuning taalmodellen bieden en waarom hun uitkomst een voorstel blijft.",
         "Een AI-model kan helpen broninhoud te selecteren en voorstellen te structureren binnen een afgebakende opdracht.",
-        "Model, prompt en uitvoercontract horen bij een concrete verwerking. Gedeelde providerconfiguratie bepaalt de modelkeuze; taakspecifieke instructies en controles blijven bij de betreffende functie. Deterministische materialisatie vormt daarna de kandidaten uit gecontroleerde bronverwijzingen.",
+        "Model, prompt en uitvoercontract horen bij een concrete verwerking. Gedeelde providerconfiguratie bepaalt de modelkeuze; taakspecifieke instructies en controles blijven bij de betreffende functie. Deterministische materialisatie vormt daarna de kandidaten uit gecontroleerde bronverwijzingen. Een bevoegde bronactor kan AI-verwerking van een ongepubliceerde prozawerkrevisie expliciet stoppen. Bronwerk en bewijs blijven bewaard; oude taken hervatten niet automatisch. De stop draagt het werk niet automatisch over aan een menselijke annotator.",
         "Het scheiden van een AI-voorstel en een gecontroleerde kandidaat maakt de taak van het model begrensd en de vervolgstappen controleerbaar.",
         ("Een taalmodel kan voorwaarden missen of een onjuiste interpretatie voorstellen.",
          "Modelzekerheid is geen inhoudelijke bevoegdheid of zelfstandig kwaliteitsbewijs.",
@@ -188,6 +188,7 @@ MODELS = (
         "Technisch beheer beheert modelconfiguratie en instructieversies. Bevoegde inhoudsdeskundigen beoordelen de kennis; de verantwoordelijke organisatie legt afspraken over gegevensverwerking en leveranciers vast.",
         "Providerconfiguratie en verwerkingsevidence beschrijven welke identificatie en aanroepgegevens beschikbaar kunnen zijn. Historische records zonder opgeslagen bewijs blijven onbekend; er wordt geen volledige evaluatiehistorie verondersteld.",
         (Reference("Gedeelde modelconfiguratie", "src/vorming/llm_provider_v1.py"),
+         Reference("Gecontroleerd stoppen van AI-proza", "docs/architecture/prose-transition-1017.md"),
          Reference("Beschikbaar verwerkingsevidence", "docs/PROCESSING_EVIDENCE_EXPORT.md"),
          Reference("Vormingsbewijs: ontwerp en verificatie", "docs/change-contracts/met41-sealed-activation-evidence.md")),
         ("ai-model", "prompt", "modelversie", "vaste-controle-deterministische-controle"),

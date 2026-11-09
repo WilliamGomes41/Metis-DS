@@ -42,7 +42,14 @@ MIGRATION_NAMES = (
     "034_human_annotations.sql",
     "035_annotation_meaning_input.sql",
     "036_human_annotation_build.sql",
+    "037_human_annotation_revisions.sql",
+    "038_prose_transitions.sql",
 )
+REQUIRED_TRIGGERS = frozenset({
+    ("documents", "guard_prose_transition_document"),
+    ("document_inputs", "guard_prose_transition_inputs"),
+    ("processing_attempts", "guard_prose_transition_attempt"),
+})
 REQUIRED_TABLES = frozenset(
     {
         "annotation_sets", "annotation_versions", "annotation_heads", "annotation_commands",
@@ -263,6 +270,11 @@ def observe_schema(connection: Any) -> dict[str, Any]:
             "WHERE n.nspname='workflow'"
         ).fetchall()
         tables = {str(row["table_name"]) for row in table_rows}
+        trigger_rows = connection.execute(
+            "SELECT c.relname AS table_name,t.tgname AS trigger_name FROM pg_trigger t "
+            "JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE n.nspname='workflow' AND NOT t.tgisinternal AND t.tgenabled IN ('O','A')"
+        ).fetchall()
         columns = {(str(row["table_name"]), str(row["column_name"])) for row in column_rows}
         counts: dict[str, int] = {}
         for table in sorted(REQUIRED_TABLES & tables):
@@ -278,8 +290,11 @@ def observe_schema(connection: Any) -> dict[str, Any]:
         for row in constraint_rows
     }
     missing_constraints = sorted(spec[1] for spec in REQUIRED_CONSTRAINTS if spec not in present_constraints)
+    present_triggers = {(str(row['table_name']), str(row['trigger_name'])) for row in trigger_rows}
+    missing_triggers = sorted(f'{table}.{trigger}' for table, trigger in REQUIRED_TRIGGERS - present_triggers)
     return {
-        "status": "PASS" if not missing_tables and not missing_columns and not missing_constraints else "BLOCKED",
+        "status": "PASS" if not missing_tables and not missing_columns and not missing_constraints and not missing_triggers else "BLOCKED",
+        "missing_triggers": missing_triggers,
         "missing_constraints": missing_constraints,
         "database": str(identity["database"]),
         "database_user": str(identity["user"]),

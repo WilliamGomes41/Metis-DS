@@ -51,7 +51,7 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchiveInputs, Processin
 
     def retain_input(self, con, *, envelope, validator_input, semantic_identity, expected_revision):
         from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
-        from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
+        from src.vorming.prepared_source_views_v1 import content_fragments as _content_fragments, evidence_fragments as _evidence_fragments
         extraction = envelope.get(KEY)
         fragments = stored_extraction(envelope)
         if fragments is None:
@@ -108,7 +108,7 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchiveInputs, Processin
             raise WorkflowDocumentStoreError("formation_input_source_mismatch")
         extraction = row["extraction"]
         from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
-        from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
+        from src.vorming.prepared_source_views_v1 import content_fragments as _content_fragments, evidence_fragments as _evidence_fragments
         source = extraction.get("source") or {}
         if (extraction.get("record_hash") != payload["extraction_hash"]
                 or source.get("snapshot_id") != payload["snapshot_id"]

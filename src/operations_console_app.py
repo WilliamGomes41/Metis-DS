@@ -304,6 +304,7 @@ ERROR_COPY = {
     "processing_retry_cooldown": "Een nieuwe poging is nog niet mogelijk vóór de vermelde herprobeertijd. Externe annulering van het eerdere verzoek is onbekend.",
     "processing_attempt_limit_reached": "Het ingestelde maximumaantal pogingen is bereikt. Laat de beheerder de oorzaak onderzoeken.",
     "processing_structural_limit": "Deze opdracht overschrijdt een invoer- of uitvoergrens. Herhalen zonder de oorzaak te wijzigen is geen herstel.",
+    "processing_prose_transition_required": "Deze AI-verwerking is expliciet gestopt. Bronwerk en bewijs zijn bewaard. Menselijke bronselectie vereist een afzonderlijke handeling; deze taak hervat niet automatisch.",
     "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
     "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
     "source_formation_incomplete": "Geldige voorstellen zijn bewaard. Er staat nog onopgelost vormingswerk open; publicatie is geblokkeerd.",
@@ -3672,6 +3673,8 @@ def create_console_app(
 
     from src.vorming.source_selection_ui_v1 import install as install_source_selection
     source_dispatcher = install_source_selection(app, state, _require, _page, _nav, _esc)
+    from src.vorming.prose_transition_api_v1 import install as install_prose_transition
+    install_prose_transition(app, state, _require)
     from src.vorming.human_annotation_ui_v1 import install as install_annotations
     install_annotations(app, state, _require, _page, _nav, _esc, dispatcher=source_dispatcher)
 

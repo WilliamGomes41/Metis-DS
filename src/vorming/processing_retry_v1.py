@@ -64,6 +64,8 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     if not envelope.get(KEY) and os.environ.get("METIS_FORMATION_TASK_STORAGE") == "v1":
         envelope["processing_storage"] = "task-v1"
     attempts = envelope.setdefault(KEY, [])
+    from src.vorming.prose_transition_v1 import assert_execution
+    assert_execution(envelope, kind=kind)
     expire_running(envelope, clock)
     for attempt in attempts:
         if attempt["command_id"] == command_id:
@@ -105,7 +107,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     else:
         if annotation_seal_id is not None:
             raise ConsoleError('annotation_seal_invalid')
-        from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode
+        from src.vorming.semantic_proposal_contract_v1 import semantic_contract_version_for_mode
         configuration = envelope.get("processing_configuration")
         attempt["reserved_semantic_contract_version"] = semantic_contract_version_for_mode(
             configuration.get("mode") if isinstance(configuration, dict) else None)
@@ -269,6 +271,9 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
         allowed, reason = False, "processing_retry_cooldown"
     elif latest.get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
         allowed, reason = False, "processing_structural_limit"
+    from src.vorming.prose_transition_v1 import current, STOPPED
+    if latest.get('kind') != 'human_annotation_build' and current(envelope) is not None:
+        allowed, reason, recovery_available = False, STOPPED, False
     return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
             "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
             "recovery_available": recovery_available, "attempts_used":attempts_used,

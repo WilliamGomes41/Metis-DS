@@ -6,6 +6,9 @@ No validation decision, actor permission or candidate is cached here.
 """
 from copy import deepcopy
 import json
+from typing import Any
+from src.object_taxonomy_v1 import extract_object_type, is_strength_stamp, is_kennisplatform_chrome_text
+from src.vorming.recommendation_semantics_v1 import is_source_strength_label
 
 from src.integrity_kernel import stable_hash
 from src.request_diagnostics_v1 import diagnostic_phase
@@ -195,11 +198,10 @@ class ReadSource(PreparedSource):
 def prepare(raw):
     if isinstance(raw,SourceFragments):
         return raw.root
-    from src.vorming.pre_review_semantic_v1 import _content_fragments,_candidate_fragments,_evidence_fragments
     from src.vorming.semantic_passage_v1 import _reconstructed_blocks
     rows=list(raw)
-    variants={'full':rows,'content':_content_fragments(rows),'candidate':_candidate_fragments(rows),
-              'evidence':_evidence_fragments(rows),'evidence_content':_content_fragments(_evidence_fragments(rows))}
+    variants={'full':rows,'content':content_fragments(rows),'candidate':candidate_fragments(rows),
+              'evidence':evidence_fragments(rows),'evidence_content':content_fragments(evidence_fragments(rows))}
     from src.object_taxonomy_v1 import extract_object_type
     variants['headings']=[row for row in rows if extract_object_type(row)[0]=='heading']
     positions={id(row):i for i,row in enumerate(rows)}
@@ -238,3 +240,56 @@ def stored_index(fragments,*,include_headings=False):
 
 def fragment_index(fragments):
     return fragments.fragment_index if isinstance(fragments,SourceFragments) else {r.get('fragment_id'):r for r in fragments}
+
+
+# Source classification is shared by historical readers and all producers.
+
+
+def content_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    retained = filtered_view(fragments,"content")
+    if retained is not None:
+        return retained
+    out: list[dict[str, Any]] = []
+    for fragment in fragments:
+        object_type, _proposed = extract_object_type(fragment)
+        if object_type != "heading":
+            out.append(fragment)
+    return out
+
+
+def candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return source fragments the provider may select as KnowledgeCandidates.
+
+    Strength labels stay in source coverage/evidence but are not themselves
+    candidate passages.
+    """
+
+    retained = filtered_view(fragments,"candidate")
+    if retained is not None:
+        return retained
+    out: list[dict[str, Any]] = []
+    for fragment in content_fragments(fragments):
+        text = str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
+        if (
+            is_strength_stamp(text)
+            or is_source_strength_label(text)
+            or is_kennisplatform_chrome_text(text)
+        ):
+            continue
+        out.append(fragment)
+    return out
+
+
+def evidence_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return source material eligible to support semantics evidence."""
+
+    retained = filtered_view(fragments,"evidence")
+    if retained is not None:
+        return retained
+    return [
+        fragment
+        for fragment in fragments
+        if not is_kennisplatform_chrome_text(
+            str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
+        )
+    ]

@@ -2111,6 +2111,9 @@ class OperationsConsole:
         from src.vorming.bounded_formation_v1 import VERSION as TASK_VERSION
         from src.review.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._processing_envelope(snapshot_id) if envelope is None else envelope
+        from src.vorming.prose_transition_v1 import current
+        if current(envelope) is not None:
+            return False
         if envelope.get("processing_storage") == "task-v1" and any(
                 (a.get("diagnostic") or {}).get("validator_input_ref") for a in envelope.get("processing_attempts") or []):
             latest = next(reversed(envelope.get("processing_attempts") or []), {})
@@ -2952,6 +2955,13 @@ class OperationsConsole:
         from src.vorming.human_annotation_v1 import owns_source
         if owns_source(self, context.get('snapshot_id')):
             raise ConsoleError('annotation_source_owned')
+        if context.get('snapshot_id'):
+            from src.vorming.prose_transition_v1 import assert_execution
+            # Synchronous ingest may prepare a new source before registration.
+            # Existing sources retain their authoritative execution fence.
+            envelope = review_envelopes_view(self).get(context['snapshot_id'])
+            if envelope is not None:
+                assert_execution(envelope)
         reuse = context.get("extraction_reuse_summary")
         diagnostic = context.get("diagnostic_checkpoint")
         if reuse is not None and diagnostic:
@@ -2975,7 +2985,6 @@ class OperationsConsole:
             command["formation_context"] = context
         strategy = getattr(self, "_source_processing_strategy", None)
         if strategy is None:
-            # No implicit formation route: an unconfigured runtime fails closed.
             raise ConsoleError("source_processing_strategy_unconfigured")
         return strategy.prepare(kind, path, **command)
 

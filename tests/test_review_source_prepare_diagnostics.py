@@ -27,10 +27,10 @@ def test_preparation_is_a_nested_phase_and_does_not_change_source(tmp_path):
 
 
 def test_preparation_failure_still_finishes_timing(monkeypatch):
-    import src.vorming.pre_review_semantic_v1 as semantic
+    import src.vorming.prepared_source_views_v1 as semantic
     def fail(_rows):
         raise ValueError('private content')
-    monkeypatch.setattr(semantic, '_content_fragments', fail)
+    monkeypatch.setattr(semantic, 'content_fragments', fail)
     evidence = RequestEvidence('test', '/review', lambda _event: None)
     token = _CURRENT.set(evidence)
     try:

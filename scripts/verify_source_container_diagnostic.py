@@ -4,7 +4,7 @@ from collections import Counter
 from src.vorming.pre_review_semantic_v1 import _replay_identity, semantic_spec_from_fragments
 from src.vorming.semantic_replay_v1 import validated_inference_record
 from src.vorming.semantic_passage_v1 import semantic_source_blocks
-from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+from src.vorming.prepared_source_views_v1 import candidate_fragments as _candidate_fragments, evidence_fragments as _evidence_fragments
 from src.vorming.semantic_transform_generic_v1 import transform
 from src.vorming.admission_gate_v1 import apply_admission_gate
 from src.vorming.passage_register_v1 import apply_passage_register

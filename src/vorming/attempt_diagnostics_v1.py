@@ -193,7 +193,7 @@ def replay_diagnostic(attempt, *, input_resolver=None):
     expected = diagnostic.get("validator_input_hash")
     if expected != hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest():
         return {"status": "unavailable", "reason_code": "diagnostic_input_integrity_failed"}
-    from src.vorming.pre_review_semantic_v1 import validate_provider_proposal
+    from src.vorming.semantic_proposal_contract_v1 import validate_provider_proposal
     from src.operations_console_v1 import ConsoleError
     try:
         validate_provider_proposal(diagnostic["proposal"], field_contract_v2=data.get("field_contract_v2", False),

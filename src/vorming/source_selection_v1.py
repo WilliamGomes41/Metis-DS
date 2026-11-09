@@ -31,7 +31,7 @@ def authorize_account(account, envelope):
 
 def resume_contract_current(envelope):
     """A resume MAG NIET continue a checkpoint formed under another full contract identifier."""
-    from src.vorming.pre_review_semantic_v1 import semantic_contract_version
+    from src.vorming.semantic_proposal_contract_v1 import semantic_contract_version
     components = _resume_components(envelope)
     return components.get("semantic_contract_version") == semantic_contract_version(field_contract_v3=True)
 

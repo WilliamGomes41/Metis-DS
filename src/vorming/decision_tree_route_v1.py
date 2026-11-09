@@ -83,7 +83,7 @@ def request_proposal(frozen: dict[str, Any], *, api_key: str, model: str, limits
     """Bounded provider call outside any write transaction; failures never fall back."""
     from src.vorming.decision_tree_proposal_v1 import proposal_schema
     from src.vorming.llm_provider_v1 import OPENAI_RESPONSES_URL
-    from src.vorming.pre_review_semantic_v1 import _bounded_provider_json, _extract_output_text
+    from src.vorming.bounded_model_call_v1 import logged_post_json as _bounded_provider_json, extract_output_text as _extract_output_text
     if not str(api_key or "").strip():
         raise _error("pre_review_llm_api_key_required")
     prompt, source = request_input(frozen)

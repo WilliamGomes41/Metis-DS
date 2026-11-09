@@ -304,7 +304,7 @@ class FormationEvidence:
         preparation = self.resolve_preparation(input_ref, expected_snapshot_id=envelope['snapshot_id'])
         replay = self.read_processing_archive(summary['replay_ref'], envelope=envelope)
         identity = replay.get('identity') or {}
-        from src.vorming.pre_review_semantic_v1 import semantic_contract_version
+        from src.vorming.semantic_proposal_contract_v1 import semantic_contract_version
         parameters = preparation['validator_input']
         expected_contract = semantic_contract_version(field_contract_v2=parameters.get('field_contract_v2', False),
                                                      field_contract_v3=parameters.get('field_contract_v3', False))
@@ -317,7 +317,7 @@ class FormationEvidence:
                 or exact_replay_lookup(replay, expected_identity=identity).status != LOOKUP_HIT
                 or replay.get('proposal_hash') != summary['gate']['proposal_hash']):
             fail('proposal_mismatch')
-        from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+        from src.vorming.prepared_source_views_v1 import candidate_fragments as _candidate_fragments, evidence_fragments as _evidence_fragments
         from src.vorming.semantic_passage_v1 import semantic_source_blocks
         from src.vorming.source_preparation_context_v1 import KEY
         source = preparation['extraction']['source']

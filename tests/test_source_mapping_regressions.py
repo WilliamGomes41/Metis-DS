@@ -160,11 +160,12 @@ def test_join_boundary_is_validated_and_exported():
 @pytest.mark.parametrize("field_contract_v2", [False, True])
 def test_replay_identity_binds_mapping_version(monkeypatch, field_contract_v2):
     from src.vorming import pre_review_semantic_v1 as semantic
+    from src.vorming import semantic_proposal_contract_v1 as contracts
     args = dict(document_id="doc", model="test", blocks=[], evidence_blocks=[],
                 source_fragments=fragments(), formation_context={
                     "snapshot_id": "snap", "source_sha256": "a" * 64},
                 field_contract_v2=field_contract_v2)
     current = semantic._replay_identity(**args)
-    monkeypatch.setattr(semantic, "SEMANTIC_PASSAGE_VERSION", "semantic-passage-v1.0.0")
+    monkeypatch.setattr(contracts, "SEMANTIC_PASSAGE_VERSION", "semantic-passage-v1.0.0")
     legacy = semantic._replay_identity(**args)
     assert current != legacy
