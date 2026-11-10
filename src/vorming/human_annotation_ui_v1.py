@@ -173,8 +173,31 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         envelope = console._envelope(document)
         domain.authorize(console, actor['account_id'], envelope)
         if not domain.owns_source(console, document):
+            from src.vorming import human_annotation_source_v1 as source
+            progress = source.progress(console, actor_id=actor['account_id'], snapshot_id=document)
+            if progress and progress['ready']:
+                return RedirectResponse('/annotations?'+urlencode({'document':document}), status_code=303)
             hidden = '<input type="hidden" name="document" value="'+esc(document)+'">'
+            hidden += '<input type="hidden" name="command_id" value="'+uuid4().hex+'">'
+
             hidden += '<input type="hidden" name="expected_revision" value="'+esc(console.objects_revision(document))+'">'
+            if progress:
+                running = progress['state'] == 'running'
+                phases = {'annotation_source_pending':'Wachten op beschikbare verwerkingsruimte.',
+                          'annotation_source_extract':'De bron wordt uitgelezen. Bij PDF controleren we ook de pagina-indeling en tabellen.',
+                          'annotation_source_check':'De brontekst en selectieposities worden gecontroleerd.'}
+                elapsed = progress['elapsed_seconds']
+                duration = str(elapsed//60)+' min '+str(elapsed%60)+' sec'
+                body = nav(actor,'selection')+'<section class="room"><h1>'+('Bron wordt voorbereid' if running else 'Bronvoorbereiding gestopt')+'</h1><h2>'+esc(envelope['title'])+'</h2>'
+                if running:
+                    body += '<p role="status">'+esc(phases.get(progress['phase'],'De bron wordt voorbereid.'))+'</p>'
+                    body += '<p>Verstreken: '+duration+'.</p><p>Bij een grote PDF kan dit enkele minuten duren. Je kunt deze pagina verlaten en later terugkomen; de voorbereiding loopt door.</p>'
+                    body += '<p>Deze pagina vernieuwt elke 5 seconden. Zodra de bron gereed is, verschijnt het annotatiedocument.</p><meta http-equiv="refresh" content="5">'
+                else:
+                    body += '<p class="banner warn" role="alert">Het voorbereiden van de bron is gestopt. Je bronbestand en opgeslagen werk blijven bewaard.</p>'
+                    body += '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bronvoorbereiding opnieuw proberen</button></form>'
+                body += '<p><a href="/tree">Terug naar Documenten</a></p></section>'
+                return HTMLResponse(page(body,title='Bron voorbereiden'),headers={'Cache-Control':'no-store'})
             notice = '<div class="banner ok" role="status">Document veilig ontvangen. Open de bron om te annoteren.</div>' if request.query_params.get('received') == 'yes' else ''
             return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><h1>Bron aanwijzen</h1><h2>'+esc(envelope['title'])+'</h2>'
                 +notice+
@@ -390,8 +413,31 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     async def prepare_source(request: Request):
         actor = require(request)
         form = await request.form()
-        await asyncio.to_thread(domain.prepare, console, actor_id=actor['account_id'],snapshot_id=str(form.get('document') or ''),expected_revision=str(form.get('expected_revision') or ''))
-        return RedirectResponse('/annotations?'+urlencode({'document':str(form.get('document') or '')}),status_code=303)
+        from src.vorming import human_annotation_source_v1 as source
+        document = str(form.get('document') or '')
+        try:
+            attempt, fresh = await asyncio.to_thread(source.reserve, console,
+                actor_id=actor['account_id'], snapshot_id=document,
+                command_id=str(form.get('command_id') or uuid4().hex),
+                expected_revision=str(form.get('expected_revision') or ''))
+        except ConsoleError as exc:
+            messages = {
+                'annotation_source_storage_not_ready':'De bronvoorbereiding is nog niet beschikbaar. Laat de beheerder de opslag bijwerken.',
+                'annotation_processing_in_progress':'Er loopt al een andere verwerking voor dit document. Open Documenten om de voortgang te bekijken.',
+                'annotation_objects_stale':'Het document is gewijzigd. Open de bronpagina opnieuw voordat je verdergaat.',
+                'processing_admission_closed':'Nieuwe voorbereidingen zijn tijdelijk gepauzeerd. Probeer het later opnieuw.',
+                'processing_attempt_limit_reached':'Er zijn meerdere voorbereidingen gestopt. Laat de beheerder de oorzaak controleren voordat je opnieuw probeert.',
+                'published_objects_must_not_be_rewritten':'Deze versie is gepubliceerd. Bereid een nieuwe werkversie voor.',
+                'annotation_existing_work_requires_takeover':'Dit document bevat al gevormd werk. Open de bestaande werkversie.',
+            }
+            from src.request_diagnostics_v1 import note_handled_error
+            note_handled_error(exc.code)
+            status = 403 if exc.code in {'researcher_role_required','reviewer_not_named_on_snapshot','not_authenticated'} else 409
+            body = nav(actor,'selection')+'<section class="room"><h1>Bron kon niet worden voorbereid</h1><p class="banner warn" role="alert">'+esc(messages.get(exc.code,'De voorbereiding kon niet worden gestart. Open de bronpagina opnieuw en controleer het document.'))+'</p><p><a href="/annotations?'+esc(urlencode({'document':document}))+'">Terug naar de bronpagina</a></p></section>'
+            return HTMLResponse(page(body,title='Bron voorbereiden'),status_code=status,headers={'Cache-Control':'no-store'})
+        if attempt is not None and attempt['state'] == 'running':
+            dispatcher.notify(document, attempt)
+        return RedirectResponse('/annotations?'+urlencode({'document':document}),status_code=303)
 
     @app.get('/annotations/api')
     def get(request: Request, document: str):

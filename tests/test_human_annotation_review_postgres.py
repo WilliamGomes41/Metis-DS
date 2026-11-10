@@ -629,7 +629,17 @@ def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(pr
         assert console.snapshot_objects(sid, include_blocked=True) == []
         opened = client.post('/annotations/source', data={'document':sid,'expected_revision':console.objects_revision(sid)})
         assert opened.status_code == 200
-        view = client.get('/annotations/api', params={'document':sid}).json()
+        # The HTTP command reserves durable preparation; the worker exposes the
+        # pinned source asynchronously before the human begins selecting text.
+        from time import monotonic, sleep
+        deadline = monotonic()+5
+        while True:
+            source_response = client.get('/annotations/api', params={'document':sid})
+            if source_response.status_code == 200:
+                break
+            assert monotonic() < deadline, source_response.text
+            sleep(.05)
+        view = source_response.json()
         core = anchor(view, 'De kwetsbare')
         condition = anchor(view, 'Alleen', role='condition')
         fields = {key:{'span':None,'missing_reason':'not_applicable'} for key in FIELDS}

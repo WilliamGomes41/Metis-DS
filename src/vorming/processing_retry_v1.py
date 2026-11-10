@@ -71,7 +71,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
         if attempt["command_id"] == command_id:
             if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"] or attempt.get("source_version", envelope["version"]) != envelope["version"]:
                 raise ConsoleError("processing_command_conflict")
-            if kind == 'human_annotation_build' and (
+            if kind in {'human_annotation_build', 'human_annotation_source'} and (
                     attempt.get('kind') != kind or attempt.get('annotation_seal_id') != annotation_seal_id):
                 raise ConsoleError('processing_command_conflict')
             return attempt, False
@@ -104,6 +104,11 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
             raise ConsoleError('annotation_seal_invalid')
         from src.vorming.human_annotation_contract_v1 import MODE
         attempt.update(annotation_seal_id=annotation_seal_id, producer_contract=MODE)
+    elif kind == 'human_annotation_source':
+        if annotation_seal_id is not None:
+            raise ConsoleError('annotation_seal_invalid')
+        from src.vorming.human_annotation_source_v1 import MODE
+        attempt['producer_contract'] = MODE
     else:
         if annotation_seal_id is not None:
             raise ConsoleError('annotation_seal_invalid')
@@ -207,7 +212,7 @@ def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | No
            budget_aware: bool = False, formation_input=None) -> dict:
     attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
     evidence = ({'stop_reason': 'done' if state == 'succeeded' else 'error'}
-                if attempt.get('kind') == 'human_annotation_build'
+                if attempt.get('kind') in {'human_annotation_build', 'human_annotation_source'}
                 else stop_evidence(envelope if formation_input is None else formation_input, state))
     # A3: a budget-exhausted attempt MOET NOOIT 'succeeded' zijn (budget-aware callers).
     if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope if formation_input is None else formation_input):
@@ -272,7 +277,7 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
     elif latest.get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
         allowed, reason = False, "processing_structural_limit"
     from src.vorming.prose_transition_v1 import current, STOPPED
-    if latest.get('kind') != 'human_annotation_build' and current(envelope) is not None:
+    if latest.get('kind') not in {'human_annotation_build', 'human_annotation_source'} and current(envelope) is not None:
         allowed, reason, recovery_available = False, STOPPED, False
     return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
             "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
