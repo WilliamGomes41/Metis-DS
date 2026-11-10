@@ -1,7 +1,7 @@
 # Emil Kowalski design-engineering skills for Metis frontend work
 
 Promise: agents doing Metis frontend work have three reviewed interaction-craft
-procedures available next to the mandatory Impeccable workflow. Change class: B
+procedures available next to the mandatory Impeccable workflow, and one read-only procedure for deciding where motion belongs. Change class: B
 (agent workflow only). Rewrite risk: none. No application or lifecycle behavior
 is changed by this installation.
 
@@ -9,7 +9,7 @@ is changed by this installation.
 
 The source is [emilkowalski/skills](https://github.com/emilkowalski/skills)
 (MIT), the pack presented on <https://aiforui.dev/skills>. Metis commits an
-unmodified snapshot of three skills at commit
+unmodified snapshot of four skills at commit
 `715c1807e08c497cfd1dc4feb450a2a3300ef2a9`; `config/emil_design_skills.v1.json`
 pins every file by SHA-256 and the notice is `.agents/licenses/emil-skills-MIT.txt`.
 
@@ -17,13 +17,14 @@ pins every file by SHA-256 and the notice is `.agents/licenses/emil-skills-MIT.t
 | --- | --- |
 | [emil-design-eng](../../.agents/skills/emil-design-eng/SKILL.md) | Interaction detail on a UI change: press and hover feedback, focus, when motion helps and when it must be absent |
 | [break-ui](../../.agents/skills/break-ui/SKILL.md) | Stress a console screen with realistic worst-case data: long guideline titles, a count of exactly one, empty lists, missing optional fields |
+| [find-animation-opportunities](../../.agents/skills/find-animation-opportunities/SKILL.md) | Read-only sweep for the few places where motion helps, with the rejected places named; first applied in `docs/change-contracts/console-reveal-motion.md` |
 | [mobile-native](../../.agents/skills/mobile-native/SKILL.md) | Phone behavior of the console: sticky hover, input zoom, tap targets, viewport height |
 
 The console is server-rendered HTML from Python with plain CSS and a little
 vanilla JavaScript. The other skills in the pack target stacks Metis does not
 have and are deliberately not installed: React Motion animation building and
 auditing (`animate`, `choreograph`, `improve-animations`, `review-animations`,
-`find-animation-opportunities`, `remove-animations`, `animation-performance`,
+`remove-animations`, `animation-performance`,
 `animation-vocabulary`), gesture and sheet interactions (`gestures`,
 `apple-design`), Expo and Swift (`animate-expo`, `write-swift`), the Sonner
 React toast library (`ask-sonner`), and library choice or variant pickers
@@ -48,6 +49,9 @@ and the Impeccable craft floor win.
   fixture or a disposable local console, never production data.
 - `mobile-native` tells you to test on real hardware. Report an emulated
   viewport as emulated; do not claim a device check that did not run.
+- `find-animation-opportunities` reports and never edits. Its hand-off names
+  `improve-animations`, which is not installed: implement an accepted row as a
+  normal Metis change with its own change contract.
 - Each skill opens with a fixed "Initial Response" for a bare invocation. Inside
   a Metis task with a concrete target, proceed with the task.
 

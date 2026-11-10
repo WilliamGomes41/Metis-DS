@@ -5,7 +5,7 @@ Frontend creation and changes also require the separately pinned
 Its canonical skill lives in `.agents/skills/impeccable/` and its independent
 manifest is `config/impeccable.v1.json`.
 
-Three interaction-craft skills that complement Impeccable are pinned separately;
+Four interaction-craft skills that complement Impeccable are pinned separately;
 see [emil-design-skills](emil-design-skills.md) and
 `config/emil_design_skills.v1.json`.
 

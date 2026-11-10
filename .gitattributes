@@ -30,3 +30,6 @@
 .cursor/skills/emil-design-eng/SKILL.md text eol=lf
 .cursor/skills/break-ui/SKILL.md text eol=lf
 .cursor/skills/mobile-native/SKILL.md text eol=lf
+.agents/skills/find-animation-opportunities/** text eol=lf
+.claude/skills/find-animation-opportunities/SKILL.md text eol=lf
+.cursor/skills/find-animation-opportunities/SKILL.md text eol=lf

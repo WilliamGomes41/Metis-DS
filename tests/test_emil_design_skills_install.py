@@ -10,7 +10,7 @@ import json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("emil-design-eng", "break-ui", "mobile-native")
+SKILLS = ("emil-design-eng", "break-ui", "mobile-native", "find-animation-opportunities")
 
 
 def _manifest():

@@ -65,6 +65,7 @@ def test_settings_has_no_label_above_the_heading_and_groups_links(production_con
 def test_press_feedback_is_additive_and_respects_reduced_motion() -> None:
     css = (ROOT / "assets/brand/console.css").read_text()
     block = css.split("/* Interaction feedback and next-step links", 1)[1]
+    block = block.split("/* Reveal motion for occasional and rare state changes", 1)[0]
     assert css.count("/* Interaction feedback and next-step links") == 1
     motion = re.search(r"@media \(prefers-reduced-motion: no-preference\) \{(.*?)\n\}", block, re.S).group(1)
     assert "transform: scale(0.97)" in motion and "120ms" in motion

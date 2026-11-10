@@ -24,9 +24,9 @@ workflow grants no deployment, publication or additional execution authority.
 
 ### Frontend interaction craft — Emil Kowalski skills
 
-Three pinned skills complement Impeccable on frontend work: `emil-design-eng`
-(interaction detail), `break-ui` (worst-case data) and `mobile-native` (phone
-behavior). Use them when the change touches that concern; see
+Four pinned skills complement Impeccable on frontend work: `emil-design-eng`
+(interaction detail), `break-ui` (worst-case data), `mobile-native` (phone
+behavior) and `find-animation-opportunities` (where motion belongs, read-only). Use them when the change touches that concern; see
 [the project integration](docs/agents/emil-design-skills.md) for the selection,
 the Metis-specific limits and verification. Impeccable remains the mandatory
 frontend workflow, and existing brand tokens and domain contracts win over any

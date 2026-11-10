@@ -2478,3 +2478,32 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
 .account-new { margin-bottom: 20px; }
 .account-roles { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
 .account-roles legend { padding: 0; margin-bottom: 6px; font-weight: 700; }
+
+/* Reveal motion for occasional and rare state changes
+   (docs/change-contracts/console-reveal-motion.md). One-shot, under 250ms, transform and opacity
+   only. Review cards, the annotation editor and navigation deliberately stay still. */
+@keyframes metis-fade { from { opacity: 0; } }
+@keyframes metis-reveal-down { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes metis-reveal-up { from { opacity: 0; transform: translateY(8px); } }
+@keyframes metis-reveal-banner { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes metis-reveal-panel { from { opacity: 0; transform: scale(0.96); } }
+
+#documents .document-row[open] > :not(summary),
+.care-companion[data-reveal="1"] .care-panel:not([hidden]),
+[data-session-warning]:not([hidden]),
+#review-colleagues:not([hidden]),
+#review-four-eyes:not([hidden]),
+#replaces-row:not([hidden]),
+.publication-room .banner.ok {
+  animation: metis-fade 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@media (prefers-reduced-motion: no-preference) {
+  #documents .document-row[open] > :not(summary) { animation-name: metis-reveal-down; animation-duration: 160ms; }
+  .care-companion[data-reveal="1"] .care-panel:not([hidden]) {
+    animation-name: metis-reveal-panel;
+    animation-duration: 160ms;
+    transform-origin: bottom right;
+  }
+  [data-session-warning]:not([hidden]) { animation-name: metis-reveal-up; animation-duration: 200ms; }
+  .publication-room .banner.ok { animation-name: metis-reveal-banner; animation-duration: 240ms; }
+}

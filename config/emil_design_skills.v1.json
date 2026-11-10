@@ -5,13 +5,15 @@
   "skills": [
     "emil-design-eng",
     "break-ui",
-    "mobile-native"
+    "mobile-native",
+    "find-animation-opportunities"
   ],
   "files": {
     ".agents/skills/emil-design-eng/SKILL.md": "965cc3108047a1f68e504977ae7816c66115b202a32e7509c0b8305314839c54",
     ".agents/skills/break-ui/CATALOG.md": "7358efcc6bb48e35187be1c064cf60022dcb18c72c18fab58b606dfc5f421f15",
     ".agents/skills/break-ui/SKILL.md": "e7eec1d70ac56a04255e9c0dbe98084ea3d544cc04aaad34f32c95d6fa9dff5e",
     ".agents/skills/mobile-native/SKILL.md": "888b7651d66d66dbac4e72b7c554638eb19bd971d686d6cbdf030a5ef3788f55",
+    ".agents/skills/find-animation-opportunities/SKILL.md": "d52a377819b84a71930f0c822cfe2849f40301605a2d5c7eccbfa3b257700df2",
     ".agents/licenses/emil-skills-MIT.txt": "4ff5bdb7887ec1435c9cab0e8d1a7caee704d894d65c2a008ccc68b1cc2f260b"
   }
 }

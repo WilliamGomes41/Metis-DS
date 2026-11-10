@@ -429,6 +429,8 @@
     panel.hidden = !open;
     toggle.setAttribute('aria-expanded', String(open));
     root.dataset.open = open ? '1' : '';
+    // Only a person opening the panel earns the reveal; a restored panel on page load does not.
+    root.dataset.reveal = open && focus ? '1' : '';
     storage((s) => (open ? s.setItem(OPEN_KEY, '1') : s.removeItem(OPEN_KEY)));
     if (open) {
       render();
