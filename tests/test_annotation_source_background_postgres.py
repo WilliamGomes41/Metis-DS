@@ -429,6 +429,7 @@ def test_busy_pdf_capacity_keeps_same_preparation_pending(production_console, tm
 
 def test_guard_removed_after_admission_blocks_worker_before_extraction(production_console, tmp_path, monkeypatch):
     from src.vorming import human_annotation_source_v1 as source
+    from src.operations_console_v1 import ConsoleError
     console, actor, reviewer, sid = received(production_console, tmp_path)
     attempt = reservation(console, actor, sid)
     with console.workflow_document_store._connect() as con:
@@ -436,7 +437,8 @@ def test_guard_removed_after_admission_blocks_worker_before_extraction(productio
     def no_extract(*args, **kwargs):
         raise AssertionError('partial schema cutover must not run extraction')
     monkeypatch.setattr(console, '_extract', no_extract)
-    console.execute_source_selection(actor_id=actor['account_id'], snapshot_id=sid, attempt=attempt)
+    with pytest.raises(ConsoleError, match='annotation_source_storage_not_ready'):
+        console.execute_source_selection(actor_id=actor['account_id'], snapshot_id=sid, attempt=attempt)
     state = source.progress(console, actor_id=actor['account_id'], snapshot_id=sid)
     assert state['state'] == 'failed' and state['error_code'] == 'annotation_source_storage_not_ready'
     assert not state['ready']
