@@ -2453,3 +2453,25 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
   .ko-receipt .ko-connections li::after { top: 21px; left: -5px; transform: rotate(-45deg); }
   .ko-receipt-claim::after { display: none; }
 }
+
+/* Interaction feedback and next-step links (docs/change-contracts/console-intuitive-interaction.md).
+   Additive only: no shared layout, colour token or home rule is redefined. */
+.btn-primary,
+.btn-secondary,
+.choice {
+  -webkit-tap-highlight-color: transparent;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn-primary,
+  .btn-secondary {
+    transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .btn-primary:not(:disabled):active,
+  .btn-secondary:not(:disabled):active {
+    transform: scale(0.97);
+  }
+}
+.document-empty a { font-weight: 700; }
+@media (min-width: 900px) {
+  .settings-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

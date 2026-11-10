@@ -456,7 +456,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
               <h1>Publiceren</h1>
               {_task_links("publish")}
               {success}
-              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
+              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten. Een ingeleverd document verschijnt hier; publiceren kan zodra de review is afgerond.</p>'}</div>
             </section>
             '''
         )

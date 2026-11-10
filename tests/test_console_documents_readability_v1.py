@@ -61,7 +61,7 @@ def test_documents_rows_show_status_aligned_actions_and_closed_delete(production
     danger = re.search(r'<details class="document-danger">\s*<summary>Document verwijderen</summary>(.*?)</details>', row, re.S)
     assert danger and "Verwijder unpublished document" in danger.group(1)
     assert 'name="confirm_title"' in danger.group(1)
-    assert "1 documenten" in html and "pagina 1 van 1" not in html
+    assert "<span>1 document</span>" in html and "pagina 1 van 1" not in html
 
 
 def test_documents_empty_search_offers_a_way_back(production_console, production_app) -> None:

@@ -637,7 +637,7 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
         state = _personal_review_view(item)['state']
         groups[state].append(_workboard_card(item, started=sid in started, observed_at=observed, q=q, page=page))
     body = ''
-    if not groups['review'] and not groups['unavailable']:
+    if visible and not groups['review'] and not groups['unavailable']:
         body += '<p class="review-empty" data-personal-empty>Op deze pagina heb je geen uitvoerbare beoordelingen.</p>'
     for state, title in [('review', 'Jouw open beoordelingen'), ('waiting', 'Wachten op anderen'),
                          ('complete', 'Geen open werk voor jou'), ('unavailable', 'Kaartgegevens niet beschikbaar')]:

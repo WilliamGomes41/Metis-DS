@@ -1331,7 +1331,7 @@ def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: 
       <label>Zoek documenten<input type="search" name="q" value="{_esc(query)}" placeholder="Titel of onderwerp"></label>
       <button class="btn-secondary" type="submit">Zoeken</button>
     </form><nav class="document-pagination" aria-label="Documentpagina’s">
-      <span>{len(matches)} documenten{"" if quiet_single_page and pages == 1 else f" · pagina {page} van {pages}"}</span> {" · ".join(links)}</nav>'''
+      <span>{len(matches)} {"document" if len(matches) == 1 else "documenten"}{"" if quiet_single_page and pages == 1 else f" · pagina {page} van {pages}"}</span> {" · ".join(links)}</nav>'''
     return matches[(page - 1) * size:page * size], controls
 
 
@@ -3885,7 +3885,7 @@ def create_console_app(
         cards = """
           <h2>Inzicht</h2>
           <p class="field-help">Eén plek met vier tabbladen: wat er gebeurt, waar werk blijft liggen en wat de volgende stap is.</p>
-          <div class="doc-list">
+          <div class="doc-list settings-links">
             <a class="doc-card" href="/inzicht?tab=systeem" style="text-decoration:none;"><p class="doc-title">Systeem</p><p>Verzoeken, fouten, fasen en deploys, tot op de milliseconde.</p></a>
             <a class="doc-card" href="/inzicht?tab=kwaliteit" style="text-decoration:none;"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bruikbaarheid van voorstellen, herstelwerk en open werk.</p></a>
             <a class="doc-card" href="/inzicht?tab=documenten" style="text-decoration:none;"><p class="doc-title">Documenten</p><p>Verwerking, blokkades en systeemfouten per document.</p></a>
@@ -3893,7 +3893,7 @@ def create_console_app(
           </div>
           <div style="height:18px" aria-hidden="true"></div>
           <h2>Beheer</h2>
-          <div class="doc-list">
+          <div class="doc-list settings-links">
             <a class="doc-card" href="/accounts" style="text-decoration:none;">
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
@@ -3906,7 +3906,7 @@ def create_console_app(
           </div>
           <div style="height:18px" aria-hidden="true"></div>
           <h2>Uitleg</h2>
-          <div class="doc-list">
+          <div class="doc-list settings-links">
             <a class="doc-card" href="/over-console" style="text-decoration:none;">
               <p class="doc-title">Over Metis</p>
               <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
@@ -3917,7 +3917,6 @@ def create_console_app(
             f"""
             {_nav(account, "settings")}
             <section class="room">
-              <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
               <p class="lead">Inzicht in systeem en werk, beheer van accounts en techniek, en uitleg over Metis.</p>
               {cards}
@@ -4828,11 +4827,17 @@ def create_console_app(
               var colleagues = document.getElementById("review-colleagues");
               var list = document.getElementById("review_reviewers");
               var options = document.querySelectorAll('input[name="review_option"]');
+              var label = colleagues.querySelector("label");
+              var help = document.getElementById("review-reviewers-help");
               function syncColleagues() {{
                 var chosen = document.querySelector('input[name="review_option"]:checked');
                 var alone = !!chosen && chosen.value === "uploader_sole";
-                colleagues.hidden = alone;
+                var two = !!chosen && chosen.value === "two_others";
+                // Ask for colleagues only once the chosen form of review needs them.
+                colleagues.hidden = !chosen || alone;
                 list.disabled = alone;
+                if (label) label.textContent = two ? "Kies twee collega's" : "Kies een collega";
+                if (help) help.hidden = !two;
               }}
               options.forEach(function (radio) {{ radio.addEventListener("change", syncColleagues); }});
               syncColleagues();
@@ -5025,7 +5030,7 @@ def create_console_app(
             blocks.append(
                 f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
-        empty = '<p class="muted document-empty">Nog geen documenten. Lever eerst een document in.</p>'
+        empty = '<p class="muted document-empty">Nog geen documenten. <a href="/ingest">Lever een document in</a> om te beginnen.</p>'
         return _page(
             f"""
             {_nav(account, "tree")}
