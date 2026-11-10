@@ -27,7 +27,7 @@ const assert = require('node:assert/strict');
   await evidence.getByRole('button',{name:'Bereik verwijderen'}).click();
   await page.locator('#annotation-role').selectOption('evidence');
   await page.locator('#annotation-function').selectOption('explains');
-  await page.locator('#annotation-essential').uncheck();
+  await page.locator('#annotation-additional').check();
   await page.locator('[data-source-block]').filter({hasText:'Onderzoek beschrijft'}).click();
   await page.locator('#annotation-select-block').click();
   await page.locator('#annotation-add').click();
