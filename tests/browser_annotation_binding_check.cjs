@@ -37,8 +37,8 @@ const assert=require('node:assert/strict');
   const acceptedBeforeReady=await type.isEnabled();
   if(!acceptedBeforeReady) {
    assert.equal(await page.getByText('De annotatiewerkplek wordt klaargezet.',{exact:true}).isVisible(),true);
-   await page.screenshot({path:output+'/binding-loading.png',fullPage:true});
   }
+  // Screenshots wait for fonts/load; release the held module before capturing.
   if(acceptedBeforeReady) await type.selectOption('source_disposition');
   releaseModule();await page.waitForLoadState('load');
   await page.unroute('**/annotations/binding.mjs');

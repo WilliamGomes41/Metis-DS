@@ -56,3 +56,6 @@ gegevens en handlers. Dit verandert alleen tijdelijke DOM-toestand.
 De Chromium-proef houdt de module-aanvraag tegen, reproduceert het verlies van
 de typekeuze en controleert daarna bronverantwoording en bestaande contextbinding.
 Er is geen timeout verhoogd of opslag-/autorisatievoorwaarde veranderd.
+De laadstatus wordt tijdens de gepauzeerde module via de DOM getoetst. Screenshots
+volgen pas na vrijgave: Playwright kan anders op `document.fonts.ready` wachten
+terwijl de test zelf het afronden van documentinitialisatie tegenhoudt.
