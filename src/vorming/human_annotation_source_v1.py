@@ -25,7 +25,8 @@ def configuration(console, envelope):
 def require_storage(con):
     ready = con.execute("SELECT EXISTS(SELECT 1 FROM pg_trigger "
         "WHERE tgrelid='workflow.processing_attempts'::regclass "
-        "AND tgname='guard_annotation_source_attempt' AND tgenabled IN ('O','A')) AS ready").fetchone()['ready']
+        "AND tgname='guard_annotation_source_attempt' AND tgenabled IN ('O','A') "
+        "AND tgfoid=to_regprocedure('workflow.guard_annotation_source_attempt()')) AS ready").fetchone()['ready']
     if not ready:
         raise ConsoleError('annotation_source_storage_not_ready')
 

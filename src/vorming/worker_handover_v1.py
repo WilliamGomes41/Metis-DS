@@ -107,7 +107,8 @@ def validate(console, con, document, row, active):
                 (document['snapshot_id'], active.get('annotation_seal_id'))).fetchone()['valid']:
             raise ConsoleError('annotation_seal_stale')
     elif active.get('kind') == 'human_annotation_source':
-        from src.vorming.human_annotation_source_v1 import validate_configuration
+        from src.vorming.human_annotation_source_v1 import require_storage, validate_configuration
+        require_storage(con)
         validate_configuration(console, document, active)
     elif active.get('processing_configuration') != configuration(console):
         raise ConsoleError('processing_configuration_changed')

@@ -425,3 +425,18 @@ def test_busy_pdf_capacity_keeps_same_preparation_pending(production_console, tm
     assert current == attempt
     state = source.progress(console, actor_id=actor['account_id'], snapshot_id=sid)
     assert state['phase'] == 'annotation_source_pending' and state['state'] == 'running'
+
+
+def test_guard_removed_after_admission_blocks_worker_before_extraction(production_console, tmp_path, monkeypatch):
+    from src.vorming import human_annotation_source_v1 as source
+    console, actor, reviewer, sid = received(production_console, tmp_path)
+    attempt = reservation(console, actor, sid)
+    with console.workflow_document_store._connect() as con:
+        con.execute('ALTER TABLE workflow.processing_attempts DISABLE TRIGGER guard_annotation_source_attempt')
+    def no_extract(*args, **kwargs):
+        raise AssertionError('partial schema cutover must not run extraction')
+    monkeypatch.setattr(console, '_extract', no_extract)
+    console.execute_source_selection(actor_id=actor['account_id'], snapshot_id=sid, attempt=attempt)
+    state = source.progress(console, actor_id=actor['account_id'], snapshot_id=sid)
+    assert state['state'] == 'failed' and state['error_code'] == 'annotation_source_storage_not_ready'
+    assert not state['ready']
