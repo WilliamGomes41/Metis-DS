@@ -1,6 +1,7 @@
 # Architectuur: een begrijpelijke annotatiewerkplek
 
-Status: ontwerpvoorstel, geen geïmplementeerde interface. Onderzocht op `main`
+Status: vastgelegd ontwerp; uitvoering in deelslices. De volledige begeleide
+interface is nog niet geïmplementeerd. Onderzocht op `main`
 `fdf852841ddac688bab4dc02062b8c3fc82cbd0c` op 10 november 2026.
 
 Doel: een inhoudelijk deskundige medewerker kan brongetrouw annoteren zonder de
@@ -17,8 +18,13 @@ Controleren en afronden**. De stappen zijn navigeerbaar, geen nieuwe opgeslagen
 workflowstatussen. De kernel blijft eigenaar van alle opgeslagen annotaties,
 bronposities, versies, relatieverplichtingen en controles.
 
-De huidige opdracht levert architectuur en de gevraagde projectskill op. Zij
-wijzigt geen productcode, database, reviewbevoegdheid of publicatie. Het ontwerp
+Het ontwerp en de gevraagde projectskill zijn vastgelegd. De eerste uitvoering
+loopt via [#1043](https://github.com/WilliamGomes41/Metis-DS/issues/1043) en
+[MET-67](https://linear.app/metis-phoenix/issue/MET-67): één contextkoppeling
+met het bijbehorende betekenisveld, een expliciete essentialiteitskeuze en
+geen vooraf gekozen eerste passage. Het
+[change contract](../change-contracts/1043-annotation-binding.md) begrenst deze
+slice en het bewijs. De overige begeleide stappen volgen afzonderlijk. Het ontwerp
 veronderstelt voor de eerste implementatie Class B, stateful, `Rewrite risk:
 none`: dezelfde opgeslagen domeinbetekenis en schrijfgrens blijven bestaan.
 Een wijziging aan gereed-semantiek, bronidentiteit, review-invalidatie of het
