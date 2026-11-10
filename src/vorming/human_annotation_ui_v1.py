@@ -206,11 +206,13 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bron openen voor annotatie</button></form></section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
         from src.vorming import human_annotation_build_v1 as build
         state = (build.overview if overview else domain.overview)(console, actor_id=actor['account_id'], snapshot_id=document)
-        from src.vorming.source_bound_fields_v3 import FIELDS, TYPE_FIELDS
+        from src.vorming.source_bound_fields_v3 import FIELDS, TYPE_FIELDS, CONTEXT_FIELDS
+        from src.vorming.human_annotation_contract_v1 import CONTEXT_BINDING_FIELDS, ROLE_MAP
         from src.vorming.human_annotation_v1 import TYPE_CORE_FIELDS
         from src.vorming.source_accountability_v1 import ROLES as SOURCE_ROLES
         state['field_contract']={'fields':list(FIELDS),'labels':FIELD_LABELS,'type_core_fields':TYPE_CORE_FIELDS,
             'type_fields':TYPE_FIELDS,
+            'context_bindings':{role:field for role,field in CONTEXT_BINDING_FIELDS.items() if ROLE_MAP[role] in CONTEXT_FIELDS[field]},
             'source_roles':{role:[{'value':reason,'label':SOURCE_LABELS[reason]} for reason in reasons] for role,reasons in SOURCE_ROLES.items()}}
         version = esc(state['source_identity']['version'])
         back = '/annotations?' + urlencode({'document':document})
@@ -297,9 +299,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
 <label for="annotation-role">Functie van het volgende bereik</label><select id="annotation-role">'''+role_options+'''</select>
 <label for="annotation-function">Functie van onderbouwing</label><select id="annotation-function"><option value="supported_by">Onderbouwt de uitspraak</option><option value="explains">Verklaart de uitspraak</option></select>
-<label><input type="checkbox" id="annotation-essential"> Dit bereik is essentieel voor de betekenis</label>
+<fieldset id="annotation-essential-choice" hidden><legend>Is dit bereik essentieel om de uitspraak juist te begrijpen?</legend>
+<label><input type="radio" name="annotation-essentiality" id="annotation-essential"> Ja, essentieel voor de betekenis</label>
+<label><input type="radio" name="annotation-essentiality" id="annotation-additional"> Nee, aanvullende context</label></fieldset>
 <details class="annotation-selection-help"><summary>Tekstselectie met toetsenbord of touch</summary><p>Raak een passage in het document aan of zet er de focus op. Selecteer daarna tekst hieronder.</p><label for="annotation-source-input">Huidige passage</label><textarea readonly id="annotation-source-input" rows="4"></textarea></details><button class="btn-secondary" type="button" id="annotation-select-block">Hele passage aanwijzen</button>
-<button class="btn-secondary" type="button" id="annotation-add">Geselecteerde tekst toevoegen</button><button class="btn-secondary" type="button" id="annotation-discard">Aanwijzing terugnemen</button><p id="annotation-selection" aria-live="polite"></p>
+<button class="btn-primary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-secondary" type="button" id="annotation-discard">Selectie wissen</button><p id="annotation-selection" aria-live="polite"></p><p id="annotation-binding-note" aria-live="polite"></p>
 <ol id="annotation-ranges"></ol><label><input type="checkbox" id="annotation-na">Onderbouwing is niet van toepassing</label>
 <div id="annotation-required-links" aria-live="polite"></div>
 <details><summary>Betekenis van de uitspraak aanwijzen</summary>
@@ -321,7 +325,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Annotatie terugnemen</button></div>
 <p>Concepten worden automatisch bewaard na een korte pauze. Alleen de melding ‘opgeslagen’ bevestigt serveropslag.</p>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button></aside></div>
-<script type="application/json" id="annotation-data">'''+data+'''</script><script src="/annotations/editor.js" defer></script>'''
+<script type="application/json" id="annotation-data">'''+data+'''</script><script type="module" src="/annotations/editor.js"></script>'''
         css = '''<style>
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
 .annotation-document{min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;max-height:calc(100vh - 8rem);overflow:auto}
@@ -342,6 +346,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     def script(request: Request):
         require(request)
         return Response(Path(__file__).with_name('human_annotation_editor.js').read_text(),media_type='text/javascript',headers={'Cache-Control':'no-store'})
+
+    @app.get('/annotations/binding.mjs')
+    def binding_script(request: Request):
+        require(request)
+        return Response(Path(__file__).with_name('human_annotation_binding.mjs').read_text(),media_type='text/javascript',headers={'Cache-Control':'no-store'})
 
     @app.post('/annotations/finalize')
     async def finalize_document(request: Request):

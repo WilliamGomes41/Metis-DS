@@ -1,4 +1,5 @@
 /* Source references only. Canonical text and object identity belong to the kernel. */
+import {bindRange} from '/annotations/binding.mjs';
 (() => {
   'use strict';
   const state = JSON.parse(document.getElementById('annotation-data').textContent);
@@ -6,7 +7,7 @@
   const labels = {core:'Kernuitspraak',population:'Doelgroep',context:'Context',condition:'Voorwaarde',exception:'Uitzondering',explanation:'Toelichting',evidence:'Onderbouwing',
     actor:'Uitvoerder',scope:'Toepassingssituatie',timing:'Tijdstip of periode',list_introduction:'Inleiding bij een lijst',row_header:'Rijkop',column_header:'Kolomkop'};
   let entry, selected = null, dirty = 0, committed = 0, timer, running = null, retryRequest = null, retryVersion = 0, failed = false;
-  let selectingFromSource = false, activeBlock = state.blocks[0] || null;
+  let selectingFromSource = false, activeBlock = null;
   const clone = value => JSON.parse(JSON.stringify(value));
   const fieldContract = state.field_contract;
   let repairingLink=null;
@@ -20,6 +21,20 @@
     if (!block || activeBlock?.block_id === block.block_id) return;
     activeBlock = block;
     el('source-input').value = block.text;
+    updateBindingControls();
+  }
+  function essentialChoice() {
+    return el('essential').checked ? true : el('additional').checked ? false : null;
+  }
+  function clearChoice() { el('essential').checked=false;el('additional').checked=false; }
+  function updateBindingControls() {
+    const role=el('role').value, context=role!=='core' && !entry?.disposition;
+    el('essential-choice').hidden=!context;
+    el('additional').disabled=!!repairingLink;
+    el('add').textContent=role==='core' ? entry?.disposition ? 'Gebruik als bronstuk' : 'Gebruik als kernuitspraak' : 'Voeg toe als '+labels[role].toLowerCase();
+    el('add').disabled=!selected || context && !repairingLink && essentialChoice()===null;
+    el('select-block').disabled=!activeBlock;
+    el('discard').disabled=!selected;
   }
   el('source-input').value = activeBlock?.text || '';
   function renderSourceHighlights() {
@@ -101,6 +116,7 @@
     el('strength').value=semantics.strength || '';
     for(const field of ['direction','strength']) el(field+'-proof').textContent=semantics[field+'_evidence'] ? literal(semantics[field+'_evidence']) :
       field==='strength' && semantics.strength_status==='not_stated' ? 'Sterkte expliciet als niet vermeld vastgelegd.' : 'Nog geen brontekst hiervoor aangewezen.';
+    updateBindingControls();
   }
   const status = text => { el('status').textContent = text; };
   function load(id) {
@@ -110,6 +126,8 @@
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
     selected = entry.pending_range ? clone(entry.pending_range) : null;
+    clearChoice();el('binding-note').textContent='';
+    activeBlock=null;el('source-input').value='';el('role').value='core';
     if (selected) {
       activateBlock(state.blocks.find(b => b.block_id === selected.block_id));
       el('to-source').href='#'+selected.block_id;
@@ -117,7 +135,7 @@
     if(selected?.relationship_id && entry.required_links.some(l => l.relationship_id===selected.relationship_id && l.required_for_meaning)) repairingLink=selected.relationship_id;
     el('selection').textContent = selected ? 'Nog te koppelen: '+selected.quote : '';
     if (selected) {
-      el('role').value=selected.role; el('essential').checked=selected.required_for_meaning;
+      el('role').value=selected.role; el('essential').checked=!!repairingLink;
       el('function').value=selected.evidence_function || 'supported_by';
     }
     dirty = committed = 0;
@@ -255,6 +273,7 @@
       ...(repairingLink ? {relationship_id:repairingLink} : {})};
     el('selection').textContent='Aangewezen: '+selected.quote;
     change();
+    updateBindingControls();
   }
   function rememberSelection(event) {
     // Sidebar clicks must never replace an explicitly chosen block with the
@@ -269,7 +288,7 @@
     const parent = node => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement).closest('[data-source-block]');
     const first = parent(range.startContainer), last = parent(range.endContainer);
     if (!first || first !== last) {
-      selected = null; el('selection').textContent = 'Wijs één bereik binnen een tekstblok aan. Voeg een volgende alinea afzonderlijk toe.'; return;
+      selected = null;entry.pending_range=null;change();updateBindingControls();el('selection').textContent = 'Wijs één bereik binnen een tekstblok aan. Voeg een volgende alinea afzonderlijk toe.'; return;
     }
     const prefix = document.createRange(); prefix.selectNodeContents(first); prefix.setEnd(range.startContainer,range.startOffset);
     const endPrefix = document.createRange(); endPrefix.selectNodeContents(first); endPrefix.setEnd(range.endContainer,range.endOffset);
@@ -330,18 +349,25 @@
   });
   el('add').addEventListener('click',() => {
     if (!selected) { status('Wijs eerst tekst in één bronblok aan.'); return; }
-    const restoring=entry.required_links.find(l => l.relationship_id===repairingLink && l.required_for_meaning);
-    const role = restoring ? restoring.role : el('role').value;
-    if(role==='core') resetFields();
-    const added={...selected,role,required_for_meaning:restoring ? true : el('essential').checked,evidence_function:restoring ? restoring.evidence_function : role==='evidence' ? el('function').value : null};
-    if(role!=='core') added.relationship_id=restoring?.relationship_id || linkId(added);
-    if(restoring) {entry.required_links=entry.required_links.filter(l => l!==restoring);repairingLink=null;}
-    entry.ranges.push(added);
+    try {
+      const result=bindRange(entry,selected,{role:el('role').value,essential:essentialChoice(),
+        repairingLink,evidenceFunction:el('function').value},fieldContract);
+      entry=result.entry;
+      if(el('role').value==='core') resetFields();
+      el('binding-note').textContent=result.fieldBinding==='preserved' ?
+        'Context toegevoegd. Het bestaande betekenisveld is behouden. Controleer bij ‘Betekenis van de uitspraak aanwijzen’ welke tekst daarbij hoort.' :
+        result.fieldBinding==='bound' ? 'Context en betekenisveld zijn samen gekoppeld.' : '';
+    } catch(error) {status(error.message);return;}
+    repairingLink=null;clearChoice();
     window.getSelection().removeAllRanges();
     selected = null; entry.pending_range=null; el('selection').textContent = ''; change(); render();
   });
-  el('discard').addEventListener('click',() => { selected=null;repairingLink=null;entry.pending_range=null;el('selection').textContent='';change();renderFields(); });
-  for (const id of ['role','essential','function']) el(id).addEventListener('change',() => { if (selected) captureSelection(selected); });
+  el('discard').addEventListener('click',() => { selected=null;repairingLink=null;clearChoice();entry.pending_range=null;el('selection').textContent='';change();renderFields(); });
+  for (const id of ['role','essential','additional','function']) el(id).addEventListener('change',() => {
+    if(id==='role') clearChoice();
+    if (selected) captureSelection(selected);
+    updateBindingControls();
+  });
   el('type').addEventListener('change',() => {
     const source=el('type').value==='source_disposition';
     entry.object_type=source ? null : el('type').value || null;
@@ -359,6 +385,7 @@
     repairingLink=null;
     selected=null;entry.pending_range=null;el('selection').textContent='';
     window.getSelection().removeAllRanges();
+    clearChoice();updateBindingControls();
     return span;
   }
   el('bind-field').addEventListener('click',() => {
