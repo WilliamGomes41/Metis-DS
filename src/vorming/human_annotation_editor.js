@@ -6,7 +6,7 @@
   const labels = {core:'Kernuitspraak',population:'Doelgroep',context:'Context',condition:'Voorwaarde',exception:'Uitzondering',explanation:'Toelichting',evidence:'Onderbouwing',
     actor:'Uitvoerder',scope:'Toepassingssituatie',timing:'Tijdstip of periode',list_introduction:'Inleiding bij een lijst',row_header:'Rijkop',column_header:'Kolomkop'};
   let entry, selected = null, dirty = 0, committed = 0, timer, running = null, retryRequest = null, retryVersion = 0, failed = false;
-  let selectingFromSource = false;
+  let selectingFromSource = false, activeBlock = state.blocks[0] || null;
   const clone = value => JSON.parse(JSON.stringify(value));
   const fieldContract = state.field_contract;
   let repairingLink=null;
@@ -15,6 +15,45 @@
     const block=state.blocks.find(b => b.block_id === span.block_id);
     return block ? Array.from(block.text).slice(span.start,span.end).join('') : '';
   };
+  const sourceElements = new Map([...document.querySelectorAll('[data-source-block]')].map(node => [node.dataset.sourceBlock,node]));
+  function activateBlock(block) {
+    if (!block || activeBlock?.block_id === block.block_id) return;
+    activeBlock = block;
+    el('source-input').value = block.text;
+  }
+  el('source-input').value = activeBlock?.text || '';
+  function renderSourceHighlights() {
+    const ranges = new Map();
+    for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
+      for (const anchor of saved.ranges || []) {
+        if (!ranges.has(anchor.block_id)) ranges.set(anchor.block_id,[]);
+        ranges.get(anchor.block_id).push({...anchor,current:saved.annotation_id === entry.annotation_id});
+      }
+    }
+    for (const block of state.blocks) {
+      const node = sourceElements.get(block.block_id);
+      if (!node) continue;
+      const anchors = ranges.get(block.block_id) || [];
+      if (!anchors.length) {
+        if (node.childNodes.length !== 1 || node.firstChild.nodeType !== Node.TEXT_NODE || node.textContent !== block.text)
+          node.textContent = block.text;
+        continue;
+      }
+      const chars = Array.from(block.text);
+      const cuts = [...new Set([0,chars.length,...anchors.flatMap(a => [a.start,a.end])])].sort((a,b) => a-b);
+      const content = document.createDocumentFragment();
+      for (let i=0;i<cuts.length-1;i++) {
+        const from=cuts[i], to=cuts[i+1], value=chars.slice(from,to).join('');
+        const covering=anchors.filter(a => a.start<=from && a.end>=to);
+        if (covering.length) {
+          const mark=document.createElement('mark');
+          if (covering.some(a => a.current)) mark.dataset.current='true';
+          mark.textContent=value;content.append(mark);
+        } else content.append(document.createTextNode(value));
+      }
+      node.replaceChildren(content);
+    }
+  }
   el('source-reason').add(new Option('Functie kiezen',''));
   for(const [role,reasons] of Object.entries(fieldContract.source_roles))
     for(const reason of reasons) el('source-reason').add(new Option(reason.label,role+':'+reason.value));
@@ -71,6 +110,10 @@
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
     selected = entry.pending_range ? clone(entry.pending_range) : null;
+    if (selected) {
+      activateBlock(state.blocks.find(b => b.block_id === selected.block_id));
+      el('to-source').href='#'+selected.block_id;
+    }
     if(selected?.relationship_id && entry.required_links.some(l => l.relationship_id===selected.relationship_id && l.required_for_meaning)) repairingLink=selected.relationship_id;
     el('selection').textContent = selected ? 'Nog te koppelen: '+selected.quote : '';
     if (selected) {
@@ -92,6 +135,7 @@
   }
   function render() {
     renderFields();
+    renderSourceHighlights();
     const binding = state.object_bindings?.[entry.annotation_id];
     el('current-object').hidden = !binding;
     if (binding) {
@@ -202,6 +246,7 @@
     try { await running; } finally { running = null; }
   }
   function captureSelection(value) {
+    activateBlock(state.blocks.find(b => b.block_id === value.block_id));
     selected=value;
     el('to-source').href='#'+value.block_id;
     el('to-controls').textContent='Aanwijzing koppelen';
@@ -214,7 +259,7 @@
   function rememberSelection(event) {
     // Sidebar clicks must never replace an explicitly chosen block with the
     // browser's older, still-visible selection. Textareas own their select event.
-    if (event.type==='mouseup') {
+    if (event.type==='mouseup' || event.type==='touchend') {
       const started=selectingFromSource; selectingFromSource=false;
       if (!started) return;
     } else if (!event.target.closest?.('[data-source-block]')) return;
@@ -231,9 +276,30 @@
     captureSelection({block_id:first.dataset.sourceBlock,start:Array.from(prefix.toString()).length,end:Array.from(endPrefix.toString()).length,quote:range.toString()});
   }
   document.addEventListener('mouseup',rememberSelection);
+  document.addEventListener('touchend',rememberSelection);
   document.addEventListener('mousedown',event => { selectingFromSource=!!event.target.closest?.('[data-source-block]'); });
+  document.addEventListener('touchstart',event => { selectingFromSource=!!event.target.closest?.('[data-source-block]'); });
   document.addEventListener('keyup',rememberSelection);
-  for (const input of document.querySelectorAll('[data-source-input]')) {
+  for (const node of sourceElements.values()) {
+    node.addEventListener('focus',() => activateBlock(state.blocks.find(b => b.block_id === node.dataset.sourceBlock)));
+    node.addEventListener('click',() => activateBlock(state.blocks.find(b => b.block_id === node.dataset.sourceBlock)));
+  }
+  function revealSource(target) {
+    const node = document.getElementById(target);
+    if (!node || !node.closest('.annotation-document')) return;
+    const folded = node.closest('details');
+    if (folded) folded.open = true;
+    node.scrollIntoView({block:'start'});
+  }
+  const pageNav = el('page-nav');
+  if (pageNav) pageNav.addEventListener('change',() => revealSource(pageNav.value));
+  document.addEventListener('click',event => {
+    const link=event.target.closest?.('a[href^="#"]');
+    if (link?.hash) revealSource(decodeURIComponent(link.hash.slice(1)));
+  });
+  window.addEventListener('hashchange',() => revealSource(decodeURIComponent(location.hash.slice(1))));
+  if (location.hash) revealSource(decodeURIComponent(location.hash.slice(1)));
+  for (const input of [el('source-input')]) {
     // Chromium does not move the caret with arrows in readonly textareas.
     // Keep the source readonly and provide selection-only keyboard movement.
     input.addEventListener('keydown',event => {
@@ -253,13 +319,14 @@
     });
     input.addEventListener('select',() => {
       if (input.selectionStart === input.selectionEnd) return;
-      captureSelection({block_id:input.dataset.sourceInput,start:Array.from(input.value.slice(0,input.selectionStart)).length,
+      if (!activeBlock) return;
+      captureSelection({block_id:activeBlock.block_id,start:Array.from(input.value.slice(0,input.selectionStart)).length,
         end:Array.from(input.value.slice(0,input.selectionEnd)).length,quote:input.value.slice(input.selectionStart,input.selectionEnd)});
     });
   }
-  for (const button of document.querySelectorAll('[data-select-block]')) button.addEventListener('click',() => {
-    const block = state.blocks.find(b => b.block_id === button.dataset.selectBlock);
-    captureSelection({block_id:block.block_id,start:0,end:Array.from(block.text).length,quote:block.text});
+  el('select-block').addEventListener('click',() => {
+    if (!activeBlock) return;
+    captureSelection({block_id:activeBlock.block_id,start:0,end:Array.from(activeBlock.text).length,quote:activeBlock.text});
   });
   el('add').addEventListener('click',() => {
     if (!selected) { status('Wijs eerst tekst in één bronblok aan.'); return; }
