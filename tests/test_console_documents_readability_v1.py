@@ -52,7 +52,8 @@ def test_documents_rows_show_status_aligned_actions_and_closed_delete(production
     summary = re.search(r"<summary>(.*?)</summary>", row, re.S).group(1)
     assert '<span class="doc-title">Eenzaamheid bij ouderen</span>' in summary
     assert '<span class="meta">Versie 1.2 · richtlijn</span>' in summary
-    assert '<span class="document-status" data-tone="warn">' in summary
+    # Received, never started: a normal state in the neutral tone, not a stuck document.
+    assert '<span class="document-status" data-tone="neutral"><span class="visually-hidden">Status: </span>nog niet gestart</span>' in summary
     assert "Vorming" in row and "/source-selection?document=" in row
     labels = re.findall(r'<h3 class="document-action-label">(.*?)</h3>', row)
     assert labels == ["Onderwerp", "Klasse", "Diagnose"]

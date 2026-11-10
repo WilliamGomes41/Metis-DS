@@ -635,7 +635,7 @@ def install(app, console, require, page, nav, esc):
                           'processing_configuration_changed':'De verwerkingsconfiguratie is gewijzigd',
                           'researcher_role_required':'De uitvoeringsbevoegdheid is ingetrokken',
                           'not_authenticated':'Het verantwoordelijke account is niet meer actief'}.get(result['blocked_reason'], 'Een verwerkingsvoorwaarde blokkeert de uitvoering')
-                progress = (f'<p>Verwerking geblokkeerd: {esc(reason)}. '
+                progress = (f'<p>Verwerking vastgelopen: {esc(reason)}. '
                             f'{esc(result.get("required_action") or "Los de blokkade op voordat u opnieuw start.")}</p>')
             if result.get('document_budget'):
                 budget = result['document_budget']

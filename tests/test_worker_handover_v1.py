@@ -146,7 +146,7 @@ def test_discovery_blocks_real_limits_without_new_start_or_provider(tmp_path, pr
     assert final['dispatch']['required_action']
     assert calls == [] and console.snapshot_objects(sid) == []
     projected = summary_projection(console, envelope=stored, observations={})
-    assert projected['state'] == 'geblokkeerd'
+    assert projected['state'] == 'vastgelopen'
     assert projected['blocked_reason'] == code and projected['required_action']
 
 
@@ -289,7 +289,7 @@ def test_source_selection_reads_show_waiting_and_blocked_without_mutation(tmp_pa
     for params in ({}, {'document':sid}):
         response = client.get('/source-selection', params=params)
         assert response.status_code == 200
-        assert 'geblokkeerd' in response.text and 'totale tijdslimiet' in response.text
+        assert 'vastgelopen' in response.text and 'totale tijdslimiet' in response.text
     assert console._envelope(sid) == before and calls == []
 
 

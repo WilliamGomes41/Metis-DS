@@ -364,7 +364,9 @@ def _apply_release_state(console: OperationsConsole, envelope: dict[str, Any], v
 def _card(envelope: dict[str, Any], view: dict[str, Any], display_status: str) -> str:
     return f'''
                 <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
-                  {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status})}
+                  {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status,
+                                           # The state line below already names it and carries the action.
+                                           "status_shown_below": view["overall_state"] == UNCHECKED_STATE})}
                   {_render_publish_state(view)}
                   <p><a href="/inzicht/document?document={quote(str(envelope['snapshot_id']), safe='')}">Bekijk diagnose in Inzicht</a></p>
                 </article>

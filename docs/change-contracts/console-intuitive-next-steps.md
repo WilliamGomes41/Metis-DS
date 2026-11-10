@@ -25,7 +25,7 @@ The home tiles and their neutral, badge-free state (ROADMAP lock, #546), the sha
 
 ## Worst-case data
 
-Documenten, Vorming, Publiceren, Accounts and the annotation start page were rendered with a 190-character title, a two-letter title and a 46-character display name at 1440px and an emulated 390px: titles and names wrap, nothing overflows. Two observations are left as they are because they are domain wording, not layout: Documenten labels a not-yet-started document `geblokkeerd` while Vorming says `nog niet gestart`, and Publiceren shows the same status twice.
+Documenten, Vorming, Publiceren, Accounts and the annotation start page were rendered with a 190-character title, a two-letter title and a 46-character display name at 1440px and an emulated 390px: titles and names wrap, nothing overflows. Two wording findings from this pass are handled in `console-status-not-started-vastgelopen.md`.
 
 ## Not verified
 

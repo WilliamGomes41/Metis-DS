@@ -110,6 +110,7 @@ from src.operations_console_v1 import (
     ALLOWED_DELETE_NEXT,
     CONSOLE_VERSION,
     PRE_REVIEW_BLOCKED,
+    PROCESSING_NOT_STARTED,
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
@@ -1348,16 +1349,20 @@ def _document_summary(row: dict[str, Any]) -> str:
             f'{_esc(row.get("class"))} · status <b>{_esc(_status_label(status))}</b></span>')
 
 
-def _document_row_summary(row: dict[str, Any], *, blocked: bool) -> str:
+def _document_row_summary(row: dict[str, Any], *, blocked: bool, not_started: bool = False) -> str:
     """Documenten row: title and version on the left, the status as a label on the right."""
-    tone = "warn" if blocked else "neutral"
+    tone = "warn" if blocked and not not_started else "neutral"
+    label = "nog niet gestart" if not_started else _status_label(_document_status(row))
     return (f'<span class="document-row-text"><span class="doc-title">{_esc(row["title"])}</span>'
             f'<span class="meta">Versie {_esc(row["version"])} · {_esc(row.get("class"))}</span></span>'
             f'<span class="document-status" data-tone="{tone}">'
-            f'<span class="visually-hidden">Status: </span>{_esc(_status_label(_document_status(row)))}</span>')
+            f'<span class="visually-hidden">Status: </span>{_esc(label)}</span>')
 
 
 def _document_card_heading(row: dict[str, Any]) -> str:
+    # A caller that prints the state on its own line directly below omits it here.
+    status = "" if row.get("status_shown_below") else (
+        f'<span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>')
     return f"""
       <header>
         <p class="doc-title">{_esc(row["title"])}</p>
@@ -1366,7 +1371,7 @@ def _document_card_heading(row: dict[str, Any]) -> str:
         <span>versie <b>{_esc(row["version"])}</b></span>
         <span>onderwerp <b>{_esc(row["family"])}</b></span>
         <span>klasse <b>{_esc(row["class"])}</b></span>
-        <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
+        {status}
       </p>
     """
 
@@ -4963,12 +4968,20 @@ def create_console_app(
                 except ConsoleError:
                     mutable = False
                 blocked = mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+                # Receipt records "not started" as a normal reason; nothing is stuck yet.
+                not_started = blocked and child.get("processing_blocker") == PROCESSING_NOT_STARTED
                 if not mutable:
                     locked = ['<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>']
                     if "researcher" in account["roles"]:
                         locked.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
                     rows.append(_document_action_row("Wijzigen", "".join(locked)))
-                if blocked:
+                if not_started:
+                    next_step = (
+                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten.'
+                        if can_move else ""
+                    )
+                    pre_review_notice = f'<p class="banner">Verwerking nog niet gestart. Beoordelen kan daarna.{next_step}</p>'
+                elif blocked:
                     next_step = (
                         f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten of te hervatten.'
                         if can_move else ""
@@ -5018,7 +5031,7 @@ def create_console_app(
                 cards.append(
                     f"""
                     <details class="doc-card document-disclosure document-row">
-                      <summary>{_document_row_summary(child, blocked=blocked)}</summary>
+                      <summary>{_document_row_summary(child, blocked=blocked, not_started=not_started)}</summary>
                       {pre_review_notice}
                       <div class="doc-actions document-actions">{"".join(rows)}</div>
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}

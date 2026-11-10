@@ -12,7 +12,7 @@ from typing import Any
 DOCUMENT_STATUS_LABELS = {
     "processing": "in verwerking",
     "in_review": "in review",
-    "blocked": "geblokkeerd",
+    "blocked": "vastgelopen",
     "ready_for_publication": "klaar voor publicatie",
     "closed": "afgesloten",
     "published": "gepubliceerd",

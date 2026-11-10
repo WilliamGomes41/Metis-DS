@@ -287,7 +287,7 @@ def test_fast_lists_stay_conservative_while_publication_checks_current_readiness
         client,
         researcher_username="researcher.anne",
         publisher_username="publisher.carla",
-        expected_label="geblokkeerd",
+        expected_label="vastgelopen",
         expected_list_label="in review",
     )
 
@@ -330,5 +330,5 @@ def test_publish_evaluates_readiness_once_per_document_and_refreshes_next_reques
     calls.clear()
     second = client.get("/publish", params={"document": receipt["snapshot_id"]})
     assert second.status_code == 200
-    assert "geblokkeerd" in second.text
+    assert "vastgelopen" in second.text
     assert calls == [receipt["snapshot_id"]]

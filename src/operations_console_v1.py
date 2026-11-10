@@ -3101,6 +3101,7 @@ class OperationsConsole:
                     "family": family,
                     "status": envelope["state"],
                     "publication_eligibility": envelope.get("publication_eligibility", ""),
+                    "processing_blocker": envelope.get("processing_blocker"),
                     "sha256": envelope["sha256"],
                     "parent": family,
                     "is_live_capture": envelope["is_live_capture"],

@@ -22,7 +22,7 @@
   const HELP = {
     home: 'Mijn werk is je startpunt. Kies de volgende stap: inleveren, bronselectie, review, publicatie of documenten.',
     ingest: 'Hier lever je een nieuwe bron in. Kies het bestand, de documentklasse en wie de review doet. Na inleveren ga je verder in Bronselectie.',
-    selection: 'Bronselectie start of hervat de verwerking per document. Een geblokkeerd document toont hier waarom; de diagnose staat in Inzicht.',
+    selection: 'Bronselectie start of hervat de verwerking per document. Een vastgelopen document toont hier waarom; de diagnose staat in Inzicht.',
     review: 'Hier beoordeel je de voorgestelde passages. Je beoordeling is pas vastgelegd na opslaan. Bij vier-ogen is een tweede, onafhankelijke reviewer nodig.',
     formation: 'Vormingsproblemen toont welke bronproblemen nog openstaan en waar je ze kunt behandelen. Geldige voorstellen blijven bereikbaar in Review; open problemen blijven publicatie blokkeren.',
     publish: 'Publicatie toont wat klaar is om te publiceren en wat nog ontbreekt. Publiceren gebeurt pas na een volledige, geldige review.',
