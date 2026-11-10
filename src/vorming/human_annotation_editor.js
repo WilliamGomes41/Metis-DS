@@ -423,4 +423,7 @@ import {bindRange} from '/annotations/binding.mjs';
   el('overview').addEventListener('click',async () => { try { await flush(); window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); } catch (_) {} });
   window.addEventListener('beforeunload',event => { if (dirty !== committed || running) { event.preventDefault(); event.returnValue = ''; } });
   load(new URLSearchParams(window.location.search).get('annotation')); entries();
+  el('editor-inputs').disabled=false;
+  el('initializing').hidden=true;
+  status('Opgeslagen werk geladen.');
 })();

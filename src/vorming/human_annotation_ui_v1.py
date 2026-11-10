@@ -293,7 +293,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         body = intro + '''<p>Markeer tekst in het document en kies in de selectiekaart de functie van het bereik. Meerdere passages kun je aan dezelfde annotatie koppelen.</p>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
-<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Jouw selectiekaart</h2><label for="annotation-entry">Opgeslagen annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
+<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Jouw selectiekaart</h2>
+<p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
+<fieldset id="annotation-editor-inputs" aria-label="Annotatie bewerken" disabled>
+<label for="annotation-entry">Opgeslagen annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
 <section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h2 id="annotation-current-version"></h2><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
 <label for="annotation-type">Type uitspraak</label><select id="annotation-type">'''+type_options+'''</select>
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
@@ -320,14 +323,15 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <label for="annotation-strength">Vermelde sterkte</label><select id="annotation-strength"><option value="">Kiezen</option><option value="strong">Sterk</option><option value="weak">Zwak</option></select>
 <button class="btn-secondary" type="button" id="annotation-strength-evidence">Aangewezen tekst voor de sterkte gebruiken</button><p id="annotation-strength-proof"></p></details>
 <p id="annotation-conflict" hidden><a id="annotation-conflict-link" target="_blank" rel="noopener">Bestaande annotatie openen in een nieuw venster</a></p>
-<p id="annotation-status" role="status" aria-live="polite">Opgeslagen werk geladen.</p>
+<p id="annotation-status" role="status" aria-live="polite"></p>
 <div class="actions"><button class="btn-secondary" type="button" id="annotation-ready">Selectie gereed</button><button class="btn-secondary" type="button" id="annotation-new">Volgende annotatie</button>
 <button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Annotatie terugnemen</button></div>
 <p>Concepten worden automatisch bewaard na een korte pauze. Alleen de melding ‘opgeslagen’ bevestigt serveropslag.</p>
-<button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button></aside></div>
+<button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button></fieldset></aside></div>
 <script type="application/json" id="annotation-data">'''+data+'''</script><script type="module" src="/annotations/editor.js"></script>'''
         css = '''<style>
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
+#annotation-editor-inputs{min-width:0;margin:0;padding:0;border:0}
 .annotation-document{min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;max-height:calc(100vh - 8rem);overflow:auto}
 .annotation-document-tools{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:.75rem;padding:.75rem 1.5rem;background:var(--wit);border-bottom:1px solid var(--line)}
 .annotation-document-tools label{margin:0 0 0 auto!important}.annotation-document-tools select{width:auto;max-width:10rem}

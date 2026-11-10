@@ -46,3 +46,13 @@ Nog buiten deze slice: per-annotatiecheckquery, volledige conflictvergelijking,
 verdere begeleide stappen, gebruikerstest en deployment. Geen nieuwe kandidaatmaker,
 database, duurzame vraagstatus of animatie-/UI-framework. Herclassificeer vóór
 verdere code als een bestaande lifecycle-/writegrens toch gewijzigd moet worden.
+
+CI-herstel: de PR-beschrijving moet dezelfde vijf machineleesbare contractvelden
+op afzonderlijke regels bevatten; een contractbestand alleen wordt door de
+PR-validator niet gelezen. Daarnaast kon de nog ladende editor een al geaccepteerde
+typekeuze wissen bij `load`. De server rendert de kaart daarom als niet bedienbaar
+met een laadmelding; de client geeft de bediening vrij na initialisatie van
+gegevens en handlers. Dit verandert alleen tijdelijke DOM-toestand.
+De Chromium-proef houdt de module-aanvraag tegen, reproduceert het verlies van
+de typekeuze en controleert daarna bronverantwoording en bestaande contextbinding.
+Er is geen timeout verhoogd of opslag-/autorisatievoorwaarde veranderd.

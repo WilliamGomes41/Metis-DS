@@ -23,8 +23,30 @@ const assert=require('node:assert/strict');
   await page.locator('[name=review_option][value=uploader_sole]').check();
   await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
   const sid=new URL(page.url()).searchParams.get('document');
-  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  // A slow module must not discard a type choice that the controls accept.
+  let releaseModule, requestedModule;
+  const moduleRequested=new Promise(resolve=>{requestedModule=resolve;});
+  await page.route('**/annotations/binding.mjs',async route=>{
+   const gate=new Promise(resolve=>{releaseModule=resolve;});
+   requestedModule();await gate;await route.continue();
+  });
+  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click({noWaitAfter:true});
   await page.locator('[data-source-block]').first().waitFor();
+  await moduleRequested;
+  const type=page.locator('#annotation-type');
+  const acceptedBeforeReady=await type.isEnabled();
+  if(!acceptedBeforeReady) {
+   assert.equal(await page.getByText('De annotatiewerkplek wordt klaargezet.',{exact:true}).isVisible(),true);
+   await page.screenshot({path:output+'/binding-loading.png',fullPage:true});
+  }
+  if(acceptedBeforeReady) await type.selectOption('source_disposition');
+  releaseModule();await page.waitForLoadState('load');
+  await page.unroute('**/annotations/binding.mjs');
+  assert.deepEqual(errors,[]);
+  if(!acceptedBeforeReady) await type.selectOption('source_disposition');
+  assert.equal(await type.inputValue(),'source_disposition','type choice accepted before initialization was lost');
+  assert.equal(await page.locator('#annotation-source-reason').isVisible(),true);
+  await type.selectOption('');
   const initialSource=await page.locator('#annotation-source-input').inputValue();
   assert.equal(await page.locator('#annotation-add').isDisabled(),true);
   await page.locator('[data-source-block]').filter({hasText:'Beoordeel de huid.'}).click();
