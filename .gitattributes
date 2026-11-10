@@ -20,3 +20,13 @@
 .agents/licenses/impeccable-* text eol=lf
 .claude/skills/impeccable/SKILL.md text eol=lf
 .cursor/skills/impeccable/SKILL.md text eol=lf
+.agents/skills/emil-design-eng/** text eol=lf
+.agents/skills/break-ui/** text eol=lf
+.agents/skills/mobile-native/** text eol=lf
+.agents/licenses/emil-skills-MIT.txt text eol=lf
+.claude/skills/emil-design-eng/SKILL.md text eol=lf
+.claude/skills/break-ui/SKILL.md text eol=lf
+.claude/skills/mobile-native/SKILL.md text eol=lf
+.cursor/skills/emil-design-eng/SKILL.md text eol=lf
+.cursor/skills/break-ui/SKILL.md text eol=lf
+.cursor/skills/mobile-native/SKILL.md text eol=lf

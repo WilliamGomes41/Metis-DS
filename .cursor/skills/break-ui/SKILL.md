@@ -1,0 +1,9 @@
+---
+name: break-ui
+description: Try to break a piece of UI by feeding it worst-case data — long names, unbreakable emails, one-letter names, missing fields, huge counts, zero items, long labels, non-Latin text, emoji, extreme numbers — then render it behind a "Demo data / Worst case" toggle and report everything that broke, with the fix for each. Use when the user asks to stress-test, break, or find edge cases in a component or screen, or to "try the worst case". For visual design critique use emil-design-eng; for motion use review-animations.
+---
+
+Read repository-root `AGENTS.md` and `docs/agents/emil-design-skills.md`.
+Then follow the [canonical skill](../../../.agents/skills/break-ui/SKILL.md).
+The skill base directory is `.agents/skills/break-ui`; Impeccable stays the mandatory frontend workflow.
+The linked file owns the procedure; do not maintain another copy here.

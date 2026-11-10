@@ -22,6 +22,16 @@ existing brand constraints, verification and an unavailable-engine fallback.
 Preserve Metis domain contracts and existing verification requirements; a design
 workflow grants no deployment, publication or additional execution authority.
 
+### Frontend interaction craft — Emil Kowalski skills
+
+Three pinned skills complement Impeccable on frontend work: `emil-design-eng`
+(interaction detail), `break-ui` (worst-case data) and `mobile-native` (phone
+behavior). Use them when the change touches that concern; see
+[the project integration](docs/agents/emil-design-skills.md) for the selection,
+the Metis-specific limits and verification. Impeccable remains the mandatory
+frontend workflow, and existing brand tokens and domain contracts win over any
+skill guidance.
+
 ### Shared plugin skills
 
 The reviewed, pinned shared workflows and agent entry points are listed in
