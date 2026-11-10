@@ -20,3 +20,5 @@
 .agents/licenses/impeccable-* text eol=lf
 .claude/skills/impeccable/SKILL.md text eol=lf
 .cursor/skills/impeccable/SKILL.md text eol=lf
+.agents/skills/emil-design-eng/** text eol=lf
+.agents/licenses/emil-design-eng.txt text eol=lf
