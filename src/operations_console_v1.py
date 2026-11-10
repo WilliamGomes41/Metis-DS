@@ -2336,6 +2336,9 @@ class OperationsConsole:
             ):
                 raise ConsoleError("processing_command_conflict")
         with self._source_attempt_failure(snapshot_id, attempt["attempt_id"],claim_token=(attempt.get("dispatch") or {}).get("token")):
+            if attempt.get('kind') == 'human_annotation_source':
+                from src.vorming.human_annotation_source_v1 import execute
+                return execute(self, actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
             if attempt.get('kind') == 'human_annotation_build':
                 from src.vorming.human_annotation_build_v1 import execute
                 return execute(self, actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)

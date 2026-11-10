@@ -101,7 +101,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-30:] == (
+    assert MIGRATION_NAMES[-31:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -132,6 +132,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "038_prose_transitions.sql",
         "039_test_document_deletion.sql",
         "040_attempt_index_document_cascade.sql",
+        "041_annotation_source_preparation.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64
@@ -198,7 +199,7 @@ def test_registered_plan_installs_stop_guards_and_verifies_their_enabled_relatio
         con.commit()
         result = apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
         assert result['status'] == 'PASS'
-        assert result['applied'][-3:] == ['038_prose_transitions.sql', '039_test_document_deletion.sql', '040_attempt_index_document_cascade.sql']
+        assert result['applied'][-3:] == ['039_test_document_deletion.sql', '040_attempt_index_document_cascade.sql', '041_annotation_source_preparation.sql']
         con.execute('ALTER TABLE workflow.processing_attempts DISABLE TRIGGER guard_prose_transition_attempt')
         observed = observe_schema(con)
         assert observed['status'] == 'BLOCKED'

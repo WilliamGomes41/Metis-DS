@@ -30,7 +30,7 @@ def current(envelope):
 
 
 def assert_execution(envelope, *, kind=None):
-    if kind != 'human_annotation_build' and current(envelope) is not None:
+    if kind not in {'human_annotation_build', 'human_annotation_source'} and current(envelope) is not None:
         raise ConsoleError(STOPPED)
 
 

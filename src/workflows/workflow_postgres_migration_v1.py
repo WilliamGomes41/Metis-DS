@@ -46,8 +46,10 @@ MIGRATION_NAMES = (
     "038_prose_transitions.sql",
     "039_test_document_deletion.sql",
     "040_attempt_index_document_cascade.sql",
+    "041_annotation_source_preparation.sql",
 )
 REQUIRED_TRIGGERS = frozenset({
+    ("processing_attempts", "guard_annotation_source_attempt"),
     ("view_checks", "refuse_deleted_test_view_check"),
     ("publication_refusals", "refuse_deleted_test_publication_refusal"),
     ("review_events", "guard_test_deletion_ledger"),

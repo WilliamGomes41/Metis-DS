@@ -83,6 +83,50 @@ def _locked(console, con, actor_id, snapshot_id):
     return envelope
 
 
+def source_record(console, envelope, *, deadline=None):
+    """Read/convert outside the shared transaction; source identity is preserved."""
+    source_path, _ = console._verified_source_bytes(envelope)
+    full = console._legacy_review_source_envelope(envelope)
+    fragments = stored_extraction(full)
+    if fragments is None:
+        options = {'deadline': deadline} if deadline is not None else {}
+        fragments = console._extract(envelope['content_kind'], source_path,
+            document_id=envelope['document_id'], source_id=envelope['source_id'], **options)
+    record = full.get('prepared_source_extraction') or extraction_record(
+        envelope, fragments, extractor_contract(envelope['content_kind']))
+    semantic_source_blocks(fragments)
+    return record
+
+
+def pin_source(console, *, actor_id, snapshot_id, expected_revision, envelope, record, attempt=None):
+    """One existing native admission; a claimed worker finishes in this same commit."""
+    store = console.workflow_document_store
+    with workflow_transaction(store) as con:
+        current = _locked(console, con, actor_id, snapshot_id)
+        if (_identity(current) != _identity(envelope)
+                or current['working_revision_id'] != envelope['working_revision_id']
+                or current['logical_document_id'] != envelope['logical_document_id']
+                or store.objects_revision(snapshot_id) != expected_revision):
+            fail('annotation_objects_stale')
+        present = con.execute('SELECT 1 FROM workflow.annotation_sets WHERE snapshot_id=%s', (snapshot_id,)).fetchone()
+        if not present:
+            if (store.current_document_objects(snapshot_id) or current.get('semantic_replay')
+                    or (current.get('_document_inputs') or {}).get('replay')):
+                fail('annotation_existing_work_requires_takeover')
+            attempts = console._processing_history_envelope(snapshot_id).get('processing_attempts') or []
+            if any(a.get('state') == 'running' and (attempt is None or a['attempt_id'] != attempt['attempt_id']) for a in attempts):
+                fail('annotation_processing_in_progress')
+        if attempt is not None:
+            from src.vorming.human_annotation_source_v1 import finish_preparation
+            finish_preparation(console, con, snapshot_id, attempt)
+        if not present:
+            FormationTaskStore(store)._immutable(con, 'prepared_extraction_versions', 'record_hash', record['record_hash'],
+                ['snapshot_id'], [snapshot_id], record)
+            con.execute('INSERT INTO workflow.annotation_sets(snapshot_id,working_revision_id,extraction_hash,source_identity,objects_revision,normalization,created_by) '
+                'VALUES(%s,%s,%s,%s::jsonb,%s,%s,%s)',
+                (snapshot_id, current['working_revision_id'], record['record_hash'], _json_text(_identity(current)), expected_revision, NORMALIZATION, actor_id))
+
+
 def prepare(console, *, actor_id, snapshot_id, expected_revision):
     envelope = console._envelope(snapshot_id)
     authorize(console, actor_id, envelope)
@@ -93,37 +137,9 @@ def prepare(console, *, actor_id, snapshot_id, expected_revision):
         return overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
     if console.objects_revision(snapshot_id) != expected_revision:
         fail('annotation_objects_stale')
-    source_path, _ = console._verified_source_bytes(envelope)
-    # Long source/extractor I/O stays outside the shared PostgreSQL transaction.
-    full = console._legacy_review_source_envelope(envelope)
-    fragments = stored_extraction(full)
-    if fragments is None:
-        fragments = console._extract(envelope['content_kind'], source_path,
-            document_id=envelope['document_id'], source_id=envelope['source_id'])
-    record = full.get('prepared_source_extraction') or extraction_record(envelope, fragments, extractor_contract(envelope['content_kind']))
-    semantic_source_blocks(fragments)  # Validate reconstruction before admitting input.
-    store = console.workflow_document_store
-    with workflow_transaction(store) as con:
-        current = _locked(console, con, actor_id, snapshot_id)
-        if (_identity(current) != _identity(envelope)
-                or current['working_revision_id'] != envelope['working_revision_id']
-                or current['logical_document_id'] != envelope['logical_document_id']
-                or store.objects_revision(snapshot_id) != expected_revision):
-            fail('annotation_objects_stale')
-        if con.execute('SELECT 1 FROM workflow.annotation_sets WHERE snapshot_id=%s', (snapshot_id,)).fetchone():
-            pass  # Another identical prepare won; use the authoritative pin.
-        else:
-            if (store.current_document_objects(snapshot_id) or current.get('semantic_replay')
-                    or (current.get('_document_inputs') or {}).get('replay')):
-                fail('annotation_existing_work_requires_takeover')
-            attempts = console._processing_history_envelope(snapshot_id).get('processing_attempts') or []
-            if any(a.get('state') == 'running' for a in attempts):
-                fail('annotation_processing_in_progress')
-            FormationTaskStore(store)._immutable(con, 'prepared_extraction_versions', 'record_hash', record['record_hash'],
-                ['snapshot_id'], [snapshot_id], record)
-            con.execute('INSERT INTO workflow.annotation_sets(snapshot_id,working_revision_id,extraction_hash,source_identity,objects_revision,normalization,created_by) '
-                'VALUES(%s,%s,%s,%s::jsonb,%s,%s,%s)',
-                (snapshot_id, current['working_revision_id'], record['record_hash'], _json_text(_identity(current)), expected_revision, NORMALIZATION, actor_id))
+    record = source_record(console, envelope)
+    pin_source(console, actor_id=actor_id, snapshot_id=snapshot_id, expected_revision=expected_revision,
+               envelope=envelope, record=record)
     return overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
 
 
