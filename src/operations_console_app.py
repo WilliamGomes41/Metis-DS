@@ -6050,8 +6050,8 @@ def create_console_app(
         access_rows = entra.access_rows() if entra is not None else {}
         for public in sorted(state.list_accounts(), key=lambda item: item["username"]):
             role_boxes = "".join(
-                f'<label class="check"><input type="checkbox" name="roles" value="{name}"'
-                f'{" checked" if name in public["roles"] else ""}>{name}</label>'
+                f'<label class="choice"><input type="checkbox" name="roles" value="{name}"'
+                f'{" checked" if name in public["roles"] else ""}> {name}</label>'
                 for name in ("researcher", "reviewer", "publisher")
             )
             role_form = ""
@@ -6059,8 +6059,10 @@ def create_console_app(
                 role_form = f"""
                   <form method="post" action="/accounts/roles">
                     <input type="hidden" name="account_id" value="{_esc(public["account_id"])}">
-                    <p>Rollen wijzigen</p>
-                    {role_boxes}
+                    <fieldset class="account-roles">
+                      <legend>Rollen</legend>
+                      <div class="choice-row">{role_boxes}</div>
+                    </fieldset>
                     <button class="btn-secondary" type="submit">Rollen wijzigen</button>
                   </form>
                 """
@@ -6089,7 +6091,7 @@ def create_console_app(
         form = ""
         if "publisher" in account["roles"] and entra is None:
             form = """
-              <form method="post" action="/accounts">
+              <form method="post" action="/accounts" class="account-new">
                 <div class="sections">
                   <div class="section">
                     <h3>Nieuwe gebruiker</h3>

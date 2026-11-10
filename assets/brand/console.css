@@ -2475,3 +2475,6 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
 @media (min-width: 900px) {
   .settings-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.account-new { margin-bottom: 20px; }
+.account-roles { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
+.account-roles legend { padding: 0; margin-bottom: 6px; font-weight: 700; }

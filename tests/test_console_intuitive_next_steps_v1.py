@@ -70,3 +70,13 @@ def test_press_feedback_is_additive_and_respects_reduced_motion() -> None:
     assert "transform: scale(0.97)" in motion and "120ms" in motion
     assert "scale(" not in block.replace(motion, "")
     assert ".home-tile" not in block and ".topbar" not in block and ".rooms" not in block
+
+
+def test_account_roles_are_one_labelled_group_with_unchanged_values(production_console, production_app) -> None:
+    html = _client(production_console, production_app).get("/accounts").text
+    group = re.search(r'<fieldset class="account-roles">(.*?)</fieldset>', html, re.S).group(1)
+    assert "<legend>Rollen</legend>" in group
+    assert re.findall(r'<input type="checkbox" name="roles" value="(\w+)"', group) == ["researcher", "reviewer", "publisher"]
+    assert group.count('class="choice"') == 3
+    assert '<form method="post" action="/accounts" class="account-new">' in html
+    assert '<button class="btn-secondary" type="submit">Rollen wijzigen</button>' in html
