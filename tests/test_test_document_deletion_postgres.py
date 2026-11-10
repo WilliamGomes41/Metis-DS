@@ -601,9 +601,25 @@ def test_attempt_index_upgrade_preserves_history_guards_and_repairs_existing_cas
     migration = (root/'db/migrations/040_attempt_index_document_cascade.sql').read_text()
     with store._connect() as con:
         con.execute(old[start:end])
-        con.execute('ALTER TABLE workflow.processing_attempts DROP CONSTRAINT processing_attempts_snapshot_id_fkey')
-        con.execute('ALTER TABLE workflow.processing_attempts ADD CONSTRAINT processing_attempts_snapshot_id_fkey '
-                    'FOREIGN KEY(snapshot_id) REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE')
+        # PostgreSQL fires same-event FK triggers by name. Rebuild both document
+        # FKs so the index cascade runs before the attempt cascade even when
+        # catalog OIDs cross a decimal-width boundary in a long test session.
+        for _ in range(2):
+            for table in ('processing_attempt_inputs', 'processing_attempts'):
+                constraint = table + '_snapshot_id_fkey'
+                con.execute('ALTER TABLE workflow.' + table + ' DROP CONSTRAINT ' + constraint)
+                con.execute('ALTER TABLE workflow.' + table + ' ADD CONSTRAINT ' + constraint + ' '
+                            'FOREIGN KEY(snapshot_id) REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE')
+            order = [row['conname'] for row in con.execute(
+                "SELECT c.conname FROM pg_trigger t JOIN pg_constraint c ON c.oid=t.tgconstraint "
+                "WHERE t.tgrelid='workflow.documents'::regclass "
+                "AND c.conname IN ('processing_attempt_inputs_snapshot_id_fkey', "
+                "'processing_attempts_snapshot_id_fkey') "
+                "AND t.tgname LIKE 'RI_ConstraintTrigger_a_%' ORDER BY t.tgname").fetchall()]
+            if order.index('processing_attempt_inputs_snapshot_id_fkey') < order.index('processing_attempts_snapshot_id_fkey'):
+                break
+        else:
+            raise AssertionError('index cascade must precede attempt cascade in the old-guard reproduction')
         before = con.execute('SELECT to_jsonb(i) AS record FROM workflow.processing_attempt_inputs i ORDER BY attempt_id').fetchall()
     rows = console.canonical_publication_store.active_publication_rows()
     request = command(console, accounts, sid)
