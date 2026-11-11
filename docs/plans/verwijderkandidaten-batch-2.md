@@ -40,7 +40,7 @@ De tabel is het besluit; de JSON is het onderliggende zoekbewijs, geen runtimeco
 | `PostgresAuditRegistry` | Native adapter voor hetzelfde behouden audit-/herstelcontract. | Drie testmodules; de volledige lifecycleproef exporteert en herstelt live én gearchiveerde records en vergelijkt tabellen/bronbytes. | Adapter voor herstelondersteuning; niet bewezen uitgefaseerd. | **BEHOUDEN**; gegevens-/tabel-/archiefuitfasering blijft de afzonderlijke auditstap. |
 | `OperationsConsole.public_signup` | Alleen definitie en één testcaller; methode weigert expliciet met `public_signup_forbidden`. | `test_no_shared_login_and_role_authorization` bewijst deze weigering. Alleen een ontbrekende methode testen zou dit beleidsbewijs verliezen. | Geen CLI of operatorcaller gevonden. | **EERST MIGREREN**: ondersteunde account-/HTTP-grens aanwijzen en daar hetzelfde negatieve beleidsbewijs leveren; dan pas de oude methodesurface beoordelen. Nu behouden. |
 | `OperationsConsole.silently_edit_object` | Alleen definitie en één testcaller; weigert `cannot_silently_mutate`. | Bestaande MVP-proef bewaart oorspronkelijke versie/hash en verwerpt stille mutatie. | Geen operatorcaller gevonden. | **EERST MIGREREN**: immutabiliteit op de actuele correctie-/opslaggrens aantonen en de oude publieke methode expliciet uitfaseren. Nu behouden. |
-| `review_ledger.unregister_backend` | Vijf testmodules gebruiken dit om een oude backendregistratie los te laten. | Twee workers, coderollback, verdwenen disks en herstel moeten een nieuwe instantie gebruiken in plaats van een oude globale backend. | Geen productie-/operatorcaller gevonden. | **EERST MIGREREN** naar gedeelde testondersteuning, met behoud van proces-/workerisolatiebewijs; niet functie plus tests verwijderen. |
+| `review_ledger.unregister_backend` | Vijf testmodules gebruiken dit als tegenhanger van `register_backend`; `_BACKENDS` blijft privé bij de ledger. | Twee workers, coderollback, verdwenen disks en herstel moeten een nieuwe instantie gebruiken in plaats van een oude globale backend. | Geen productie-/operatorcaller gevonden. | **BEHOUDEN** als noodzakelijke testondersteuning via de bestaande registratiegrens. Deze tweeregelige functie naar tests verplaatsen zou private opslag laten uitlekken zonder gedragswinst. |
 | `extract_metrics_v1.extract_quality_claim_allowed` | Module heeft geen runtime-importeur, maar is al `ACTIVE-TEST-SUPPORT` in het register; onafhankelijk meetcontract, geen productgate. | Drie modules verwerpen fixture-goud, ontbrekende review/locks en train/holdout-overlap als kwaliteitsclaim. | Geen actuele operatorrun vastgesteld; de expliciete acceptatiefunctie is voldoende reden tot behoud. | **BEHOUDEN** als acceptatieondersteuning; uit de directe verwijderlijst halen. |
 | `extract_metrics_v1.compute_extract_metrics` | Zelfde onafhankelijke meetmodule; geen productiegebruik vereist voor dit doel. | Drie modules controleren false positives in de noemer, gemiste kennis, bronidentiteit, duplicaten, verslechterende scores en geen bestandswrites. | Geen operatoruitvoering waargenomen; geen runtime-import is geen uitfaseringsbesluit. | **BEHOUDEN** als onafhankelijke referentiemeting. |
 | `extract_metrics_v1.measure_admission_language_variation` | Zelfde expliciete testondersteuning. | Twee modules toetsen taalvariatie en dat zelfverklaarde kwaliteitsvlaggen geen claim openen. | Geen huidige operatorcaller gevonden. | **BEHOUDEN** met de meetmodule; geen runtimegate toevoegen. |
@@ -49,7 +49,7 @@ De tabel is het besluit; de JSON is het onderliggende zoekbewijs, geen runtimeco
 | `PostgresWorkflowReviewStore.read_events_after` | Geen huidige runtimecaller gevonden. #708 en `pg-command-review-evidence.md` benoemen dit expliciet als gecommitteerde auditreader. | `test_pg_command_review_evidence.py` controleert dat pending command-events niet als gecommitteerd bewijs zichtbaar worden. | Geen operatorcaller gevonden; contract nog niet als vervallen aangetoond. | **BEHOUDEN** tot de resterende committed-readerbelofte aantoonbaar op een behouden lezer ligt. |
 | `runtime_data_inventory_v1.apply_clean_wwwroot` | Alleen één testmodule; model van clean deploy, geen productroute. | `test_clean_true_wipes_wwwroot_and_must_not_delete_runtime_data` controleert tijdelijke webroot, extern databehoud, clean=false en weigering bij overlappende paden. | Geen operatorcaller gevonden; geen echte webroot gewist in deze batch. | **EERST MIGREREN** naar testondersteuning als dit model nuttig blijft; deployment-/databehoudsbewijs behouden. |
 
-Resultaat: **1 verwijderen, 8 behouden, 4 eerst migreren en 3 open**. Dit zijn
+Resultaat: **1 verwijderen, 9 behouden, 3 eerst migreren en 3 open**. Dit zijn
 zestien kandidaten, niet zestien uitgefaseerde onderdelen. Overige A2/A3-symbolen
 zijn in deze batch niet individueel afgesloten.
 
@@ -94,5 +94,11 @@ gelijktijdige correcties en rollback van objecten/bindings/audit.
 De na-verwijderingcontroles en exacte codecommit worden vastgelegd in
 [het uitvoeringscontract](../change-contracts/1049-candidate-contract-review.md).
 Een testsuite bewijst geen afwezigheid van onbekende externe callers; operatorvragen
-blijven zichtbaar open. Niemand hoeft voor de acht expliciete behoudsbesluiten
+blijven zichtbaar open. Niemand hoeft voor de negen expliciete behoudsbesluiten
 opnieuw te kiezen: hun bestaande contract is het uitgangspunt.
+
+Eindbewijs na verwijderen: [verification.json](../../evidence/1049/verification.json).
+De volledige suite slaagt op codecommit `0276be3f`, inclusief dezelfde 49
+broncorrectiegevallen als vóór verwijderen. De uiteindelijke beoordeling van
+`unregister_backend` bewaart de bestaande register/unregister-grens; deze
+documentatieverfijning verandert geen code of tests.

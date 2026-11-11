@@ -1,0 +1,151 @@
+{
+  "commit": "0276be3f6d67c153dcfbe0087960a1139a1df97b",
+  "python": "3.13.5",
+  "seconds": 5226.914,
+  "wall_seconds": 1440.872,
+  "exit_code": 0,
+  "tests": 8612,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 54,
+  "postgres_skips": [],
+  "postgres_version": 160015,
+  "collected": 8612,
+  "collection_digest": "e004f6bb4c7462d0a665cc392497c859fdcb808c141782509572a7b45bd36d19",
+  "shards": [
+    {
+      "shard_index": 0,
+      "tests": 1509,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 16,
+      "postgres_skips": [],
+      "seconds": 1421.95,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 1,
+      "tests": 2401,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 4,
+      "postgres_skips": [],
+      "seconds": 1300.979,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 2,
+      "tests": 1924,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 20,
+      "postgres_skips": [],
+      "seconds": 1440.872,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 3,
+      "tests": 2778,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 14,
+      "postgres_skips": [],
+      "seconds": 1063.113,
+      "exit_code": 0
+    }
+  ],
+  "expected_xfails": 3,
+  "optional_environment_skips": 51,
+  "passed": 8558,
+  "ast_proof": {
+    "base": "821692b4cda775cec62b3b137ea84fb94c447c5f",
+    "removed_symbol": "DeterministicRepairReviewConsole._finalize_source_provenance",
+    "retained_source_ast_equal": true,
+    "retained_test_ast_equal": true,
+    "active_helpers_preserved": [
+      "_verified_finalized_source_refs",
+      "_source_repair_provenance_patch"
+    ]
+  },
+  "baseline_repair_proof": {
+    "commit": "821692b4cda775cec62b3b137ea84fb94c447c5f",
+    "passed": 49,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "same_49_cases_passed_after_removal": true
+  },
+  "candidate_outcomes": {
+    "remove": [
+      "_finalize_source_provenance"
+    ],
+    "retain": [
+      "prior_object_audit_history",
+      "AuditRetentionService",
+      "list_archived",
+      "PostgresAuditRegistry",
+      "unregister_backend",
+      "extract_quality_claim_allowed",
+      "compute_extract_metrics",
+      "measure_admission_language_variation",
+      "read_events_after"
+    ],
+    "migrate_first": [
+      "public_signup",
+      "silently_edit_object",
+      "apply_clean_wwwroot"
+    ],
+    "open": [
+      "storage_prepare",
+      "prepare_operational_inputs",
+      "activate_operational_inputs"
+    ]
+  },
+  "verification_scope": "Full default suite on Python 3.13.5 and PostgreSQL 16.15. Synthetic native/HTTP behavior; optional Chromium, Docling and Bend checks skipped. External operator use and production layouts not established.",
+  "retained_contract_proofs": [
+    {
+      "module": "tests/test_audit_retention_v1.py",
+      "passed": 13
+    },
+    {
+      "module": "tests/test_workflow_audit_retention_v1.py",
+      "passed": 13
+    },
+    {
+      "module": "tests/test_lifecycle_withdrawal_recovery_v1.py",
+      "passed": 5
+    },
+    {
+      "module": "tests/test_operations_console_mvp.py",
+      "passed": 29
+    },
+    {
+      "module": "tests/test_workflow_review_postgres_v1.py",
+      "passed": 10
+    },
+    {
+      "module": "tests/test_extract_metrics_independent_quality.py",
+      "passed": 20
+    },
+    {
+      "module": "tests/test_extract_metrics_wave4_quality_claim.py",
+      "passed": 26
+    },
+    {
+      "module": "tests/test_admission_language_variation.py",
+      "passed": 7
+    },
+    {
+      "module": "tests/test_operational_document_inputs_postgres.py",
+      "passed": 30
+    },
+    {
+      "module": "tests/test_pg_command_review_evidence.py",
+      "passed": 9
+    },
+    {
+      "module": "tests/test_wave_d_runtime_inventory.py",
+      "passed": 3
+    }
+  ]
+}

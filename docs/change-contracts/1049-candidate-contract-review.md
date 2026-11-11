@@ -28,8 +28,8 @@ gedeelde mutatie-/leesgrens of domeinregel wordt vervangen.
 
 Het bronbestand moet AST-gelijk zijn na alleen de wrapper uit de basis-AST weg
 te laten. Bestaande tests krijgen alleen een bewijscommentaar. Geen test of
-weigering verdwijnt. Acht expliciete behoudskandidaten gaan uit de directe
-verwijdersectie van de inventaris; vier migratiekandidaten en drie open vragen
+weigering verdwijnt. Negen expliciete behoudskandidaten gaan uit de directe
+verwijdersectie van de inventaris; drie migratiekandidaten en drie open vragen
 blijven zichtbaar. Het levenscyclusregister en de GitHub/Linear-koppeling worden
 binnen hun bestaande vorm bijgewerkt.
 
@@ -37,6 +37,23 @@ binnen hun bestaande vorm bijgewerkt.
 
 Baseline vóór verwijdering: `test_review_closure_v1.py` en
 `test_a09_source_repair.py`, **49 passed, geen skips**, PostgreSQL 16.15/Python 3.13.5.
-De volledige na-verwijderingrun en repositorychecks volgen op de codecommit.
+Codecommit na verwijdering: `0276be3f6d67c153dcfbe0087960a1139a1df97b`.
+[Verificatierapport](../../evidence/1049/verification.json): **8.558 passed,
+51 optionele omgevingsskips, 3 verwachte xfails, nul failures/errors en nul
+PostgreSQL-skips**. De strikte vierdelige samenvoeging verantwoordt precies alle
+8.612 verzamelde gevallen op dezelfde commit en collectiedigest. Dezelfde 49
+broncorrectiegevallen als in de baseline slagen na verwijderen, zonder skips.
+
+De 51 optionele skips betreffen Chromium (28), Docling/modellen (12) en Bend (11).
+AST-equivalentie van behouden bron- en testcode, repository-/releasepreflight,
+compileall, architectuurgrenzen, contractvalidatie en diffcontrole: PASS.
+
+Bij de laatste beoordeling is `unregister_backend` van migratiekandidaat naar
+behouden testondersteuning verplaatst: vijf modules gebruiken de bestaande
+register/unregister-grens voor worker-/herstartisolatie; verplaatsen zou private
+backendopslag laten uitlekken. Dit wijzigt uitsluitend de bewijstabel/inventaris.
+De uiteindelijke telling is 1 verwijderen, 9 behouden, 3 eerst migreren en 3 open.
+De bewijsdocumentatie na de codecommit verandert geen broncode, testcode of config.
+
 Operatorgebruik en productielayouttelling zijn niet vastgesteld; de relevante
 gevallen zijn OPEN, niet goedgekeurd voor verwijdering. Geen merge of deployment.

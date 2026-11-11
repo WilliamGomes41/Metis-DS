@@ -18,7 +18,7 @@ De eerste uitvoering is [#1047](https://github.com/WilliamGomes41/Metis-DS/issue
 De tweede batch is [#1049](https://github.com/WilliamGomes41/Metis-DS/issues/1049) /
 [MET-70](https://linear.app/metis-phoenix/issue/MET-70): de
 [functiegewijze bewijstabel](verwijderkandidaten-batch-2.md) onderscheidt één
-verwijdering, acht behoudsbesluiten, vier migraties en drie open gevallen.
+verwijdering, negen behoudsbesluiten, drie migraties en drie open gevallen.
 Dit plan vervangt de algemene volgorde uit de oorspronkelijke inventaris.
 Onafhankelijke niet-semantische opruiming hoeft niet te wachten op productcutover;
 integrale uitfasering en projectsluiting behouden hun bestaande afhankelijkheden.

@@ -82,7 +82,6 @@ deze methoden en hun tests blijven in deze stap staan.
 | `src/review/proportionate_review_v1.py` | `normal_risk_batch_counts` (1) |
 | `src/review/review_duty_v1.py` | `repair_duty_count` (1) |
 | `src/review/domain_dimensions_v1.py` | `project_review_domain_dimensions` (1) |
-| `src/review/review_ledger.py` | `unregister_backend` (5) — testhulp; hoort in testondersteuning |
 | `src/vorming/admission_gate_v1.py` | `blocked_audit_lane` (5) |
 | `src/vorming/heading_parent_list_v1.py` | `freeze_heading_anchors` (1), `default_structural_parent` (1) |
 | `src/vorming/recommendation_semantics_v1.py` | `legacy_recommendation_semantics_view` (1) |
@@ -293,6 +292,7 @@ contracten.
 
 ## C. Bewust laten staan
 
+- `unregister_backend`: noodzakelijke testondersteuning via de bestaande registratiegrens; vijf modules bewaken worker-/herstartisolatie zonder private backendopslag naar tests te verplaatsen.
 - `prior_object_audit_history`: expliciet historisch leescontract in `semantic-only-formation.md`; productiehistorie niet geteld.
 - `AuditRetentionService`, `list_archived` en `PostgresAuditRegistry`: behouden audit-/back-upherstel met native lifecyclebewijs.
 - `extract_quality_claim_allowed`, `compute_extract_metrics` en `measure_admission_language_variation` in `extract_metrics_v1`: `ACTIVE-TEST-SUPPORT`, onafhankelijke acceptatiemeting.
