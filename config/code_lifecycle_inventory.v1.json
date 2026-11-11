@@ -12,6 +12,10 @@
   ],
   "processing_route_register": "config/legacy_processing_routes.json",
   "symbols": [
+    {"path": "src/integrity_kernel.py", "symbol": "validate_source_integrity", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: no runtime, script, test or literal dispatch caller on d5715e61; retained source-fragment/hash/object validation is unchanged."},
+    {"path": "src/operations_console_v1.py", "symbol": "session_is_expired", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: unused helper; active session validation and authorization are unchanged."},
+    {"path": "src/operations_console_app.py", "symbol": "knowledge_open_count", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: unused counter; active personal review projection and second-review accounting are unchanged."},
+    {"path": "src/workflows/workflow_documents_cutover_v1.py", "symbol": "list_processing_history_inputs", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: unused whole-document collection; targeted processing-history readers remain."},
     {"path": "src/cli.py", "symbol": "prepublish and audit-current publication verdict", "status": "LEGACY-REMOVED", "reason": "KO-5 (#1012): offline prepublish command retired; audit-current retains only its existing integrity validation and cannot authorize publication."},
     {"path": "src/review/review_workflow_v3.py", "symbol": "apply_reviews and main", "status": "LEGACY-REMOVED", "reason": "KO-5 (#1012): blocked public JSONL review entrypoint retired; _apply_review_state is retained as private command preparation."},
     {"path": "src/review/review_closure_v1.py", "symbol": "ReviewClosureConsole.migrate_legacy_revise_to_review", "status": "LEGACY-REMOVED", "reason": "KO-5 (#1012): obsolete startup revise migration retired; bootstrap, lock and canonical publication reconciliation remain."},

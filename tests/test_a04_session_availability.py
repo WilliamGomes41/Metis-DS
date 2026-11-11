@@ -8,6 +8,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+# #1047 reuses this unchanged behavioral proof for active session authorization,
+# storage and stale/concurrent protection after deleting unused helper definitions.
 from tests.semantic_fixture_support import bind_fixture_selections
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from copy import deepcopy

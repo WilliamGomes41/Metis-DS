@@ -417,9 +417,6 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                 result.append(envelope)
             return result
 
-    def list_processing_history_inputs(self):
-        return [self.processing_history_input(h['snapshot_id']) for h in self.list_envelopes()]
-
     def list_document_cards(self, snapshot_ids: list[str] | None = None) -> list[dict[str, Any]]:
         """List/chooser data, without replay, extraction, attempts or object rows."""
         if snapshot_ids == []:

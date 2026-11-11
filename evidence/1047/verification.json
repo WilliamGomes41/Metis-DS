@@ -1,0 +1,114 @@
+{
+  "commit": "e3a5d41a71ac3f383bb02d06c930ffe6c19c0bdc",
+  "python": "3.13.5",
+  "seconds": 5252.508,
+  "wall_seconds": 1464.715,
+  "exit_code": 0,
+  "tests": 8612,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 54,
+  "postgres_skips": [],
+  "postgres_version": 160015,
+  "collected": 8612,
+  "collection_digest": "e004f6bb4c7462d0a665cc392497c859fdcb808c141782509572a7b45bd36d19",
+  "shards": [
+    {
+      "shard_index": 0,
+      "tests": 1509,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 16,
+      "postgres_skips": [],
+      "seconds": 1464.715,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 1,
+      "tests": 2401,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 4,
+      "postgres_skips": [],
+      "seconds": 1293.553,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 2,
+      "tests": 1924,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 20,
+      "postgres_skips": [],
+      "seconds": 1435.222,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 3,
+      "tests": 2778,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 14,
+      "postgres_skips": [],
+      "seconds": 1059.018,
+      "exit_code": 0
+    }
+  ],
+  "ast_proof": {
+    "base": "d5715e61ca47554b89853f190202ad388c30ed07",
+    "files": [
+      {
+        "path": "src/integrity_kernel.py",
+        "removed_symbol": "validate_source_integrity",
+        "retained_ast_equal": true
+      },
+      {
+        "path": "src/operations_console_v1.py",
+        "removed_symbol": "session_is_expired",
+        "retained_ast_equal": true
+      },
+      {
+        "path": "src/operations_console_app.py",
+        "removed_symbol": "knowledge_open_count",
+        "retained_ast_equal": true
+      },
+      {
+        "path": "src/workflows/workflow_documents_cutover_v1.py",
+        "removed_symbol": "list_processing_history_inputs",
+        "retained_ast_equal": true
+      }
+    ],
+    "test_ast_unchanged": true
+  },
+  "existing_targeted_proof": [
+    {
+      "module": "tests.test_architecture_invariants",
+      "passed": 6
+    },
+    {
+      "module": "tests.test_a04_session_availability",
+      "passed": 7
+    },
+    {
+      "module": "tests.test_workflow_documents_cutover_v1",
+      "passed": 15
+    },
+    {
+      "module": "tests.test_domain_workplaces_contract",
+      "passed": 1
+    },
+    {
+      "module": "tests.test_linear_github_sync",
+      "passed": 22
+    },
+    {
+      "module": "tests.test_integrity_sprint_v1",
+      "passed": 10
+    }
+  ],
+  "verification_scope": "Complete default suite on Python 3.13 / PostgreSQL 16.15; optional environment tests and expected xfails remain skipped. No deployment or production acceptance.",
+  "initial_attempts": "Missing pinned regex dependency fixed via requirements-dev.lock; early sharded attempt interrupted because psql was absent from PATH. Only the final complete run is counted here.",
+  "passed": 8558,
+  "optional_environment_skips": 51,
+  "expected_xfails": 3
+}

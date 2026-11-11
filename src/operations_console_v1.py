@@ -352,15 +352,6 @@ def _parse_utc(value: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def session_is_expired(session: dict[str, Any], *, now: datetime | None = None) -> bool:
-    """Missing or unreadable expires_at is expired. Expiry field alone is not enough — callers MUST reject."""
-    parsed = _parse_utc(str(session.get("expires_at") or ""))
-    if parsed is None:
-        return True
-    current = now or datetime.now(timezone.utc)
-    return current >= parsed
-
-
 def normalize_ingest_source_date(value: str | None) -> str:
     """Persist freeze colofon/publicatiedatum as ISO YYYY-MM-DD.
 
