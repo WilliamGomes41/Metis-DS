@@ -51,4 +51,6 @@ def test_trajectory_and_overview_use_room_layout(production_console, production_
     client = TestClient(production_app(console))
     client.post("/login", data={"username": "rob", "password": "rob-secret-pass"})
     html = client.get("/review").text
-    assert '<p class="review-empty">Geen aan jou toegewezen reviewdocumenten.' in html
+    empty_messages = re.findall(r'<p\b[^>]*\sclass="review-empty"[^>]*>(.*?)</p>', html)
+    assert len(empty_messages) == 1
+    assert empty_messages[0].startswith('Geen aan jou toegewezen reviewdocumenten.')

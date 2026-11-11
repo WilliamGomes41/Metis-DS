@@ -216,7 +216,7 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None, 
              else "onderbroken" if (succeeded and not complete) else "mislukt" if current == "failed"
              else "voltooid" if complete else "nog niet gestart")
     if (attempt.get("dispatch") or {}).get("state") == "blocked":
-        state = "geblokkeerd"
+        state = "vastgelopen"
     # Only an actual start form needs the legacy processing precondition.
     # Capture its rows and token together, retaining the original CAS contract.
     needs_revision = ((processing["retry_allowed"] or processing["resume_allowed"])
@@ -271,7 +271,7 @@ def summary_projection(console, *, envelope, observations):
              else "onderbroken" if current in {"expired", "interrupted", "incomplete_budget"}
              else "mislukt" if current == "failed" else UNCHECKED if succeeded else "nog niet gestart")
     if (attempt.get("dispatch") or {}).get("state") == "blocked":
-        state = "geblokkeerd"
+        state = "vastgelopen"
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
     timing = estimate({**envelope, "processing_configuration": configuration(console)}, [], observations=observations)
     remaining = None

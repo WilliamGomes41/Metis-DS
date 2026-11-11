@@ -110,6 +110,7 @@ from src.operations_console_v1 import (
     ALLOWED_DELETE_NEXT,
     CONSOLE_VERSION,
     PRE_REVIEW_BLOCKED,
+    PROCESSING_NOT_STARTED,
     ConsoleError,
     OperationsConsole,
     REPO_ROOT,
@@ -1331,7 +1332,7 @@ def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: 
       <label>Zoek documenten<input type="search" name="q" value="{_esc(query)}" placeholder="Titel of onderwerp"></label>
       <button class="btn-secondary" type="submit">Zoeken</button>
     </form><nav class="document-pagination" aria-label="Documentpagina’s">
-      <span>{len(matches)} documenten{"" if quiet_single_page and pages == 1 else f" · pagina {page} van {pages}"}</span> {" · ".join(links)}</nav>'''
+      <span>{len(matches)} {"document" if len(matches) == 1 else "documenten"}{"" if quiet_single_page and pages == 1 else f" · pagina {page} van {pages}"}</span> {" · ".join(links)}</nav>'''
     return matches[(page - 1) * size:page * size], controls
 
 
@@ -1348,16 +1349,20 @@ def _document_summary(row: dict[str, Any]) -> str:
             f'{_esc(row.get("class"))} · status <b>{_esc(_status_label(status))}</b></span>')
 
 
-def _document_row_summary(row: dict[str, Any], *, blocked: bool) -> str:
+def _document_row_summary(row: dict[str, Any], *, blocked: bool, not_started: bool = False) -> str:
     """Documenten row: title and version on the left, the status as a label on the right."""
-    tone = "warn" if blocked else "neutral"
+    tone = "warn" if blocked and not not_started else "neutral"
+    label = "nog niet gestart" if not_started else _status_label(_document_status(row))
     return (f'<span class="document-row-text"><span class="doc-title">{_esc(row["title"])}</span>'
             f'<span class="meta">Versie {_esc(row["version"])} · {_esc(row.get("class"))}</span></span>'
             f'<span class="document-status" data-tone="{tone}">'
-            f'<span class="visually-hidden">Status: </span>{_esc(_status_label(_document_status(row)))}</span>')
+            f'<span class="visually-hidden">Status: </span>{_esc(label)}</span>')
 
 
 def _document_card_heading(row: dict[str, Any]) -> str:
+    # A caller that prints the state on its own line directly below omits it here.
+    status = "" if row.get("status_shown_below") else (
+        f'<span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>')
     return f"""
       <header>
         <p class="doc-title">{_esc(row["title"])}</p>
@@ -1366,7 +1371,7 @@ def _document_card_heading(row: dict[str, Any]) -> str:
         <span>versie <b>{_esc(row["version"])}</b></span>
         <span>onderwerp <b>{_esc(row["family"])}</b></span>
         <span>klasse <b>{_esc(row["class"])}</b></span>
-        <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
+        {status}
       </p>
     """
 
@@ -3885,7 +3890,7 @@ def create_console_app(
         cards = """
           <h2>Inzicht</h2>
           <p class="field-help">Eén plek met vier tabbladen: wat er gebeurt, waar werk blijft liggen en wat de volgende stap is.</p>
-          <div class="doc-list">
+          <div class="doc-list settings-links">
             <a class="doc-card" href="/inzicht?tab=systeem" style="text-decoration:none;"><p class="doc-title">Systeem</p><p>Verzoeken, fouten, fasen en deploys, tot op de milliseconde.</p></a>
             <a class="doc-card" href="/inzicht?tab=kwaliteit" style="text-decoration:none;"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bruikbaarheid van voorstellen, herstelwerk en open werk.</p></a>
             <a class="doc-card" href="/inzicht?tab=documenten" style="text-decoration:none;"><p class="doc-title">Documenten</p><p>Verwerking, blokkades en systeemfouten per document.</p></a>
@@ -3893,7 +3898,7 @@ def create_console_app(
           </div>
           <div style="height:18px" aria-hidden="true"></div>
           <h2>Beheer</h2>
-          <div class="doc-list">
+          <div class="doc-list settings-links">
             <a class="doc-card" href="/accounts" style="text-decoration:none;">
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
@@ -3906,7 +3911,7 @@ def create_console_app(
           </div>
           <div style="height:18px" aria-hidden="true"></div>
           <h2>Uitleg</h2>
-          <div class="doc-list">
+          <div class="doc-list settings-links">
             <a class="doc-card" href="/over-console" style="text-decoration:none;">
               <p class="doc-title">Over Metis</p>
               <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
@@ -3917,7 +3922,6 @@ def create_console_app(
             f"""
             {_nav(account, "settings")}
             <section class="room">
-              <p class="eyebrow">Beheer</p>
               <h1>Instellingen</h1>
               <p class="lead">Inzicht in systeem en werk, beheer van accounts en techniek, en uitleg over Metis.</p>
               {cards}
@@ -4828,11 +4832,17 @@ def create_console_app(
               var colleagues = document.getElementById("review-colleagues");
               var list = document.getElementById("review_reviewers");
               var options = document.querySelectorAll('input[name="review_option"]');
+              var label = colleagues.querySelector("label");
+              var help = document.getElementById("review-reviewers-help");
               function syncColleagues() {{
                 var chosen = document.querySelector('input[name="review_option"]:checked');
                 var alone = !!chosen && chosen.value === "uploader_sole";
-                colleagues.hidden = alone;
+                var two = !!chosen && chosen.value === "two_others";
+                // Ask for colleagues only once the chosen form of review needs them.
+                colleagues.hidden = !chosen || alone;
                 list.disabled = alone;
+                if (label) label.textContent = two ? "Kies twee collega's" : "Kies een collega";
+                if (help) help.hidden = !two;
               }}
               options.forEach(function (radio) {{ radio.addEventListener("change", syncColleagues); }});
               syncColleagues();
@@ -4958,12 +4968,20 @@ def create_console_app(
                 except ConsoleError:
                     mutable = False
                 blocked = mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+                # Receipt records "not started" as a normal reason; nothing is stuck yet.
+                not_started = blocked and child.get("processing_blocker") == PROCESSING_NOT_STARTED
                 if not mutable:
                     locked = ['<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>']
                     if "researcher" in account["roles"]:
                         locked.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
                     rows.append(_document_action_row("Wijzigen", "".join(locked)))
-                if blocked:
+                if not_started:
+                    next_step = (
+                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten.'
+                        if can_move else ""
+                    )
+                    pre_review_notice = f'<p class="banner">Verwerking nog niet gestart. Beoordelen kan daarna.{next_step}</p>'
+                elif blocked:
                     next_step = (
                         f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten of te hervatten.'
                         if can_move else ""
@@ -5013,7 +5031,7 @@ def create_console_app(
                 cards.append(
                     f"""
                     <details class="doc-card document-disclosure document-row">
-                      <summary>{_document_row_summary(child, blocked=blocked)}</summary>
+                      <summary>{_document_row_summary(child, blocked=blocked, not_started=not_started)}</summary>
                       {pre_review_notice}
                       <div class="doc-actions document-actions">{"".join(rows)}</div>
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
@@ -5025,7 +5043,7 @@ def create_console_app(
             blocks.append(
                 f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
-        empty = '<p class="muted document-empty">Nog geen documenten. Lever eerst een document in.</p>'
+        empty = '<p class="muted document-empty">Nog geen documenten. <a href="/ingest">Lever een document in</a> om te beginnen.</p>'
         return _page(
             f"""
             {_nav(account, "tree")}
@@ -6045,8 +6063,8 @@ def create_console_app(
         access_rows = entra.access_rows() if entra is not None else {}
         for public in sorted(state.list_accounts(), key=lambda item: item["username"]):
             role_boxes = "".join(
-                f'<label class="check"><input type="checkbox" name="roles" value="{name}"'
-                f'{" checked" if name in public["roles"] else ""}>{name}</label>'
+                f'<label class="choice"><input type="checkbox" name="roles" value="{name}"'
+                f'{" checked" if name in public["roles"] else ""}> {name}</label>'
                 for name in ("researcher", "reviewer", "publisher")
             )
             role_form = ""
@@ -6054,8 +6072,10 @@ def create_console_app(
                 role_form = f"""
                   <form method="post" action="/accounts/roles">
                     <input type="hidden" name="account_id" value="{_esc(public["account_id"])}">
-                    <p>Rollen wijzigen</p>
-                    {role_boxes}
+                    <fieldset class="account-roles">
+                      <legend>Rollen</legend>
+                      <div class="choice-row">{role_boxes}</div>
+                    </fieldset>
                     <button class="btn-secondary" type="submit">Rollen wijzigen</button>
                   </form>
                 """
@@ -6084,7 +6104,7 @@ def create_console_app(
         form = ""
         if "publisher" in account["roles"] and entra is None:
             form = """
-              <form method="post" action="/accounts">
+              <form method="post" action="/accounts" class="account-new">
                 <div class="sections">
                   <div class="section">
                     <h3>Nieuwe gebruiker</h3>
