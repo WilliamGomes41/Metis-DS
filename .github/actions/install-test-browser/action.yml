@@ -15,7 +15,7 @@ runs:
       shell: bash
       run: |
         browser="$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright"
-        "$browser" install-deps chromium
+        bash scripts/ci_with_apt_proxy.sh "$browser" install-deps chromium
         for attempt in 1 2 3; do
           if "$browser" install chromium; then exit 0; fi
           if [ "$attempt" -eq 3 ]; then exit 1; fi

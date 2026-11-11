@@ -34,3 +34,17 @@ De nieuwe browserproef faalde vóór de implementatie op de echte pagina:
 ‘The duplicate selection field must be removed’, actual 2, expected 0.
 Skill: Impeccable/distill en emil-design-eng; geen animatie of extra visueel
 hulppaneel. Contextengine niet beschikbaar; bestaande projectcontext toegepast.
+
+## CI-herstel (11 november 2026)
+
+Browser- en echte-PDF-jobs falen vóór de tests op APT-DNS. De geïsoleerde
+APT-aanvraag reproduceert dit zonder proxy; met de bestaande proxy wordt de
+Ubuntu-index opgehaald. Sudo en Playwrights geneste sudo verliezen de geërfde
+proxyinstellingen. Een gedeelde CI-wrapper normaliseert de geërfde variabelen
+naar APTs lowercase namen en voert de installatie eenmaal via sudo met een
+expliciete preserve-lijst uit. Geen proxywaarden in argumenten/logs, nieuwe
+netwerkregels, alternatieve mirrors of versoepelde TLS-/pakketcontroles.
+De wrapper bewaart foutcodes; echte browser/PDF-tests en hun bestaande
+verplichte bewijscontroles blijven behouden. Een subprocessproef simuleert
+sudo env_reset en toont rood zonder behoud, groen met behoud. Workflowwiring
+is afzonderlijk getest. Succes van de nieuwe CI-jobs blijft vereist.
