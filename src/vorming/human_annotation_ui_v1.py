@@ -302,28 +302,31 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         page_options = ''.join('<option value="source-page-'+str(p)+'">Pagina '+str(p)+'</option>' for p in pages)
         role_options = ''.join('<option value="'+key+'">'+label+'</option>' for key,label in LABELS.items())
         from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
-        type_options = '<option value="">Type kiezen</option>'+''.join('<option value="'+key+'">'+label+'</option>' for key,label in TYPES.items() if key in CLOSED_OBJECT_TYPES)+'<option value="source_disposition">Dit bronstuk verantwoorden</option>'
+        type_options = '<option value="">Laat Metis het type voorstellen</option>'+''.join('<option value="'+key+'">'+label+'</option>' for key,label in TYPES.items() if key in CLOSED_OBJECT_TYPES)+'<option value="source_disposition">Dit bronstuk verantwoorden</option>'
         data = json.dumps(state,ensure_ascii=False).replace('<','\\u003c')
-        body = intro + '''<p>Selecteer een uitspraak in de bron. Vul daarna de betekenis aan en controleer je annotatie voordat je afrondt.</p>
+        body = intro + '''<p>Selecteer één volledige uitspraak. Metis stelt de betekenis voor; jij controleert en corrigeert voordat je afrondt.</p>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
-<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Annotatie maken</h2>
+<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
 <fieldset id="annotation-editor-inputs" aria-label="Annotatie bewerken" disabled>
 <nav class="annotation-steps" aria-label="Annotatiestappen"><ol>
-<li><button type="button" id="annotation-step-1" aria-current="step">1. Uitspraak selecteren</button></li>
-<li><button type="button" id="annotation-step-2">2. Betekenis aanvullen</button></li>
-<li><button type="button" id="annotation-step-3">3. Controleren en afronden</button></li></ol></nav>
+<li><button type="button" id="annotation-step-1" aria-current="step">1. Uitspraak kiezen</button></li>
+<li><button type="button" id="annotation-step-2">2. Voorstel controleren</button></li>
+<li><button type="button" id="annotation-step-3">3. Afronden</button></li></ol></nav>
 <p id="annotation-status" role="status" aria-live="polite"></p>
 <label for="annotation-entry">Huidige annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
 <section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h3 id="annotation-current-version"></h3><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
 <section id="annotation-task-1" aria-labelledby="annotation-heading-1"><h3 id="annotation-heading-1" tabindex="-1">Welke uitspraak wil je vastleggen?</h3>
-<p>Markeer de uitspraak links in de bron. Neem de hele betekenis mee; voorwaarden kun je daarna toevoegen.</p>
-<label for="annotation-type">Wat voor uitspraak is dit?</label><select id="annotation-type">'''+type_options+'''</select>
+<p>Markeer de uitspraak links in de bron. Metis gebruikt deze selectie om type en betekenis voor te stellen.</p>
+<label for="annotation-type">Type (optioneel vooraf kiezen)</label><select id="annotation-type">'''+type_options+'''</select>
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
 <p id="annotation-core-summary"></p></section>
-<section id="annotation-task-2" aria-labelledby="annotation-heading-2" hidden><h3 id="annotation-heading-2" tabindex="-1">Maak de betekenis duidelijk</h3>
-<p>Wijs per vraag de bijbehorende woorden in de bron aan. Gebruik de ontbreekreden als de tekst geen antwoord geeft.</p>
+<p id="annotation-suggestion-note" role="status" aria-live="polite"></p>
+<section id="annotation-task-2" aria-labelledby="annotation-heading-2" hidden><h3 id="annotation-heading-2" tabindex="-1">Controleer het betekenisvoorstel</h3>
+<p>Type: <strong id="annotation-type-summary"></strong> <button class="btn-secondary" type="button" id="annotation-change-type">Type aanpassen</button></p>
+<blockquote id="annotation-proposal-core"></blockquote>
+<p>Controleer de antwoorden. Pas alleen aan wat ontbreekt of niet klopt. De volledige uitspraak hoef je niet opnieuw te selecteren.</p>
 <div id="annotation-meaning"><label for="annotation-field" hidden>Onderdeel</label><select id="annotation-field" hidden></select><dl id="annotation-fields"></dl></div>
 <details id="annotation-context-tools"><summary>Context of onderbouwing toevoegen</summary><p>Kies wat je wilt toevoegen en wijs de tekst in de bron aan.</p>
 <label for="annotation-role">Wat wil je toevoegen?</label><select id="annotation-role">'''+role_options+'''</select>
@@ -350,7 +353,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <p id="annotation-conflict" hidden><a id="annotation-conflict-link" target="_blank" rel="noopener">Bestaande annotatie openen in een nieuw venster</a></p>
 <section id="annotation-save-conflict" hidden><h3>Je werk en de opgeslagen versie verschillen</h3><p>Je aanwijzingen blijven hier staan. Vergelijk ze met de opgeslagen versie voordat je kiest wat je behoudt.</p><details><summary>Mijn huidige werk</summary><pre id="annotation-local-work"></pre></details><a id="annotation-server-work" target="_blank" rel="noopener">Bekijk opgeslagen versie in een nieuw venster</a></section>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button>
-<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button></div>
+<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-suggest" disabled>Betekenis voorstellen</button><button class="btn-secondary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button></div>
 <details id="annotation-more"><summary>Bewaren, document en meer acties</summary><p>Concepten worden automatisch bewaard. Alleen ‘opgeslagen’ bevestigt serveropslag.</p><div class="actions"><button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Hele annotatie terugnemen</button></div></details>
 <section id="annotation-confirm" hidden aria-labelledby="annotation-confirm-title"><h3 id="annotation-confirm-title" tabindex="-1">Wijziging bevestigen</h3><p id="annotation-confirm-message"></p><button type="button" class="btn-secondary" id="annotation-confirm-cancel">Behouden</button><button type="button" class="btn-secondary" id="annotation-confirm-accept">Wijziging uitvoeren</button></section>
 </fieldset></aside></div>
@@ -499,6 +502,28 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 status_code=status, headers={'Cache-Control':'no-store'})
         result['findings'] = [{'code':code,'field':CHECK_FIELDS.get(code),'message':FINDINGS.get(code,
             'Controleer de betekenisvelden en de bijbehorende bronselectie.')} for code in result.pop('codes')]
+        return JSONResponse(result, headers={'Cache-Control':'no-store'})
+
+    @app.post('/annotations/suggest')
+    async def suggest(request: Request):
+        from starlette.concurrency import run_in_threadpool
+        from src.vorming.human_annotation_suggestion_v1 import suggest as propose
+        actor = require(request)
+        try:
+            body = await request.json()
+            result = await run_in_threadpool(propose, console, actor_id=actor['account_id'], request=body)
+        except ConsoleError as exc:
+            code = exc.code
+            status = (403 if code in {'not_authenticated','researcher_role_required','reviewer_not_named_on_snapshot'}
+                      else 409 if code == 'annotation_suggestion_stale'
+                      else 422 if code in {'annotation_suggestion_invalid','annotation_suggestion_input_limit'} else 503)
+            return JSONResponse({'error':code, 'message':
+                'Het voorstel kon niet worden gemaakt. Je opgeslagen werk blijft bewaard. '
+                'Probeer opnieuw of vul de betekenis zelf in.'}, status_code=status,
+                headers={'Cache-Control':'no-store'})
+        except ValueError:
+            return JSONResponse({'error':'annotation_suggestion_invalid'}, status_code=422,
+                headers={'Cache-Control':'no-store'})
         return JSONResponse(result, headers={'Cache-Control':'no-store'})
 
     @app.post('/annotations/api')
