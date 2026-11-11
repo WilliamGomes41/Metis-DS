@@ -87,6 +87,7 @@ const assert=require('node:assert/strict');
   assert.equal(await page.locator('#annotation-add').isDisabled(),true);
   assert.equal(await page.locator('#annotation-essential').isChecked(),false);
   assert.equal(await page.locator('#annotation-additional').isChecked(),false);
+  await tasks.role(page,'population');
   await page.locator('#annotation-additional').check();
   assert.equal(await page.locator('#annotation-add').isEnabled(),true);
   await page.locator('#annotation-add').click();

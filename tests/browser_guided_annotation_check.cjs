@@ -6,7 +6,8 @@ const assert=require('node:assert/strict');
  const m=await(await fetch(base+'/browser-manifest')).json();
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
  try {
-  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+  const context=await browser.newContext({viewport:{width:1440,height:1000}});
+  const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/login');await page.locator('[name=username]').fill(m.username);await page.locator('[name=password]').fill(m.password);
   await Promise.all([page.waitForURL(u=>u.pathname!='/login'),page.locator('button[type=submit]').click()]);
@@ -50,7 +51,14 @@ const assert=require('node:assert/strict');
    await primaryCount();await page.locator('#annotation-add').click();
   }
   await page.locator('#annotation-na').check();await saved();
+  // A type-change warning leaves saved work intact until explicit confirmation.
+  await step(1);await page.locator('#annotation-type').selectOption('definition');
+  assert.equal(await page.locator('#annotation-confirm').isVisible(),true);
+  await page.locator('#annotation-confirm-cancel').click();
+  assert.equal(await page.locator('#annotation-type').inputValue(),'explanation');
+  assert.equal((await read()).entries[0].object_type,'explanation');await step(2);
   const annotation=(await read()).entries[0].annotation_id;
+  assert.equal(new URL(page.url()).searchParams.get('annotation'),annotation,'Reload must retain the current saved annotation');
   await page.screenshot({path:output+'/guided-meaning-desktop.png',fullPage:true});
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-ready:enabled').waitFor();await primaryCount();

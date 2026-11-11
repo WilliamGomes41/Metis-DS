@@ -17,14 +17,24 @@ import {bindRange} from '/annotations/binding.mjs';
     check.basis.working_revision_id===state.working_revision_id && check.basis.normalization===state.normalization &&
     check.basis.generation===state.generation &&
     check.basis.extraction_hash===state.extraction_hash && check.basis.objects_revision===state.objects_revision;
+  function cancelConfirmation() {
+    const pending=confirmation;confirmation=null;el('confirm').hidden=true;pending?.cancel();
+    if(pending?.focus?.isConnected) pending.focus.focus();
+  }
+  function setEntryUrl(id) {
+    const url=new URL(location.href);
+    if(id) url.searchParams.set('annotation',id);else url.searchParams.delete('annotation');
+    history.replaceState(null,'',url);
+  }
   function confirmChange(message, action, cancel=()=>{}) {
     if(confirmation) return;
-    confirmation={action,cancel};el('confirm-message').textContent=message;el('confirm').hidden=false;
+    confirmation={action,cancel,focus:document.activeElement};el('confirm-message').textContent=message;el('confirm').hidden=false;
     el('confirm-title').focus();
   }
-  el('confirm-cancel').addEventListener('click',()=>{const pending=confirmation;confirmation=null;el('confirm').hidden=true;pending?.cancel();});
-  el('confirm-accept').addEventListener('click',()=>{const pending=confirmation;confirmation=null;el('confirm').hidden=true;pending?.action();});
+  el('confirm-cancel').addEventListener('click',cancelConfirmation);
+  el('confirm-accept').addEventListener('click',()=>{const pending=confirmation;confirmation=null;el('confirm').hidden=true;pending?.action();if(pending?.focus?.isConnected) pending.focus.focus();});
   function chooseTarget(value) {
+    cancelConfirmation();repairingLink=null;el('role').disabled=!!entry.disposition;
     target=value;clearChoice();
     if(value.kind==='range') el('role').value=value.role;
     for(const select of el('fields').querySelectorAll('select')) select.hidden=value.kind!=='field' || select.dataset.missingField!==value.field;
@@ -32,12 +42,12 @@ import {bindRange} from '/annotations/binding.mjs';
     updateBindingControls();
   }
   function showTask(value, focus=false) {
-    task=value;
+    cancelConfirmation();task=value;
     for(let n=1;n<=3;n++) {
       el('task-'+n).hidden=n!==task;
       if(n===task) el('step-'+n).setAttribute('aria-current','step');else el('step-'+n).removeAttribute('aria-current');
     }
-    if(task===1) {target={kind:'range',role:'core'};el('role').value='core';}
+    if(task===1) {repairingLink=null;clearChoice();target={kind:'range',role:'core'};el('role').value='core';el('role').disabled=!!entry.disposition;}
     else if(task===2 && target?.role==='core') target=null;
     el('selection-tools').hidden=task===3;
     el('linked').hidden=task===3;
@@ -75,11 +85,11 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   function repairFinding(finding) {
     const code=finding.code;
-    const step=['annotation_core_required','annotation_pending_range','incomplete_sentence','no_independent_claim','annotation_source_disposition_unresolved'].includes(code)?1:2;
-    showTask(step,true);
+    const step=['annotation_core_required','incomplete_sentence','no_independent_claim','annotation_source_disposition_unresolved'].includes(code) || code.startsWith('recommendation_core') ?1:2;
+    showTask(code==='annotation_pending_range' && entry.pending_range?.role==='core' ? 1 : step,true);
     const field=finding.field;
     if(field) {el('field').value=field;chooseTarget({kind:'field',field});el('fields').querySelector('button[data-field="'+field+'"]')?.focus();}
-    if(code.startsWith('recommendation_')) {el('recommendation').open=true;el('direction').focus();}
+    if(code==='recommendation_semantics_invalid' || code.startsWith('recommendation_direction') || code.startsWith('recommendation_strength')) {el('recommendation').open=true;el('direction').focus();}
     if(code==='annotation_evidence_required') {el('context-tools').open=true;chooseTarget({kind:'range',role:'evidence'});el('role').focus();}
   }
   async function runCheck() {
@@ -100,6 +110,10 @@ import {bindRange} from '/annotations/binding.mjs';
   for(let n=1;n<=3;n++) el('step-'+n).addEventListener('click',()=>{showTask(n,true);if(n===3) runCheck();});
   el('back').addEventListener('click',()=>showTask(task-1,true));
   el('recheck').addEventListener('click',runCheck);
+  el('context-tools').addEventListener('toggle',()=>{
+    if(el('context-tools').open && !target && !entry.disposition)
+      chooseTarget({kind:'range',role:el('role').value==='core'?'context':el('role').value});
+  });
   const linkId = a => a.relationship_id || 'link-v1:'+JSON.stringify([entry.annotation_id,a.role,a.block_id,a.start,a.end]);
   const literal = span => {
     const block=state.blocks.find(b => b.block_id === span.block_id);
@@ -121,6 +135,9 @@ import {bindRange} from '/annotations/binding.mjs';
     el('essential-choice').hidden=!context;
     el('evidence-function').hidden=role!=='evidence' || target?.kind!=='range';
     el('additional').disabled=!!repairingLink;
+    el('essential').disabled=!!entry?.disposition || !!repairingLink;
+    el('role').disabled=!!entry?.disposition || !!repairingLink;
+    el('function').disabled=!!repairingLink;
     const action=target?.kind==='field' ? 'Gebruik voor dit onderdeel' : target?.kind==='semantics' ? 'Gebruik voor '+(target.field==='direction'?'de richting':'de sterkte') : role==='core' ? entry?.disposition ? 'Gebruik als bronstuk' : 'Gebruik als kernuitspraak' : 'Voeg toe als '+labels[role].toLowerCase();
     el('add').textContent=selected ? target ? action : 'Kies eerst waarvoor je de tekst gebruikt' : task===1 ? hasCore() ? 'Verder naar betekenis' : 'Selecteer tekst in de bron' : 'Naar controleren en afronden';
     el('add').disabled=finalizing || (selected ? !target || context && !repairingLink && essentialChoice()===null : task===1 && (!hasCore() || !el('type').value));
@@ -197,6 +214,7 @@ import {bindRange} from '/annotations/binding.mjs';
     el('na').closest('label').hidden=!!entry.disposition;
     for(const option of el('role').options) {
       option.disabled=!!entry.disposition && option.value!=='core';
+      option.hidden=option.value==='core';
       if(option.value==='core') option.text=entry.disposition ? 'Bronstuk' : 'Kernuitspraak';
     }
     if(entry.disposition) {el('role').value='core';el('essential').checked=false;}
@@ -235,7 +253,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;confirmation=null;el('confirm').hidden=true;
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
     activeBlock=null;el('source-input').value='';el('role').value='core';
@@ -249,13 +267,13 @@ import {bindRange} from '/annotations/binding.mjs';
       el('role').value=selected.role; el('essential').checked=!!repairingLink;
       el('function').value=selected.evidence_function || 'supported_by';
     }
-    dirty = committed = 0;
+    dirty = committed = 0;setEntryUrl(saved?.annotation_id);
     if (el('conflict')) el('conflict').hidden = true;
     el('type').value = entry.disposition ? 'source_disposition' : entry.object_type || '';
     el('na').checked = entry.evidence_not_applicable;
     render();
     showTask(entry.status==='ready'?3:hasCore()?2:1);
-    if(task===2 && selected) target={kind:'range',role:el('role').value};
+    if(task===2 && selected && repairingLink) target={kind:'range',role:el('role').value};
     updateBindingControls();
     if(task===3) runCheck();
   }
@@ -327,7 +345,7 @@ import {bindRange} from '/annotations/binding.mjs';
     });
   }
   function change() {
-    entry.status = 'draft'; dirty += 1;check=null;renderSummary();updateBindingControls();
+    cancelConfirmation();entry.status = 'draft'; dirty += 1;check=null;renderSummary();updateBindingControls();
     status('Wijzigingen nog niet opgeslagen.'); clearTimeout(timer);
     timer = setTimeout(() => { flush().catch(() => {}); },600);
   }
@@ -382,7 +400,7 @@ import {bindRange} from '/annotations/binding.mjs';
           const saved = {...clone(entry),...body.selection,revision:data.revision};
           const index = state.entries.findIndex(e => e.annotation_id === entry.annotation_id);
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
-          committed = version; retryRequest = null; entries();
+          committed = version; retryRequest = null;setEntryUrl(entry.annotation_id);entries();
           el('retry').hidden = true;
           status(data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderSummary();updateBindingControls();
         } catch (error) {

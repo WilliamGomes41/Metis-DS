@@ -58,3 +58,30 @@ UI-skill: vastgelegde emil-design-eng; Impeccable/distill, Operate. Regelmatig
 herhaalde stappen en selecties animeren niet. Website aiforui.dev geblokkeerd in
 deze omgeving; lokale herkomst en pin staan in docs/agents/emil-design-skills.md.
 Technisch bewijs is geen gemeten menselijk begrip, live uitrol of klinische acceptatie.
+
+## Uitgevoerde bediening en herstel
+
+De editor wisselt drie taaksecties; de footer toont één primaire actie. Vragen
+komen uit field_contract, ontbreekredenen worden alleen na een bewuste keuze
+gewijzigd. Context verwijderen ruimt uitsluitend betekenisverwijzingen op die
+volledig van die verwijderde bronkoppeling afhankelijk waren; required_links
+blijven onder de bestaande kernel vallen. Een kern verwijderen vraagt eerst
+bevestiging en maakt de betekenisvelden opnieuw aan te wijzen. Een typewissel
+blijft ongewijzigd tot bevestiging; navigeren of ander werk annuleert de open
+bevestiging. Een tijdelijke herstelbestemming verhuist nooit naar een nieuwe
+annotatie of kernselectie.
+
+Na serveropslag bevat de URL de annotatie-ID. Verversen hervat daardoor die
+annotatie. Niet reconstrueerbare veld-/contextbestemmingen vragen opnieuw een
+keuze; een expliciete opgeslagen relationship_id kan de herstelhandeling wel
+herstellen. Geen extra duurzame wizard- of browserstore.
+
+Native opslag-, opbouw-, herstel- en reviewregressies zijn uitgevoerd; nieuwe
+HTTP-/inspectieproeven controleren ongewijzigde versies/receipts, toegangsregels
+en exacte basis. De browserproeven doorlopen de zichtbare route, fout/retry,
+actuele controle tegenover een tweede tab, expliciet afronden, Unicode,
+relatieherstel, bronrolvoorstel, documentopbouw en reviewcorrectie. De gewijzigde
+routelijst bevat alleen de toegevoegde GET /annotations/check. Volledige-suite-
+en CI-resultaten worden aan de PR gekoppeld; die gelden pas na werkelijk
+voltooide runs. Emulatie van 390px is geen fysieke telefoontest en technische
+bediening is geen onafhankelijke onderzoekeracceptatie.

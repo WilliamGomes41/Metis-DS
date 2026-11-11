@@ -79,6 +79,12 @@
       ]
     ],
     [
+      "/annotations/check",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/annotations/editor.js",
       [
         "GET"

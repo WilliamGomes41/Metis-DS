@@ -145,6 +145,11 @@ const assert = require('node:assert/strict');
   const pendingRepair=await page.evaluate(async sid => (await fetch('/annotations/api?document='+sid)).json(),m.document);
   assert.equal(pendingRepair.entries[0].pending_range.relationship_id,pendingRepair.entries[0].required_links[0].relationship_id);
   assert.equal(await page.locator('#annotation-role').isDisabled(),true);
+  // Leaving repair mode must not secretly bind the pending condition as a core.
+  await tasks.step(page,1);await tasks.step(page,2);
+  assert.equal(await page.locator('#annotation-add').isDisabled(),true);
+  await page.getByRole('button',{name:'Dit verband opnieuw aanwijzen'}).click();
+  assert.equal(await page.locator('#annotation-role').inputValue(),'condition');
   await page.locator('#annotation-add').click();
   await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   await tasks.ready(page);

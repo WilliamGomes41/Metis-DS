@@ -74,8 +74,8 @@ FINDINGS = {**ERRORS,
     'incomplete_sentence':'De kern lijkt een onvolledige zin. Controleer of de hele uitspraak is geselecteerd.',
     'no_independent_claim':'Controleer of de kern een zelfstandige uitspraak bevat.',
     'recommendation_subject_missing':'Wijs het onderwerp van deze aanbeveling aan.',
-    'recommendation_action_missing':'Wijs de aanbevolen handeling aan.',
-    'recommendation_goal_missing':'Wijs aan waarop de handeling gericht is.',
+    'recommendation_recommended_action_missing':'Wijs de aanbevolen handeling aan.',
+    'recommendation_action_object_or_goal_missing':'Wijs aan waarop de handeling gericht is.',
     'supported_object_missing':'Wijs aan welke uitspraak wordt toegelicht.',
     'condition_target_missing':'Wijs aan waarvoor deze voorwaarde geldt.',
     'exception_target_missing':'Wijs aan waarop dit een uitzondering is.',
@@ -85,7 +85,7 @@ FINDINGS = {**ERRORS,
 CHECK_FIELDS = {'subject_missing':'subject_span','recommendation_subject_missing':'subject_span',
     'predicate_missing':'predicate_span','supported_object_missing':'supported_object',
     'condition_target_missing':'condition_target','exception_target_missing':'exception_target',
-    'recommendation_action_missing':'recommended_action','recommendation_goal_missing':'action_object_or_goal'}
+    'recommendation_recommended_action_missing':'recommended_action','recommendation_action_object_or_goal_missing':'action_object_or_goal'}
 
 
 def location_label(block):
