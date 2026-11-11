@@ -525,18 +525,7 @@ def overview(console, *, actor_id, snapshot_id):
         block['locations'] = [{'page':raw[f].get('source_page'),'locator':raw[f].get('source_locator')}
             for f in block['source_fragment_ids'] if f in raw]
     by_id = {b['block_id']:b for b in blocks}
-    # One statement captures heads and generation together, including two-tab writes.
-    with console.workflow_document_store._connect() as con:
-        con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-        capture = con.execute('SELECT s.generation,COALESCE(jsonb_agg(jsonb_build_object('
-            "'annotation_id',v.annotation_id,'revision',v.revision,'author_id',v.author_id,'payload',v.payload,'payload_hash',v.payload_hash) "
-            "ORDER BY h.position) FILTER (WHERE v.annotation_id IS NOT NULL),'[]'::jsonb) AS entries "
-            'FROM workflow.annotation_sets s LEFT JOIN workflow.annotation_heads h USING(snapshot_id) '
-            'LEFT JOIN workflow.annotation_versions v ON (v.snapshot_id,v.annotation_id,v.revision)=(h.snapshot_id,h.annotation_id,h.revision) '
-            'WHERE s.snapshot_id=%s GROUP BY s.generation', (snapshot_id,)).fetchone()
-        history = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (snapshot_id,)).fetchall()]
-        revision_supported = con.execute("SELECT to_regprocedure('workflow.annotation_pending_objects(text)') AS name").fetchone()['name'] is not None
-        pending = {r['object_id'] for r in con.execute('SELECT object_id FROM workflow.annotation_pending_objects(%s)', (snapshot_id,)).fetchall()} if revision_supported else set()
+    capture, history, pending = _capture_heads(console, snapshot_id)
     entries = capture['entries']
     for entry in entries:
         if stable_hash(entry['payload']) != entry.pop('payload_hash'):
@@ -561,3 +550,40 @@ def overview(console, *, actor_id, snapshot_id):
         for obj in current_revisions(history, snapshot_id=snapshot_id) if (obj.get('metadata') or {}).get('human_annotation')}
     return {**summary,'title':envelope['title'],'blocks':blocks,
             'objects_revision':console.workflow_document_store.revision_for_rows(history), 'object_bindings': objects}
+
+
+def _capture_heads(console, snapshot_id):
+    # One statement captures heads and generation together, including two-tab writes.
+    with console.workflow_document_store._connect() as con:
+        con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+        capture = con.execute('SELECT s.generation,COALESCE(jsonb_agg(jsonb_build_object('
+            "'annotation_id',v.annotation_id,'revision',v.revision,'author_id',v.author_id,'payload',v.payload,'payload_hash',v.payload_hash) "
+            "ORDER BY h.position) FILTER (WHERE v.annotation_id IS NOT NULL),'[]'::jsonb) AS entries "
+            'FROM workflow.annotation_sets s LEFT JOIN workflow.annotation_heads h USING(snapshot_id) '
+            'LEFT JOIN workflow.annotation_versions v ON (v.snapshot_id,v.annotation_id,v.revision)=(h.snapshot_id,h.annotation_id,h.revision) '
+            'WHERE s.snapshot_id=%s GROUP BY s.generation', (snapshot_id,)).fetchone()
+        history = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (snapshot_id,)).fetchall()]
+        revision_supported = con.execute("SELECT to_regprocedure('workflow.annotation_pending_objects(text)') AS name").fetchone()['name'] is not None
+        pending = {r['object_id'] for r in con.execute('SELECT object_id FROM workflow.annotation_pending_objects(%s)', (snapshot_id,)).fetchall()} if revision_supported else set()
+    return capture, history, pending
+
+
+def check_current(console, *, actor_id, snapshot_id, annotation_id):
+    """Inspect one stored head; never mutate it or account for the document."""
+    envelope = console._envelope(snapshot_id)
+    authorize(console, actor_id, envelope)
+    row, fragments = _read_set(console, snapshot_id)
+    if _identity(envelope) != row['source_identity'] or envelope['working_revision_id'] != row['working_revision_id']:
+        fail('annotation_representation_stale')
+    capture, history, _ = _capture_heads(console, snapshot_id)
+    entry = next((entry for entry in capture['entries'] if entry['annotation_id'] == annotation_id), None)
+    if entry is None:
+        fail('annotation_not_found')
+    from src.vorming.human_annotation_preview_v1 import inspect_annotation
+    codes = inspect_annotation(entry, fragments=fragments, require_ready=False)
+    return {'annotation_id': annotation_id, 'revision': entry['revision'],
+            'basis': {'snapshot_id': snapshot_id, 'working_revision_id': row['working_revision_id'],
+                      'extraction_hash': row['extraction_hash'], 'normalization': row['normalization'],
+                      'generation': capture['generation'],
+                      'objects_revision': console.workflow_document_store.revision_for_rows(history)},
+            'codes': codes}

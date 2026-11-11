@@ -32,6 +32,7 @@ import pytest
     ('tests.browser_insight_owner_fixture', 'browser_insight_owner_check.cjs'),
     ('tests.browser_review_disposition_fixture', 'browser_review_disposition_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_human_annotation_check.cjs'),
+    ('tests.browser_human_annotation_fixture', 'browser_guided_annotation_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_annotation_binding_check.cjs'),
     ('tests.browser_annotation_source_progress_fixture', 'browser_annotation_source_progress_check.cjs'),
     ('tests.browser_test_document_deletion_fixture', 'browser_test_document_deletion_check.cjs'),

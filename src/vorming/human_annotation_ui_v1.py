@@ -71,7 +71,21 @@ FINDINGS = {**ERRORS,
     'type_contract_incomplete':'Er ontbreekt een noodzakelijk betekenisveld voor dit type uitspraak.',
     'recommendation_direction_missing':'Kies de richting van deze aanbeveling en wijs het bronbewijs aan.',
     'recommendation_strength_unmapped':'De vermelde sterkte is nog onzeker. Controleer de betekenis en het bronbewijs.',
+    'incomplete_sentence':'De kern lijkt een onvolledige zin. Controleer of de hele uitspraak is geselecteerd.',
+    'no_independent_claim':'Controleer of de kern een zelfstandige uitspraak bevat.',
+    'recommendation_subject_missing':'Wijs het onderwerp van deze aanbeveling aan.',
+    'recommendation_action_missing':'Wijs de aanbevolen handeling aan.',
+    'recommendation_goal_missing':'Wijs aan waarop de handeling gericht is.',
+    'supported_object_missing':'Wijs aan welke uitspraak wordt toegelicht.',
+    'condition_target_missing':'Wijs aan waarvoor deze voorwaarde geldt.',
+    'exception_target_missing':'Wijs aan waarop dit een uitzondering is.',
 }
+
+
+CHECK_FIELDS = {'subject_missing':'subject_span','recommendation_subject_missing':'subject_span',
+    'predicate_missing':'predicate_span','supported_object_missing':'supported_object',
+    'condition_target_missing':'condition_target','exception_target_missing':'exception_target',
+    'recommendation_action_missing':'recommended_action','recommendation_goal_missing':'action_object_or_goal'}
 
 
 def location_label(block):
@@ -290,44 +304,57 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
         type_options = '<option value="">Type kiezen</option>'+''.join('<option value="'+key+'">'+label+'</option>' for key,label in TYPES.items() if key in CLOSED_OBJECT_TYPES)+'<option value="source_disposition">Dit bronstuk verantwoorden</option>'
         data = json.dumps(state,ensure_ascii=False).replace('<','\\u003c')
-        body = intro + '''<p>Markeer tekst in het document en kies in de selectiekaart de functie van het bereik. Meerdere passages kun je aan dezelfde annotatie koppelen.</p>
+        body = intro + '''<p>Selecteer een uitspraak in de bron. Vul daarna de betekenis aan en controleer je annotatie voordat je afrondt.</p>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
-<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Jouw selectiekaart</h2>
+<aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Annotatie maken</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
 <fieldset id="annotation-editor-inputs" aria-label="Annotatie bewerken" disabled>
-<label for="annotation-entry">Opgeslagen annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
-<section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h2 id="annotation-current-version"></h2><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
-<label for="annotation-type">Type uitspraak</label><select id="annotation-type">'''+type_options+'''</select>
+<nav class="annotation-steps" aria-label="Annotatiestappen"><ol>
+<li><button type="button" id="annotation-step-1" aria-current="step">1. Uitspraak selecteren</button></li>
+<li><button type="button" id="annotation-step-2">2. Betekenis aanvullen</button></li>
+<li><button type="button" id="annotation-step-3">3. Controleren en afronden</button></li></ol></nav>
+<p id="annotation-status" role="status" aria-live="polite"></p>
+<label for="annotation-entry">Huidige annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
+<section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h3 id="annotation-current-version"></h3><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
+<section id="annotation-task-1" aria-labelledby="annotation-heading-1"><h3 id="annotation-heading-1" tabindex="-1">Welke uitspraak wil je vastleggen?</h3>
+<p>Markeer de uitspraak links in de bron. Neem de hele betekenis mee; voorwaarden kun je daarna toevoegen.</p>
+<label for="annotation-type">Wat voor uitspraak is dit?</label><select id="annotation-type">'''+type_options+'''</select>
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
-<label for="annotation-role">Functie van het volgende bereik</label><select id="annotation-role">'''+role_options+'''</select>
-<label for="annotation-function">Functie van onderbouwing</label><select id="annotation-function"><option value="supported_by">Onderbouwt de uitspraak</option><option value="explains">Verklaart de uitspraak</option></select>
-<fieldset id="annotation-essential-choice" hidden><legend>Is dit bereik essentieel om de uitspraak juist te begrijpen?</legend>
+<p id="annotation-core-summary"></p></section>
+<section id="annotation-task-2" aria-labelledby="annotation-heading-2" hidden><h3 id="annotation-heading-2" tabindex="-1">Maak de betekenis duidelijk</h3>
+<p>Wijs per vraag de bijbehorende woorden in de bron aan. Gebruik de ontbreekreden als de tekst geen antwoord geeft.</p>
+<div id="annotation-meaning"><label for="annotation-field" hidden>Onderdeel</label><select id="annotation-field" hidden></select><dl id="annotation-fields"></dl></div>
+<details id="annotation-context-tools"><summary>Context of onderbouwing toevoegen</summary><p>Kies wat je wilt toevoegen en wijs de tekst in de bron aan.</p>
+<label for="annotation-role">Wat wil je toevoegen?</label><select id="annotation-role">'''+role_options+'''</select>
+<div id="annotation-evidence-function" hidden><label for="annotation-function">Hoe helpt deze onderbouwing?</label><select id="annotation-function"><option value="supported_by">Onderbouwt de uitspraak</option><option value="explains">Verklaart de uitspraak</option></select></div></details>
+<fieldset id="annotation-essential-choice" hidden><legend>Verandert de betekenis als dit ontbreekt?</legend>
 <label><input type="radio" name="annotation-essentiality" id="annotation-essential"> Ja, essentieel voor de betekenis</label>
 <label><input type="radio" name="annotation-essentiality" id="annotation-additional"> Nee, aanvullende context</label></fieldset>
-<details class="annotation-selection-help"><summary>Tekstselectie met toetsenbord of touch</summary><p>Raak een passage in het document aan of zet er de focus op. Selecteer daarna tekst hieronder.</p><label for="annotation-source-input">Huidige passage</label><textarea readonly id="annotation-source-input" rows="4"></textarea></details><button class="btn-secondary" type="button" id="annotation-select-block">Hele passage aanwijzen</button>
-<button class="btn-primary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-secondary" type="button" id="annotation-discard">Selectie wissen</button><p id="annotation-selection" aria-live="polite"></p><p id="annotation-binding-note" aria-live="polite"></p>
-<ol id="annotation-ranges"></ol><label><input type="checkbox" id="annotation-na">Onderbouwing is niet van toepassing</label>
-<div id="annotation-required-links" aria-live="polite"></div>
-<details><summary>Betekenis van de uitspraak aanwijzen</summary>
-<p>Gebruik de aangewezen brontekst voor een onderdeel van de uitspraak. Je hoeft de tekst niet over te schrijven.</p>
-<label for="annotation-field">Onderdeel</label><select id="annotation-field"></select>
-<button class="btn-secondary" type="button" id="annotation-bind-field">Aangewezen tekst hiervoor gebruiken</button>
-<button class="btn-secondary" type="button" id="annotation-field-absent">Niet in de bron genoemd</button>
-<dl id="annotation-fields"></dl></details>
+<div id="annotation-evidence"><p id="annotation-evidence-summary"></p><label><input type="checkbox" id="annotation-na">Onderbouwing is niet van toepassing</label></div>
 <details id="annotation-recommendation"><summary>Richting en sterkte van de aanbeveling</summary>
 <label for="annotation-direction">Richting</label><select id="annotation-direction"><option value="">Kiezen</option><option value="for">Toepassen of overwegen</option><option value="against">Afraden of vermijden</option></select>
-<button class="btn-secondary" type="button" id="annotation-direction-evidence">Aangewezen tekst voor de richting gebruiken</button>
-<p id="annotation-direction-proof"></p>
+<button class="btn-secondary" type="button" id="annotation-direction-evidence">Brontekst voor de richting aanwijzen</button><p id="annotation-direction-proof"></p>
 <label for="annotation-strength-status">Is de sterkte vermeld?</label><select id="annotation-strength-status"><option value="">Kiezen</option><option value="not_stated">Niet vermeld</option><option value="explicit">Ja, expliciet vermeld</option><option value="unmapped">Vermeld, betekenis nog onzeker</option></select>
 <label for="annotation-strength">Vermelde sterkte</label><select id="annotation-strength"><option value="">Kiezen</option><option value="strong">Sterk</option><option value="weak">Zwak</option></select>
-<button class="btn-secondary" type="button" id="annotation-strength-evidence">Aangewezen tekst voor de sterkte gebruiken</button><p id="annotation-strength-proof"></p></details>
+<button class="btn-secondary" type="button" id="annotation-strength-evidence">Brontekst voor de sterkte aanwijzen</button><p id="annotation-strength-proof"></p></details>
+<div id="annotation-required-links" aria-live="polite"></div></section>
+<section id="annotation-task-3" aria-labelledby="annotation-heading-3" hidden><h3 id="annotation-heading-3" tabindex="-1">Controleer je annotatie</h3>
+<p>Lees de uitspraak en de gekoppelde tekst terug. Deze controle gaat over deze annotatie; het hele document controleer je daarna.</p>
+<dl id="annotation-review-summary"></dl><div id="annotation-check" aria-live="polite"><p>De opgeslagen annotatie is nog niet gecontroleerd.</p></div>
+<button class="btn-secondary" type="button" id="annotation-recheck">Opnieuw controleren</button></section>
+<div id="annotation-selection-tools"><p id="annotation-target" role="status">Wijs de kernuitspraak aan in de bron.</p>
+<details class="annotation-selection-help"><summary>Hulp bij tekstselectie</summary><p>Raak een passage aan of zet er de focus op. Selecteer tekst hieronder met toetsenbord of touch.</p><label for="annotation-source-input">Huidige passage</label><textarea readonly id="annotation-source-input" rows="4"></textarea></details>
+<div class="annotation-selection-actions"><button class="btn-secondary" type="button" id="annotation-select-block">Hele passage aanwijzen</button><button class="btn-secondary" type="button" id="annotation-discard">Selectie wissen</button></div>
+<p id="annotation-selection" aria-live="polite"></p><p id="annotation-binding-note" aria-live="polite"></p></div>
+<details id="annotation-linked"><summary>Gekoppelde brontekst bekijken of aanpassen</summary><ol id="annotation-ranges"></ol></details>
 <p id="annotation-conflict" hidden><a id="annotation-conflict-link" target="_blank" rel="noopener">Bestaande annotatie openen in een nieuw venster</a></p>
-<p id="annotation-status" role="status" aria-live="polite"></p>
-<div class="actions"><button class="btn-secondary" type="button" id="annotation-ready">Selectie gereed</button><button class="btn-secondary" type="button" id="annotation-new">Volgende annotatie</button>
-<button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Annotatie terugnemen</button></div>
-<p>Concepten worden automatisch bewaard na een korte pauze. Alleen de melding ‘opgeslagen’ bevestigt serveropslag.</p>
-<button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button></fieldset></aside></div>
+<section id="annotation-save-conflict" hidden><h3>Je werk en de opgeslagen versie verschillen</h3><p>Je aanwijzingen blijven hier staan. Vergelijk ze met de opgeslagen versie voordat je kiest wat je behoudt.</p><details><summary>Mijn huidige werk</summary><pre id="annotation-local-work"></pre></details><a id="annotation-server-work" target="_blank" rel="noopener">Bekijk opgeslagen versie in een nieuw venster</a></section>
+<button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button>
+<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button></div>
+<details id="annotation-more"><summary>Bewaren, document en meer acties</summary><p>Concepten worden automatisch bewaard. Alleen ‘opgeslagen’ bevestigt serveropslag.</p><div class="actions"><button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Hele annotatie terugnemen</button></div></details>
+<section id="annotation-confirm" hidden aria-labelledby="annotation-confirm-title"><h3 id="annotation-confirm-title" tabindex="-1">Wijziging bevestigen</h3><p id="annotation-confirm-message"></p><button type="button" class="btn-secondary" id="annotation-confirm-cancel">Behouden</button><button type="button" class="btn-secondary" id="annotation-confirm-accept">Wijziging uitvoeren</button></section>
+</fieldset></aside></div>
 <script type="application/json" id="annotation-data">'''+data+'''</script><script type="module" src="/annotations/editor.js"></script>'''
         css = '''<style>
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
@@ -343,6 +370,9 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 .annotation-toc{padding:1rem 1.5rem;border-bottom:1px solid var(--line)}.annotation-toc>summary{font-weight:700;color:var(--paars);cursor:pointer}.annotation-toc .annotation-page{padding-inline:.75rem}.annotation-toc-row{line-height:1.6;margin:.35rem 0;overflow-wrap:anywhere}
 .annotation-workplace aside{align-self:start;position:sticky;top:1rem;max-height:90vh;overflow:auto;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;padding:1.25rem}.annotation-workplace aside h2{color:var(--paars)}.annotation-workplace label{display:block;margin-top:1rem}.annotation-workplace select{max-width:100%}.annotation-workplace textarea{width:100%;max-width:100%;box-sizing:border-box}.annotation-workplace .btn-secondary{min-height:2.75rem;white-space:normal}.annotation-workplace li{overflow-wrap:anywhere;margin-block:1rem}.annotation-workplace .actions{display:flex;flex-wrap:wrap;gap:.75rem}.annotation-workplace [hidden]{display:none!important}.annotation-workplace ::selection{background:var(--water-soft)}#annotation-controls{scroll-margin-top:6rem}.annotation-mobile-nav{display:none}
 @media(max-width:800px){.annotation-mobile-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin-block:1rem;background:var(--wit);padding:.75rem;border:1px solid var(--line);border-radius:12px}.annotation-workplace{grid-template-columns:1fr}.annotation-document{max-height:65vh}.annotation-page{padding:1.25rem}.annotation-workplace aside{position:static;max-height:none}}
+.annotation-steps ol{display:flex;gap:.25rem;list-style:none;padding:0;margin:0 0 1rem}.annotation-steps li{flex:1;margin:0}.annotation-steps button{width:100%;min-height:3.5rem;padding:.5rem;border:0;border-bottom:2px solid var(--line);background:transparent;color:var(--muted);text-align:left;font:inherit;font-size:.85rem;line-height:1.35;cursor:pointer}.annotation-steps button[aria-current]{border-color:var(--paars);color:var(--paars);font-weight:700}
+#annotation-controls h2{font-size:1.3rem;margin:0 0 1rem}#annotation-controls h3{font-size:1.1rem;line-height:1.4;margin:1.5rem 0 .5rem}#annotation-controls p{line-height:1.5;overflow-wrap:anywhere}#annotation-status{margin:.75rem 0;color:var(--muted);font-size:.9rem;min-height:1.5em}#annotation-core-summary{font-weight:600}#annotation-controls details{margin-block:1rem}#annotation-controls summary{cursor:pointer;min-height:2.75rem;display:list-item;align-content:center}#annotation-fields dt{font-weight:600;margin-top:1.25rem}#annotation-fields dd{margin:.35rem 0 1rem}#annotation-fields dd p{margin:.35rem 0}.annotation-field-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-field-actions select{font-size:1rem}#annotation-target{font-weight:600}#annotation-selection{max-height:10rem;overflow:auto;background:var(--water-soft);padding:.5rem}#annotation-selection:empty{display:none}.annotation-selection-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-task-actions{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.5rem;background:var(--wit);padding-block:1rem;border-top:1px solid var(--line);z-index:2}.annotation-task-actions .btn-primary{flex:1;min-height:2.75rem;white-space:normal}.annotation-task-actions .btn-secondary{flex:0 1 auto}#annotation-check li{margin-block:.5rem}#annotation-review-summary dd{margin:.25rem 0 1rem;overflow-wrap:anywhere}#annotation-review-summary dt{font-weight:600}#annotation-local-work{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}#annotation-controls button{touch-action:manipulation}#annotation-controls button:focus-visible,#annotation-controls summary:focus-visible{outline:2px solid var(--paars);outline-offset:3px}#annotation-controls button:active{opacity:.8}
+@media(max-width:800px){.annotation-task-actions{padding-bottom:max(1rem,env(safe-area-inset-bottom))}.annotation-steps button{font-size:.8rem}#annotation-controls select,#annotation-controls textarea{font-size:1rem}.annotation-document{max-height:60dvh}}
 </style>'''
         return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>'+css,title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
 
@@ -456,6 +486,21 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     def get(request: Request, document: str):
         actor = require(request)
         return JSONResponse(domain.overview(console,actor_id=actor['account_id'],snapshot_id=document),headers={'Cache-Control':'no-store'})
+
+    @app.get('/annotations/check')
+    def check(request: Request, document: str, annotation: str):
+        actor = require(request)
+        try:
+            result = domain.check_current(console, actor_id=actor['account_id'],
+                snapshot_id=document, annotation_id=annotation)
+        except ConsoleError as exc:
+            status = 403 if exc.code in {'not_authenticated','researcher_role_required','reviewer_not_named_on_snapshot'} else 409
+            return JSONResponse({'error':exc.code,'message':ERRORS.get(exc.code,
+                'De controle kon niet worden gelezen. Open de opgeslagen annotatie opnieuw.')},
+                status_code=status, headers={'Cache-Control':'no-store'})
+        result['findings'] = [{'code':code,'field':CHECK_FIELDS.get(code),'message':FINDINGS.get(code,
+            'Controleer de betekenisvelden en de bijbehorende bronselectie.')} for code in result.pop('codes')]
+        return JSONResponse(result, headers={'Cache-Control':'no-store'})
 
     @app.post('/annotations/api')
     async def save(request: Request):

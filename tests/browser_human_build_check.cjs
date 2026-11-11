@@ -1,3 +1,4 @@
+const tasks=require('./browser_annotation_tasks.cjs');
 const {chromium} = require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
@@ -54,20 +55,20 @@ const assert = require('node:assert/strict');
   assert.match(await page.locator('#annotation-selection').innerText(), /De kwetsbare huid verklaart de pijn\./);
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-type').selectOption('explanation');
-  await page.getByText('Betekenis van de uitspraak aanwijzen',{exact:true}).click();
+  await tasks.step(page,2);
   const input = page.locator('#annotation-source-input');
   for (const [field,text] of [['subject_span','De kwetsbare huid'],['predicate_span','verklaart'],['supported_object','de pijn']]) {
-    await page.locator('#annotation-field').selectOption(field);
+    await tasks.field(page,field);
     await input.evaluate((element,text) => {
       const start = element.value.indexOf(text); element.setSelectionRange(start,start+text.length);
       element.dispatchEvent(new Event('select'));
     },text);
-    await page.locator('#annotation-bind-field').click();
+    await page.locator('#annotation-add').click();
   }
   await page.locator('#annotation-na').check();
-  await page.locator('#annotation-ready').click();
-  await page.waitForFunction(() => document.getElementById('annotation-status').textContent === 'Selectie gereed en opgeslagen.');
-  await page.locator('#annotation-pause').click();
+  await tasks.ready(page);
+  await page.waitForFunction(() => document.getElementById('annotation-status').textContent === 'Klaar voor documentcontrole en opgeslagen.');
+  (await tasks.more(page),await page.locator('#annotation-pause').click());
   await page.waitForURL(url => url.pathname === '/');
   await context.close();
   context = await browser.newContext({viewport:{width:1440,height:1000}});
@@ -77,6 +78,7 @@ const assert = require('node:assert/strict');
   assert.equal(saved.entries.length,1); assert.equal(saved.entries[0].status,'ready');
   // A duplicate stays unsaved and points back to the original; recovery never
   // silently merges the selections or discards the local context choices.
+  await page.locator('#annotation-entry').selectOption(saved.entries[0].annotation_id);
   await page.locator('#annotation-new').click();
   await page.locator('[data-source-block]').first().click();
   await page.locator('#annotation-select-block').click();
@@ -90,11 +92,13 @@ const assert = require('node:assert/strict');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
     await page.screenshot({path:`${output}/human-duplicate-${width}.png`,fullPage:true});
   }
-  await page.locator('#annotation-ranges').getByRole('button',{name:'Bereik verwijderen'}).click();
+  await tasks.linked(page);
+  await page.locator('#annotation-ranges').getByRole('button',{name:'Deze bronkoppeling verwijderen'}).click();
+  await tasks.confirm(page);
   await page.waitForFunction(() => document.getElementById('annotation-status').textContent === 'Concept opgeslagen.');
-  await page.locator('#annotation-withdraw').click();
+  await tasks.more(page);await page.locator('#annotation-withdraw').click();await tasks.confirm(page);
   await page.waitForFunction(() => document.getElementById('annotation-status').textContent === 'Annotatie teruggenomen en opgeslagen.');
-  await page.locator('#annotation-overview').click();
+  await tasks.more(page);await page.locator('#annotation-overview').click();
   await page.waitForURL(url => url.searchParams.get('overview') === 'true');
   await page.locator('#annotation-finalize').waitFor();
   assert.match(await page.locator('body').innerText(), /De kwetsbare huid verklaart de pijn\./);
