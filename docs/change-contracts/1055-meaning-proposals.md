@@ -58,3 +58,18 @@ HTTP/PostgreSQL-route. Dat bewijst integratie en foutgrenzen, geen klinische
 betrouwbaarheid van live modelinterpretatie. Inhoudelijke praktijkacceptatie
 blijft nodig; geen betaalde calls of deployment binnen deze opdracht.
 Afhankelijkheid: PR #1054 verwijdert eerst het dubbele tekstselectiehulpvak.
+
+## CI-regressie: lockvolgorde van de heartbeat-test
+
+Na herstel van de proxy-installatie ontdekte één volledige Python 3.12-partitie
+op head 98e01be8 een bestaande testfixture-deadlock. De fixture wijzigde
+processing_attempts rechtstreeks (attempt → document via de trigger), terwijl
+de gelijktijdige echte heartbeat document → attempt lockt. De PostgreSQL-
+deadlocktrace toont precies die twee transacties. De fixture gebruikt nu
+worker_handover_v1.locked, dezelfde bestaande document-eerst-eigenaar.
+Productiecode, lease-/deadlinevoorwaarden en assertions worden niet gewijzigd.
+De echte heartbeat moet nog steeds committen, de lease verlengen zonder de
+harde deadline te verlengen en de drie providerstappen succesvol afronden.
+Een vroege native CI-proef herhaalt deze concrete regressie vijfmaal vóór de
+volledige matrix. De lokale werkruimte is tijdens herstel niet beschikbaar;
+verificatie van deze wijziging loopt daarom via de native PostgreSQL-runner in CI.

@@ -364,9 +364,10 @@ def test_live_worker_renews_lease_during_long_preparation_without_extending_dead
     original = console._fragments_and_spec
     def long_preparation(*args, **kwargs):
         initial_lease = now()+timedelta(seconds=30)
-        with console.workflow_document_store._connect() as con:
-            con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,lease_expires_at}',%s::jsonb) WHERE attempt_id=%s",
-                (json.dumps(initial_lease.isoformat()), attempt['attempt_id']))
+        # The live heartbeat uses document -> attempt locks. The fixture must
+        # use the same owner; direct attempt UPDATE locks in reverse via its trigger.
+        with handover.locked(console, sid, attempt['attempt_id']) as (_, _, _, active):
+            active['dispatch']['lease_expires_at'] = initial_lease.isoformat()
         # Await a real committed heartbeat, rather than assuming CI can renew
         # and read PostgreSQL inside an artificial half-second lease.
         renewed.clear()
