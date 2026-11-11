@@ -1,0 +1,932 @@
+{
+  "base": "821692b4cda775cec62b3b137ea84fb94c447c5f",
+  "method": "Exact symbol references in all tracked UTF-8 repository files before this batch; paths and line numbers only. Source definitions count as references. Dynamic dispatch and contracts inspected separately.",
+  "symbols": {
+    "_finalize_source_provenance": {
+      "code": [
+        {
+          "path": "src/review/deterministic_review_repair_v1.py",
+          "lines": [
+            360
+          ]
+        }
+      ],
+      "tests": [],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/console-read-dependencies.json",
+          "lines": [
+            97,
+            98,
+            1137
+          ]
+        },
+        {
+          "path": "docs/change-contracts/source-repair-finalizer-505.md",
+          "lines": [
+            17
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            58
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderplan-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            84
+          ]
+        }
+      ],
+      "other": []
+    },
+    "prior_object_audit_history": {
+      "code": [
+        {
+          "path": "src/workflows/workflow_remaining_cutover_v1.py",
+          "lines": [
+            149
+          ]
+        }
+      ],
+      "tests": [],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/console-read-dependencies.json",
+          "lines": [
+            464,
+            465,
+            5051
+          ]
+        },
+        {
+          "path": "docs/change-contracts/d6b-postgres-only-runtime.md",
+          "lines": [
+            46
+          ]
+        },
+        {
+          "path": "docs/change-contracts/semantic-only-formation.md",
+          "lines": [
+            165
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            60
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderplan-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            83
+          ]
+        }
+      ],
+      "other": []
+    },
+    "storage_prepare": {
+      "code": [],
+      "tests": [],
+      "scripts": [
+        {
+          "path": "scripts/release_control_preflight.py",
+          "lines": [
+            69
+          ]
+        }
+      ],
+      "contracts": [
+        {
+          "path": "config/code_lifecycle_inventory.v1.json",
+          "lines": [
+            278
+          ]
+        },
+        {
+          "path": "docs/change-contracts/1047-removal-first-slice.md",
+          "lines": [
+            32
+          ]
+        },
+        {
+          "path": "docs/history/DEAD_CODE_REMOVAL.md",
+          "lines": [
+            26,
+            49,
+            75,
+            114,
+            129
+          ]
+        },
+        {
+          "path": "docs/history/METIS_CODE_AUDIT_2026-10-04.md",
+          "lines": [
+            21,
+            38
+          ]
+        },
+        {
+          "path": "docs/history/STEP5_PREP_README.md",
+          "lines": [
+            10,
+            20
+          ]
+        },
+        {
+          "path": "docs/history/pre_step5_audit_2026-08-19.md",
+          "lines": [
+            66
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            61
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderplan-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            80
+          ]
+        }
+      ],
+      "other": []
+    },
+    "AuditRetentionService": {
+      "code": [
+        {
+          "path": "src/audit_retention_v1.py",
+          "lines": [
+            164
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_audit_retention_v1.py",
+          "lines": [
+            19,
+            76,
+            116,
+            156,
+            181,
+            200,
+            208,
+            230,
+            258,
+            283,
+            314,
+            357,
+            387,
+            414,
+            441
+          ]
+        },
+        {
+          "path": "tests/test_lifecycle_withdrawal_recovery_v1.py",
+          "lines": [
+            23,
+            271,
+            312
+          ]
+        },
+        {
+          "path": "tests/test_workflow_audit_retention_v1.py",
+          "lines": [
+            23,
+            56,
+            123,
+            207,
+            220,
+            241
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/audit-room-retirement.md",
+          "lines": [
+            5
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            92
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderplan-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            40
+          ]
+        }
+      ],
+      "other": []
+    },
+    "list_archived": {
+      "code": [
+        {
+          "path": "src/audit_retention_v1.py",
+          "lines": [
+            179
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_audit_retention_v1.py",
+          "lines": [
+            126,
+            166,
+            191,
+            216,
+            244,
+            270,
+            339,
+            377,
+            402,
+            455
+          ]
+        },
+        {
+          "path": "tests/test_workflow_audit_retention_v1.py",
+          "lines": [
+            73
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            92
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderplan-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            40
+          ]
+        }
+      ],
+      "other": []
+    },
+    "PostgresAuditRegistry": {
+      "code": [
+        {
+          "path": "src/workflows/workflow_remaining_cutover_v1.py",
+          "lines": [
+            27
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_lifecycle_withdrawal_recovery_v1.py",
+          "lines": [
+            35,
+            267,
+            311
+          ]
+        },
+        {
+          "path": "tests/test_workflow_audit_retention_v1.py",
+          "lines": [
+            32,
+            54,
+            123,
+            206
+          ]
+        },
+        {
+          "path": "tests/test_workflow_remaining_cutover_v1.py",
+          "lines": [
+            16,
+            40
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/audit-room-retirement.md",
+          "lines": [
+            21
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            93
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderplan-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            41
+          ]
+        }
+      ],
+      "other": []
+    },
+    "public_signup": {
+      "code": [
+        {
+          "path": "src/operations_console_v1.py",
+          "lines": [
+            932
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_operations_console_mvp.py",
+          "lines": [
+            468
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/console-read-dependencies.json",
+          "lines": [
+            476,
+            477
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            69,
+            74
+          ]
+        }
+      ],
+      "other": []
+    },
+    "silently_edit_object": {
+      "code": [
+        {
+          "path": "src/operations_console_v1.py",
+          "lines": [
+            4446
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_operations_console_mvp.py",
+          "lines": [
+            458
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/console-read-dependencies.json",
+          "lines": [
+            542,
+            543,
+            3441
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            69,
+            74
+          ]
+        }
+      ],
+      "other": []
+    },
+    "unregister_backend": {
+      "code": [
+        {
+          "path": "src/review/review_ledger.py",
+          "lines": [
+            40
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_d5_code_rollback_postgres.py",
+          "lines": [
+            27,
+            186
+          ]
+        },
+        {
+          "path": "tests/test_d5_pg_recovery_and_source_v1.py",
+          "lines": [
+            18,
+            82,
+            106,
+            139,
+            213
+          ]
+        },
+        {
+          "path": "tests/test_d5_two_workers_postgres.py",
+          "lines": [
+            16,
+            44,
+            91
+          ]
+        },
+        {
+          "path": "tests/test_pg_console_without_disk_mirrors.py",
+          "lines": [
+            37,
+            443
+          ]
+        },
+        {
+          "path": "tests/test_workflow_review_postgres_v1.py",
+          "lines": [
+            26,
+            166
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            80
+          ]
+        }
+      ],
+      "other": []
+    },
+    "extract_quality_claim_allowed": {
+      "code": [
+        {
+          "path": "src/vorming/extract_metrics_v1.py",
+          "lines": [
+            383
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_extract_metrics_independent_quality.py",
+          "lines": [
+            32,
+            215,
+            224,
+            232,
+            258,
+            304,
+            384
+          ]
+        },
+        {
+          "path": "tests/test_extract_metrics_wave4_quality_claim.py",
+          "lines": [
+            24,
+            197,
+            209,
+            219,
+            228,
+            321,
+            595
+          ]
+        },
+        {
+          "path": "tests/test_v230_phase4_passage_register_coverage_gold.py",
+          "lines": [
+            43,
+            442
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            82
+          ]
+        }
+      ],
+      "other": []
+    },
+    "compute_extract_metrics": {
+      "code": [
+        {
+          "path": "src/vorming/extract_metrics_v1.py",
+          "lines": [
+            571
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_extract_metrics_independent_quality.py",
+          "lines": [
+            31,
+            146,
+            160,
+            170,
+            186,
+            201,
+            216,
+            225,
+            231,
+            247,
+            353,
+            371,
+            390,
+            391,
+            403
+          ]
+        },
+        {
+          "path": "tests/test_extract_metrics_wave4_quality_claim.py",
+          "lines": [
+            23,
+            198,
+            210,
+            229,
+            235,
+            344,
+            360,
+            379,
+            396,
+            418,
+            447,
+            459,
+            493,
+            494,
+            596,
+            669,
+            684
+          ]
+        },
+        {
+          "path": "tests/test_v230_phase4_passage_register_coverage_gold.py",
+          "lines": [
+            42,
+            443,
+            456,
+            499,
+            527
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            82
+          ]
+        }
+      ],
+      "other": []
+    },
+    "measure_admission_language_variation": {
+      "code": [
+        {
+          "path": "src/vorming/extract_metrics_v1.py",
+          "lines": [
+            698
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_admission_language_variation.py",
+          "lines": [
+            23,
+            186,
+            204,
+            255,
+            270,
+            271
+          ]
+        },
+        {
+          "path": "tests/test_extract_metrics_wave4_quality_claim.py",
+          "lines": [
+            27,
+            647
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            82
+          ]
+        }
+      ],
+      "other": []
+    },
+    "prepare_operational_inputs": {
+      "code": [
+        {
+          "path": "src/workflows/operational_document_inputs_v1.py",
+          "lines": [
+            96
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_formation_evidence_postgres.py",
+          "lines": [
+            426
+          ]
+        },
+        {
+          "path": "tests/test_operational_document_inputs_postgres.py",
+          "lines": [
+            34,
+            59,
+            89,
+            128,
+            134,
+            153,
+            186,
+            242,
+            312,
+            331,
+            380,
+            403,
+            415
+          ]
+        },
+        {
+          "path": "tests/test_review_passage_scope_postgres.py",
+          "lines": [
+            101,
+            121
+          ]
+        }
+      ],
+      "scripts": [
+        {
+          "path": "evidence/review-scoped-951/combined_probe.py",
+          "lines": [
+            54
+          ]
+        }
+      ],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/met41-operational-document-inputs.md",
+          "lines": [
+            120
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            95,
+            253
+          ]
+        }
+      ],
+      "other": []
+    },
+    "activate_operational_inputs": {
+      "code": [
+        {
+          "path": "src/workflows/operational_document_inputs_v1.py",
+          "lines": [
+            215
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_formation_evidence_postgres.py",
+          "lines": [
+            426
+          ]
+        },
+        {
+          "path": "tests/test_operational_document_inputs_postgres.py",
+          "lines": [
+            35,
+            59,
+            89,
+            133,
+            134,
+            153,
+            186,
+            242,
+            317,
+            323,
+            335,
+            380,
+            415
+          ]
+        },
+        {
+          "path": "tests/test_review_passage_scope_postgres.py",
+          "lines": [
+            101,
+            121
+          ]
+        }
+      ],
+      "scripts": [
+        {
+          "path": "evidence/review-scoped-951/combined_probe.py",
+          "lines": [
+            54
+          ]
+        }
+      ],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/met41-operational-document-inputs.md",
+          "lines": [
+            120
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            95,
+            253
+          ]
+        }
+      ],
+      "other": []
+    },
+    "read_events_after": {
+      "code": [
+        {
+          "path": "src/workflows/workflow_review_postgres_v1.py",
+          "lines": [
+            282
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_pg_command_review_evidence.py",
+          "lines": [
+            118
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/708-b1-ledger-projection.md",
+          "lines": [
+            18,
+            56
+          ]
+        },
+        {
+          "path": "docs/change-contracts/pg-command-review-evidence.md",
+          "lines": [
+            10,
+            31
+          ]
+        },
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            94
+          ]
+        }
+      ],
+      "other": []
+    },
+    "apply_clean_wwwroot": {
+      "code": [
+        {
+          "path": "src/runtime_data_inventory_v1.py",
+          "lines": [
+            241
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_wave_d_runtime_inventory.py",
+          "lines": [
+            16,
+            87,
+            95,
+            101
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/plans/verwijderlijst-na-annotatie-en-reviewkaart.md",
+          "lines": [
+            98
+          ]
+        }
+      ],
+      "other": []
+    },
+    "_verified_finalized_source_refs": {
+      "code": [
+        {
+          "path": "src/operations_console_v1.py",
+          "lines": [
+            4280
+          ]
+        },
+        {
+          "path": "src/review/deterministic_review_repair_v1.py",
+          "lines": [
+            343,
+            379
+          ]
+        }
+      ],
+      "tests": [],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/console-read-dependencies.json",
+          "lines": [
+            310,
+            311,
+            1143,
+            1210,
+            3018
+          ]
+        }
+      ],
+      "other": []
+    },
+    "_source_repair_provenance_patch": {
+      "code": [
+        {
+          "path": "src/operations_console_v1.py",
+          "lines": [
+            4282
+          ]
+        },
+        {
+          "path": "src/review/deterministic_review_repair_v1.py",
+          "lines": [
+            356,
+            380
+          ]
+        },
+        {
+          "path": "src/review/review_closure_v1.py",
+          "lines": [
+            114
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "path": "tests/test_review_closure_v1.py",
+          "lines": [
+            336,
+            337
+          ]
+        }
+      ],
+      "scripts": [],
+      "contracts": [
+        {
+          "path": "docs/change-contracts/console-read-dependencies.json",
+          "lines": [
+            277,
+            278
+          ]
+        },
+        {
+          "path": "docs/change-contracts/source-repair-finalizer-505.md",
+          "lines": [
+            27
+          ]
+        }
+      ],
+      "other": []
+    }
+  }
+}
