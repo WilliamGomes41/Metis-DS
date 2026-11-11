@@ -44,20 +44,24 @@ Alles hieronder wijkt van dit doelbeeld af of wordt er niet meer door gebruikt.
 
 ## A. Kandidaten zonder aangetoonde productie-aanroep
 
+Voor zestien nader beoordeelde kandidaten gelden de afzonderlijke besluiten uit
+[batch 2](verwijderkandidaten-batch-2.md), #1049 / MET-70. Expliciete historische
+lezers, audit-/herstelondersteuning en onafhankelijke acceptatiemetrics staan bij C.
+
 ### A1. Geen directe aanroep gevonden, ook niet door tests
 
 #1047 verwijdert uitsluitend `validate_source_integrity`, `knowledge_open_count`,
 `session_is_expired` en `list_processing_history_inputs`. De tabel bewaart hun
-oorspronkelijke vindplaatsen. De twee overige functies en de module blijven behouden.
+oorspronkelijke vindplaatsen. Batch 2 verwijdert de oude provenance-wrapper;
+de historische lezer en de module blijven behouden volgens de bewijstabel.
 
 | Plek | Naam | Opmerking |
 | --- | --- | --- |
 | `src/integrity_kernel.py:160` | `validate_source_integrity` | Komt nergens anders voor |
 | `src/operations_console_app.py:1997` | `knowledge_open_count` | Alleen nog genoemd in `docs/change-contracts/domain-workplaces.md` |
 | `src/operations_console_v1.py:355` | `session_is_expired` | Komt nergens anders voor |
-| `src/review/deterministic_review_repair_v1.py:360` | `_finalize_source_provenance` | Alleen nog in `console-read-dependencies.json` en het contract #505 |
+| `src/review/deterministic_review_repair_v1.py:360` | `_finalize_source_provenance` | Verwijderd in #1049; actuele correctie en beide verificatie-/hashhelpers blijven behouden |
 | `src/workflows/workflow_documents_cutover_v1.py:420` | `list_processing_history_inputs` | Komt nergens anders voor |
-| `src/workflows/workflow_remaining_cutover_v1.py:149` | `prior_object_audit_history` | Historische lezer; behoudscontract eerst beoordelen |
 | `src/storage_prepare.py` | hele module | `LEGACY-UNUSED`, maar expliciet behouden als OPENVRAAG-S3 in `docs/history/DEAD_CODE_REMOVAL.md`; extern operatorgebruik eerst besluiten |
 
 ### A2. Alleen nog door tests gebruikt
@@ -65,9 +69,10 @@ oorspronkelijke vindplaatsen. De twee overige functies en de module blijven beho
 De statische inspectie vond alleen testaanroepen; de aantallen horen bij de
 inspectiebasis. Dit bewijst niet dat het contract vervalt. Bepaal eerst testdoel,
 herstelcontract en operatorgebruik. Verwijder geen test om een verwijdering groen
-te krijgen. Controleer ook of de functie bewust een weigering bewijst
-(`public_signup`, `silently_edit_object`): dan hoort de weigering in de test thuis, niet
-als methode op de console.
+te krijgen. Bewaakt een test een weigering (`public_signup`, `silently_edit_object`),
+dan moet hetzelfde beleidsbewijs eerst op de behouden grens bestaan en de oude
+methodesurface expliciet worden uitgefaseerd. Batch 2 noemt dit EERST MIGREREN;
+deze methoden en hun tests blijven in deze stap staan.
 
 | Module | Namen (testbestanden) |
 | --- | --- |
@@ -77,9 +82,7 @@ als methode op de console.
 | `src/review/proportionate_review_v1.py` | `normal_risk_batch_counts` (1) |
 | `src/review/review_duty_v1.py` | `repair_duty_count` (1) |
 | `src/review/domain_dimensions_v1.py` | `project_review_domain_dimensions` (1) |
-| `src/review/review_ledger.py` | `unregister_backend` (5) — testhulp; hoort in testondersteuning |
 | `src/vorming/admission_gate_v1.py` | `blocked_audit_lane` (5) |
-| `src/vorming/extract_metrics_v1.py` | `extract_quality_claim_allowed` (3), `compute_extract_metrics` (3), `measure_admission_language_variation` (2) — de hele module (761 regels) heeft geen productie-importeur |
 | `src/vorming/heading_parent_list_v1.py` | `freeze_heading_anchors` (1), `default_structural_parent` (1) |
 | `src/vorming/recommendation_semantics_v1.py` | `legacy_recommendation_semantics_view` (1) |
 | `src/knowledge_relations_v1.py` | `knowledge_relation_set_hash` (1), `legacy_knowledge_relations_view` (1) |
@@ -89,9 +92,6 @@ als methode op de console.
 | `src/publication/publication_refusal_store_v1.py` | `store_path` (2), `read_records` (1) |
 | `src/publication/publish_refusal_audit_v1.py` | `suppressed_failure_count` (1) |
 | `src/compiled_knowledge_v1.py` | `compiled_knowledge_inputs` (1) — hele module zonder productie-importeur |
-| `src/audit_retention_v1.py` | `AuditRetentionService` (3), `list_archived` (2) — behouden onder `audit-room-retirement.md` |
-| `src/workflows/workflow_remaining_cutover_v1.py` | `PostgresAuditRegistry` (3) — behouden audit-/herstelonderdeel |
-| `src/workflows/workflow_review_postgres_v1.py` | `read_events_after` (1) |
 | `src/workflows/operational_document_inputs_v1.py` | `prepare_operational_inputs` (3), `activate_operational_inputs` (3) — zie B8 |
 | `src/workflows/processing_archives_v1.py` | `processing_archive_header` (1) |
 | `src/vorming/decision_tree_experiment_v1.py` | `route_output` (1), `compare_to_reference` (1) |
@@ -292,6 +292,12 @@ contracten.
 
 ## C. Bewust laten staan
 
+- `unregister_backend`: noodzakelijke testondersteuning via de bestaande registratiegrens; vijf modules bewaken worker-/herstartisolatie zonder private backendopslag naar tests te verplaatsen.
+- `prior_object_audit_history`: expliciet historisch leescontract in `semantic-only-formation.md`; productiehistorie niet geteld.
+- `AuditRetentionService`, `list_archived` en `PostgresAuditRegistry`: behouden audit-/back-upherstel met native lifecyclebewijs.
+- `extract_quality_claim_allowed`, `compute_extract_metrics` en `measure_admission_language_variation` in `extract_metrics_v1`: `ACTIVE-TEST-SUPPORT`, onafhankelijke acceptatiemeting.
+- `read_events_after`: contract voor gecommitteerde auditinzage; pending events blijven buiten deze lezer.
+- De actieve helpers `_verified_finalized_source_refs` en `_source_repair_provenance_patch`: actuele broncorrectie roept ze zelf aan.
 - `materialise_knowledge_candidates` en de admission- en bronbindingscontroles: de ene kandidaatmaker.
 - De beslisboomroute (`decision_tree_*`, `decision_graph_v1`, `decision_review_*`).
 - Historische bewijs- en diagnoselezers (`formation_evidence_v1`, `forensic_trace_v1`,

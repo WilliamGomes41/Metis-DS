@@ -102,3 +102,18 @@ checks and CI results must be reported separately from production validation.
 
 Native PostgreSQL and full CI results are tracked in the pull request for #505.
 Local skipped tests do not establish those results. Deployment is outside scope.
+
+## Actuele callmap — 11 november 2026, #1049 / MET-70
+
+De bovenstaande kaart beschrijft de #505-uitvoering. Sinds A09/#587, commit
+`413070035e85f9af58ce5207458d07aa0a868641`, geven `_source_repair` en
+`_merge_repair` hun `source_repair_spec` aan `OperationsConsole.correct_object`.
+Die bestaande operatie roept `_verified_finalized_source_refs` en de polymorfe
+`_source_repair_provenance_patch` zelf aan vóór de hash-/schema-/KO-controles en
+de bestaande commit. Brongetrouwheid en beide patch-hash-policies blijven gelden.
+
+#1049 verwijdert uitsluitend de niet meer aangeroepen `_finalize_source_provenance`
+wrapper. De twee helpers, beide policy-implementaties en alle bestaande tests
+blijven behouden. Vóór deze verwijdering slagen 49 bestaande source-/merge-/hash-/
+rollback-/herstartgevallen op PostgreSQL 16.15. Het actuele na-verwijderingbewijs
+staat in [1049-candidate-contract-review.md](1049-candidate-contract-review.md).

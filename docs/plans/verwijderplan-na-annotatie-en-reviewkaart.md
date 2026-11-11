@@ -15,6 +15,10 @@ Het bestaande opschoonwerkpakket is [MET-11](https://linear.app/metis-phoenix/is
 onder het projectoverzicht [#877](https://github.com/WilliamGomes41/Metis-DS/issues/877).
 De eerste uitvoering is [#1047](https://github.com/WilliamGomes41/Metis-DS/issues/1047) /
 [MET-69](https://linear.app/metis-phoenix/issue/MET-69), als kind van MET-11.
+De tweede batch is [#1049](https://github.com/WilliamGomes41/Metis-DS/issues/1049) /
+[MET-70](https://linear.app/metis-phoenix/issue/MET-70): de
+[functiegewijze bewijstabel](verwijderkandidaten-batch-2.md) onderscheidt één
+verwijdering, negen behoudsbesluiten, drie migraties en drie open gevallen.
 Dit plan vervangt de algemene volgorde uit de oorspronkelijke inventaris.
 Onafhankelijke niet-semantische opruiming hoeft niet te wachten op productcutover;
 integrale uitfasering en projectsluiting behouden hun bestaande afhankelijkheden.

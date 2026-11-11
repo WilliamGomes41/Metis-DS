@@ -8,6 +8,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+# #1049 reuses source/merge, patch-hash, stale/restart and rollback proofs after
+# retiring the unused wrapper; the active verification/policy helpers stay.
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import pytest

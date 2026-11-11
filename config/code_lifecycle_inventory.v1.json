@@ -12,6 +12,7 @@
   ],
   "processing_route_register": "config/legacy_processing_routes.json",
   "symbols": [
+    {"path": "src/review/deterministic_review_repair_v1.py", "symbol": "_finalize_source_provenance", "status": "LEGACY-REMOVED", "reason": "#1049 / MET-70: unused wrapper since A09/#587 41307003; source-unit/merge repair already finalizes inside OperationsConsole.correct_object. Both active source-verification and patch-policy helpers remain."},
     {"path": "src/integrity_kernel.py", "symbol": "validate_source_integrity", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: no runtime, script, test or literal dispatch caller on d5715e61; retained source-fragment/hash/object validation is unchanged."},
     {"path": "src/operations_console_v1.py", "symbol": "session_is_expired", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: unused helper; active session validation and authorization are unchanged."},
     {"path": "src/operations_console_app.py", "symbol": "knowledge_open_count", "status": "LEGACY-REMOVED", "reason": "#1047 / MET-69: unused counter; active personal review projection and second-review accounting are unchanged."},

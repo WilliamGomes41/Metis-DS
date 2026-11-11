@@ -357,39 +357,6 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         """Compatibility repairs bind the final provenance to their repair spec."""
         return {"revision_patch_hash": stable_hash(repair_spec)}
 
-    def _finalize_source_provenance(
-        self,
-        *,
-        snapshot_id: str,
-        object_id: str,
-        source_refs: list[dict[str, Any]],
-        repair_spec: dict[str, Any],
-    ) -> dict[str, Any]:
-        revision = self.objects_revision(snapshot_id)
-        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
-        live = self._current_object(snapshot_id, object_id)
-        version = str(live.get("object_version") or "")
-        updated: dict[str, Any] | None = None
-        for index in range(len(rows) - 1, -1, -1):
-            row = rows[index]
-            if row.get("object_id") != object_id or str(row.get("object_version") or "") != version:
-                continue
-            row = deepcopy(row)
-            provenance = row.setdefault("provenance", {})
-            provenance["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
-            provenance.update(self._source_repair_provenance_patch(repair_spec))
-            stamp_canonical_hashes(row)
-            errors = schema_errors(row, self.schema_path)
-            if errors:
-                raise ConsoleError("revision_schema_invalid", " | ".join(errors))
-            rows[index] = row
-            updated = row
-            break
-        if updated is None:
-            raise ConsoleError("unknown_object")
-        return self._commit_knowledge_change(snapshot_id, live, updated,
-            reason="deterministic/source-bound repair", actor="repair-command")
-
     def _source_repair(
         self,
         *,
