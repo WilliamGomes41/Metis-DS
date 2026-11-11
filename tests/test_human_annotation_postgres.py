@@ -169,7 +169,7 @@ def test_http_source_and_autosave_contract(tmp_path, production_console, product
     assert client.post('/login',data={'username':'annotator','password':'annotation-secret'},follow_redirects=False).status_code==303
     response = client.get('/annotations?document='+sid)
     assert response.status_code==200
-    assert 'Geselecteerde tekst toevoegen' in response.text and 'data-source-block' in response.text
+    assert 'Gebruik als kernuitspraak' in response.text and 'data-source-block' in response.text
     request = command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
     saved = client.post('/annotations/api',json=request)
     assert saved.status_code==200, saved.text
@@ -183,6 +183,8 @@ def test_http_source_and_autosave_contract(tmp_path, production_console, product
     assert original.status_code==200 and original.headers['content-disposition'].startswith('attachment')
     script = client.get('/annotations/editor.js')
     assert script.status_code==200
+    binding_script = client.get('/annotations/binding.mjs')
+    assert binding_script.status_code == 200 and 'export function bindRange' in binding_script.text
     malformed=deepcopy(request);malformed['selection']['object_type']=[]
     assert client.post('/annotations/api',json=malformed).status_code==422
     malformed=deepcopy(request);malformed['selection']['ranges'][0]['block_id']=[]

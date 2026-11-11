@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/emilkowalski/skills",
+  "commit": "715c1807e08c497cfd1dc4feb450a2a3300ef2a9",
+  "distribution": ".agents/skills/emil-design-eng",
+  "upstream_path": "skills/emil-design-eng/SKILL.md",
+  "git_blob_sha": "dc063c2a861922c1c9f2412b824b0862746304f5",
+  "installation_command": "npx --yes skills@latest add emilkowalski/skills --skill emil-design-eng --agent codex --yes",
+  "files": {
+    ".agents/skills/emil-design-eng/SKILL.md": "965cc3108047a1f68e504977ae7816c66115b202a32e7509c0b8305314839c54",
+    ".agents/licenses/emil-design-eng.txt": "4ff5bdb7887ec1435c9cab0e8d1a7caee704d894d65c2a008ccc68b1cc2f260b"
+  }
+}

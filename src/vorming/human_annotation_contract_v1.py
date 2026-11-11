@@ -1,6 +1,8 @@
 """Closed human input/projection vocabulary; no storage or candidate creator."""
 MODE = 'human-annotation-v1'
 FIELDS_VERSION = 'human-source-bound-fields-v1'
+CONTEXT_BINDING_FIELDS = {'population':'target_group_span', 'condition':'condition_span',
+                        'actor':'actor_span', 'scope':'scope_span'}
 CONTEXT_VERSION = 'human-source-bound-context-v1'
 REFERENCE_KEY = 'human_annotation'
 CORE_FIELDS = frozenset({'type_evidence_spans','recommendation_evidence_span','factual_claim_span',

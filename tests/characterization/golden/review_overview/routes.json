@@ -55,6 +55,12 @@
       ]
     ],
     [
+      "/annotations/binding.mjs",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/annotations/build",
       [
         "GET"

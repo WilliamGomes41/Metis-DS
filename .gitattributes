@@ -33,3 +33,4 @@
 .agents/skills/find-animation-opportunities/** text eol=lf
 .claude/skills/find-animation-opportunities/SKILL.md text eol=lf
 .cursor/skills/find-animation-opportunities/SKILL.md text eol=lf
+.agents/licenses/emil-design-eng.txt text eol=lf
