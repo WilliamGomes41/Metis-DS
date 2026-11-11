@@ -72,9 +72,9 @@ jobs:
       - name: Verify live worker heartbeat lock order
         run: |
           mkdir -p output
+          bash scripts/test_postgres.sh > /dev/null
           for attempt in 1 2 3 4 5; do
-            python -m pytest -q tests/test_worker_handover_v1.py::test_live_worker_renews_lease_during_long_preparation_without_extending_deadline \\
-              --junitxml="output/char-worker-lease-${attempt}.xml"
+            python -m pytest -q tests/test_worker_handover_v1.py::test_live_worker_renews_lease_during_long_preparation_without_extending_deadline --junitxml="output/char-worker-lease-${attempt}.xml"
           done
       - name: MET-23 native Review POST baseline
         timeout-minutes: 10
