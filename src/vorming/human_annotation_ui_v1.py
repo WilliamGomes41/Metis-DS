@@ -341,7 +341,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <div id="annotation-required-links" aria-live="polite"></div></section>
 <section id="annotation-task-3" aria-labelledby="annotation-heading-3" hidden><h3 id="annotation-heading-3" tabindex="-1">Controleer je annotatie</h3>
 <p>Lees de uitspraak en de gekoppelde tekst terug. Deze controle gaat over deze annotatie; het hele document controleer je daarna.</p>
-<dl id="annotation-review-summary"></dl><div id="annotation-check" aria-live="polite"><p>De opgeslagen annotatie is nog niet gecontroleerd.</p></div>
+<div id="annotation-check" aria-live="polite"><p>De opgeslagen annotatie is nog niet gecontroleerd.</p></div><dl id="annotation-review-summary"></dl>
 <button class="btn-secondary" type="button" id="annotation-recheck">Opnieuw controleren</button></section>
 <div id="annotation-selection-tools"><p id="annotation-target" role="status">Wijs de kernuitspraak aan in de bron.</p>
 <details class="annotation-selection-help"><summary>Hulp bij tekstselectie</summary><p>Raak een passage aan of zet er de focus op. Selecteer tekst hieronder met toetsenbord of touch.</p><label for="annotation-source-input">Huidige passage</label><textarea readonly id="annotation-source-input" rows="4"></textarea></details>

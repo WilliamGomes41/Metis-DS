@@ -247,6 +247,7 @@ import {bindRange} from '/annotations/binding.mjs';
     renderSummary();updateBindingControls();
   }
   const status = text => { el('status').textContent = text; };
+  const loadedStatus = () => entry.revision ? entry.status==='ready' ? 'Klaar voor documentcontrole en opgeslagen.' : 'Concept opgeslagen.' : 'Nieuwe annotatie. Nog niets opgeslagen.';
   function load(id) {
     const saved = state.entries.find(e => e.annotation_id === id);
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
@@ -581,7 +582,7 @@ import {bindRange} from '/annotations/binding.mjs';
   el('withdraw').addEventListener('click',()=>confirmChange('De hele annotatie terugnemen, inclusief alle gekoppelde brontekst? Dit meldt de annotatie niet gereed. De bron moet nog worden verantwoord.',async()=>{
     try {await flush();entry.status='withdrawn';dirty+=1;await flush();load('');entries();}catch(_){}
   }));
-  async function switchEntry(id) { await flush(); load(id); entries(); status(entry.status==='ready'?'Klaar voor documentcontrole en opgeslagen.':'Concept opgeslagen.'); }
+  async function switchEntry(id) { await flush(); load(id); entries(); status(loadedStatus()); }
   el('new').addEventListener('click',() => { switchEntry('').catch(() => {}); });
   el('entry').addEventListener('change',() => { switchEntry(el('entry').value).catch(() => {}); });
   el('pause').addEventListener('click',async () => { try { await flush(); window.location.href = '/'; } catch (_) {} });
@@ -590,5 +591,5 @@ import {bindRange} from '/annotations/binding.mjs';
   load(new URLSearchParams(window.location.search).get('annotation')); entries();
   el('editor-inputs').disabled=false;
   el('initializing').hidden=true;
-  status(entry.status==='ready'?'Klaar voor documentcontrole en opgeslagen.':'Concept opgeslagen.');
+  status(loadedStatus());
 })();

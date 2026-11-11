@@ -25,6 +25,8 @@ const assert=require('node:assert/strict');
   const source=page.locator('[data-source-block]').filter({hasText:'De kwetsbare huid verklaart de pijn.'});
   const primaryCount=async()=>assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
   assert.equal(await page.locator('#annotation-source-input').inputValue(),'');
+  assert.match(await page.locator('#annotation-status').innerText(),/Nog niets opgeslagen/);
+  assert.equal((await read()).entries.length,0);
   assert.equal(await page.locator('#annotation-task-1').isVisible(),true);await primaryCount();
   await page.screenshot({path:output+'/guided-select-desktop.png',fullPage:true});
   await page.locator('#annotation-type').selectOption('explanation');await source.click();await page.locator('#annotation-select-block').click();
