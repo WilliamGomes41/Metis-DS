@@ -37,11 +37,37 @@ symboolregels en het bestaande sync-register koppelt #1047 aan MET-69.
 
 ## Verificatie
 
-Uitvoering loopt. Nog geen volledige-suite-, merge-, deployment- of productieclaim.
-De controles gebruiken Python 3.13 en een geïsoleerde PostgreSQL 16.15-server met
-synthetische testdata. AST-gelijkheid wordt gecontroleerd na uitsluitend de vier
-genoemde definities uit de basis-AST weg te laten. De echte systeempaden worden
-getoetst met bestaande sessie-, integriteits-, review-/opslag- en architectuurtests.
+Codecommit: `e3a5d41a71ac3f383bb02d06c930ffe6c19c0bdc`. Python 3.13.5,
+geïsoleerde PostgreSQL 16.15, synthetische testdata. Het
+[verificatierapport](../../evidence/1047/verification.json) bevat commit,
+collectiedigest, uitkomsten per testdeel en AST-bewijs.
+
+- Volledige standaardcollectie: **8.558 geslaagd, 51 optionele omgevingsproeven
+  overgeslagen, 3 verwachte xfails; 0 failures/errors en 0 PostgreSQL-skips**.
+  De strikte samenvoeging bevestigt dezelfde commit/collectiedigest/PostgreSQL 16
+  en exact één uitvoering van alle 8.612 verzamelde gevallen over vier delen.
+- De 61 gerichte bestaande sessie-, integriteits-, opslag-, architectuur-,
+  documentreferentie- en sync-controles zijn uit die volledige uitvoering
+  hergebruikt: alle geslaagd, geen skips. Geen aanvullende herhaling als vervanging
+  van een volledige uitslag.
+- AST-gelijkheid van de vier behouden productmodules na uitsluitend de genoemde
+  definities weg te laten: PASS. De twee gewijzigde testbestanden hebben een
+  identieke AST; alleen bewijscommentaar is toegevoegd.
+- Repositorypreflight, release-control-preflight tegen `origin/main`, compileall,
+  architectuurgrenzen, change-contractvalidatie en diffcontrole: PASS.
+- Naamzoekronde na verwijderen: nul verwijzingen in `src`, `scripts`, `tests`,
+  `.github`, `db` en `examples`; documentatie en register vermelden de historie.
+
+De eerste omgevingspoging ontbrak de gepinde `regex`-dependency. De daaropvolgende
+vroege sharded run is onderbroken omdat de uitgepakte `psql` niet in PATH stond.
+Na installatie via `requirements-dev.lock` en correctie van uitsluitend PATH is
+de volledige bovenstaande run opnieuw gestart en afgerond. Dezelfde gerichte
+herstelproef ging met die PATH-correctie van rood naar groen, zonder codewijziging.
+De onvolledige pogingen tellen niet als geslaagd bewijs.
+
+De 51 optionele skips betreffen Chromium (28), Docling/modellen (12) en Bend (11).
+Er is geen nieuwe browser-, provider-, deployment- of productieacceptatieclaim.
+De bewijsdocumentatie na de codecommit verandert geen broncode, testcode of config.
 
 Vervolgwerk blijft open bij de bestaande issues uit het plan; deze deelslice sluit
 MET-11, HA-4 en KO-6 niet. Geen operationele cutover of betaald modelgebruik.
