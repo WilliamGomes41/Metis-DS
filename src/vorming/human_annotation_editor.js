@@ -8,6 +8,7 @@ import {bindRange} from '/annotations/binding.mjs';
     actor:'Uitvoerder',scope:'Toepassingssituatie',timing:'Tijdstip of periode',list_introduction:'Inleiding bij een lijst',row_header:'Rijkop',column_header:'Kolomkop'};
   let entry, selected = null, dirty = 0, committed = 0, timer, running = null, retryRequest = null, retryVersion = 0, failed = false;
   let selectingFromSource = false, activeBlock = null;
+  let suggesting=false;
   const clone = value => JSON.parse(JSON.stringify(value));
   const fieldContract = state.field_contract;
   let repairingLink=null, task=1, target=null, check=null, checking=false, finalizing=false, confirmation=null;
@@ -56,6 +57,8 @@ import {bindRange} from '/annotations/binding.mjs';
     renderSummary();updateBindingControls();
   }
   function renderSummary() {
+    el('type-summary').textContent=entry.object_type ? el('type').selectedOptions[0]?.textContent : 'Nog niet vastgesteld';
+    el('proposal-core').textContent=entry.ranges.filter(a=>a.role==='core').map(a=>a.quote).join(' ');
     el('core-summary').textContent=hasCore() ? 'Gekozen uitspraak: '+entry.ranges.filter(a=>a.role==='core').map(a=>a.quote).join(' ') : 'Nog geen uitspraak gekoppeld.';
     el('evidence-summary').textContent=entry.ranges.some(a=>a.role==='evidence') ? 'Brononderbouwing toegevoegd.' : entry.evidence_not_applicable ? 'Onderbouwing expliciet als niet van toepassing vastgelegd.' : 'Onderbouwing: nog niet gekoppeld.';
     el('review-summary').replaceChildren();
@@ -108,6 +111,7 @@ import {bindRange} from '/annotations/binding.mjs';
     finally {checking=false;renderSummary();updateBindingControls();}
   }
   for(let n=1;n<=3;n++) el('step-'+n).addEventListener('click',()=>{showTask(n,true);if(n===3) runCheck();});
+  el('change-type').addEventListener('click',()=>{showTask(1,true);el('type').focus();});
   el('back').addEventListener('click',()=>showTask(task-1,true));
   el('recheck').addEventListener('click',runCheck);
   el('context-tools').addEventListener('toggle',()=>{
@@ -141,6 +145,11 @@ import {bindRange} from '/annotations/binding.mjs';
     el('add').textContent=selected ? target ? action : 'Kies eerst waarvoor je de tekst gebruikt' : task===1 ? hasCore() ? 'Verder naar betekenis' : 'Selecteer tekst in de bron' : 'Naar controleren en afronden';
     el('add').disabled=finalizing || (selected ? !target || context && !repairingLink && essentialChoice()===null : task===1 && (!hasCore() || !el('type').value));
     el('add').hidden=task===3;
+    el('add').className=task===1 && !entry?.disposition ? 'btn-secondary' : 'btn-primary';
+    if(task===1 && !entry?.disposition) el('add').textContent=selected ? 'Zelf betekenis invullen' : 'Verder zonder nieuw voorstel';
+    el('suggest').hidden=task!==1 || !!entry?.disposition;
+    el('suggest').disabled=suggesting || finalizing || entry?.status!=='draft' || (!selected && !hasCore());
+    el('suggest').textContent=suggesting ? 'Betekenis wordt voorgesteld…' : 'Betekenis voorstellen';
     const confirmedReady=entry.status==='ready' && dirty===committed;
     el('ready').hidden=task!==3 || confirmedReady;
     el('ready').disabled=finalizing || checking || !checkIsCurrent() || check.findings.length>0;
@@ -253,6 +262,7 @@ import {bindRange} from '/annotations/binding.mjs';
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
     check=null;target=null;confirmation=null;el('confirm').hidden=true;
+    el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
     activeBlock=null;el('role').value='core';
@@ -527,6 +537,50 @@ import {bindRange} from '/annotations/binding.mjs';
     if(target?.kind==='range' && el('role').value==='core' && hasCore())
       confirmChange('Nog een kernbereik toevoegen? Controleer daarna de betekenisvelden en eventuele gevolgen voor beoordelingen.',bindSelected);
     else bindSelected();
+  });
+  const suggestionBasis=()=>Object.fromEntries(['snapshot_id','working_revision_id','extraction_hash','normalization','generation','objects_revision'].map(key=>[key,state[key]]));
+  async function proposeMeaning() {
+    if(suggesting || entry.disposition) return;
+    suggesting=true;updateBindingControls();
+    const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),55000);
+    el('suggestion-note').textContent='Metis stelt betekenis voor uit je selectie. Dit kan maximaal ongeveer een minuut duren. Je bronselectie blijft bewaard.';
+    try {
+      if(selected) {
+        target={kind:'range',role:'core'};el('role').value='core';bindSelected();
+        if(selected) throw Error('De kern kon niet worden gekoppeld. Controleer je selectie.');
+      }
+      if(!hasCore()) throw Error('Selecteer eerst de volledige uitspraak.');
+      await flush();
+      const id=entry.annotation_id,version=dirty,revision=entry.revision,basis=suggestionBasis();
+      // Controls cannot change the meaning while this response is outstanding.
+      // Source selection remains usable; its dirty version invalidates the answer.
+      el('editor-inputs').disabled=true;
+      const response=await fetch('/annotations/suggest',{method:'POST',headers:{'Content-Type':'application/json'},
+        signal:controller.signal,body:JSON.stringify({snapshot_id:state.snapshot_id,annotation_id:id,revision,basis})});
+      const data=await response.json();
+      if(!response.ok) throw Error(data.error==='annotation_suggestion_stale' ? 'Het opgeslagen werk is gewijzigd. Heropen de annotatie voordat je opnieuw een voorstel vraagt.' : data.message || 'Het voorstel kon niet worden gemaakt.');
+      if(entry.annotation_id!==id || entry.revision!==revision || dirty!==version || data.annotation_id!==id || data.revision!==revision || JSON.stringify(data.basis)!==JSON.stringify(basis))
+        throw Error('Je selectie of opgeslagen werk is gewijzigd. Het oude voorstel is niet toegepast.');
+      // Ordinary draft save remains the only writer; no approval/status shortcut.
+      entry.object_type=data.object_type;entry.field_evidence=data.field_evidence;
+      entry.recommendation_semantics=data.recommendation_semantics;
+      el('type').value=entry.object_type || '';change();renderFields();showTask(2);
+      el('controls').scrollTop=0;
+      if(window.matchMedia('(max-width:800px)').matches) el('controls').scrollIntoView({block:'start'});
+      el('heading-2').focus({preventScroll:true});
+      await flush();
+      el('suggestion-note').textContent='Betekenisvoorstel als concept opgeslagen. Controleer de antwoorden; dit is nog geen goedkeuring.';
+    } catch(error) {
+      el('suggestion-note').textContent=(error.name==='AbortError' ? 'Het voorstel duurde te lang.' : error.message)+' Je opgeslagen werk blijft bewaard. Probeer opnieuw of vul de betekenis zelf in.';
+    } finally {
+      clearTimeout(deadline);suggesting=false;el('editor-inputs').disabled=false;updateBindingControls();
+    }
+  }
+  el('suggest').addEventListener('click',()=>{
+    const hasMeaning=Object.values(entry.field_evidence || {}).some(value=>value.span) || entry.recommendation_semantics;
+    if(hasCore() && (hasMeaning || selected || entry.status!=='draft'))
+      confirmChange('Een nieuw voorstel vervangt de huidige betekenisvelden in dit concept. Wil je dat? Je bestaande opgeslagen versies blijven bewaard.',proposeMeaning);
+    else proposeMeaning();
   });
   el('discard').addEventListener('click',() => { selected=null;repairingLink=null;clearChoice();entry.pending_range=null;el('selection').textContent='';change();renderFields(); });
   for (const id of ['role','essential','additional','function']) el(id).addEventListener('change',() => {

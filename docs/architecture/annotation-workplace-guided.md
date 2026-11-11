@@ -429,3 +429,26 @@ gerenderd, gebruikerstest uitgevoerd of productgedrag gewijzigd. De Impeccable
 engine was eerder niet beschikbaar; de bestaande projectrichtlijnen en vendored
 Operate-guidance zijn gebruikt. Geen detector-, bruikbaarheids- of releasebewijs
 wordt hiermee geclaimd.
+
+## Eén selectie met betekenisvoorstel (#1055 / MET-73)
+
+De eerdere verplichte tweede aanwijzingsronde wordt vervangen door een voorstel:
+**Uitspraak kiezen → Voorstel controleren → Afronden**. De handmatige route
+blijft beschikbaar voor correcties en provideruitval.
+
+```mermaid
+flowchart LR
+  S[Volledige uitspraak selecteren] --> K[Bestaande draft-save met CAS]
+  K --> Q[Readonly voorstelquery op exacte versie]
+  Q --> P[Een begrensde providercall]
+  P --> B[Unieke letterlijke quotes binden aan bronspans]
+  B --> C[Gebruiker controleert of corrigeert concept]
+  C --> K
+  C --> I[Bestaande annotatie- en documentcontrole]
+  I --> M[Bestaande enige materialiser en reviewroute]
+```
+
+De query schrijft niets en controleert vóór en na provider-I/O dezelfde bron-,
+werk-, annotatie- en objectversie. Bij fout of stale antwoord blijven opgeslagen
+keuzes intact; er volgt geen automatische retry of invulling met gegokte tekst.
+Zie [ontwerp en bewijsgrenzen](../change-contracts/1055-meaning-proposals.md).
