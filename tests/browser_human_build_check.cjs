@@ -56,13 +56,9 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-type').selectOption('explanation');
   await tasks.step(page,2);
-  const input = page.locator('#annotation-source-input');
   for (const [field,text] of [['subject_span','De kwetsbare huid'],['predicate_span','verklaart'],['supported_object','de pijn']]) {
     await tasks.field(page,field);
-    await input.evaluate((element,text) => {
-      const start = element.value.indexOf(text); element.setSelectionRange(start,start+text.length);
-      element.dispatchEvent(new Event('select'));
-    },text);
+    await tasks.selectText(page,core,text);
     await page.locator('#annotation-add').click();
   }
   await page.locator('#annotation-na').check();

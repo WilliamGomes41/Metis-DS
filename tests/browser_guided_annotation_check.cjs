@@ -1,3 +1,4 @@
+const {selectText}=require('./browser_annotation_tasks.cjs');
 const {chromium}=require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
@@ -24,7 +25,8 @@ const assert=require('node:assert/strict');
   const saved=()=>page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   const source=page.locator('[data-source-block]').filter({hasText:'De kwetsbare huid verklaart de pijn.'});
   const primaryCount=async()=>assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
-  assert.equal(await page.locator('#annotation-source-input').inputValue(),'');
+  assert.equal(await page.locator('#annotation-source-input,.annotation-selection-help').count(),0);
+  assert.equal(await page.locator('#annotation-selection').innerText(),'');
   assert.match(await page.locator('#annotation-status').innerText(),/Nog niets opgeslagen/);
   assert.equal((await read()).entries.length,0);
   assert.equal(await page.locator('#annotation-task-1').isVisible(),true);await primaryCount();
@@ -45,11 +47,10 @@ const assert=require('node:assert/strict');
   let view=await read();assert.equal(view.entries[0].status,'draft');
   assert.equal(await page.locator('#annotation-check').innerText().then(t=>t.includes('nog niet gereed')),false);
   await step(2);
-  const input=page.locator('#annotation-source-input');
   for(const [field,text] of [['subject_span','De kwetsbare huid'],['predicate_span','verklaart'],['supported_object','de pijn']]) {
    await page.locator(`[data-field="${field}"]`).click();
    await source.click();
-   await input.evaluate((node,text)=>{const start=node.value.indexOf(text);node.setSelectionRange(start,start+text.length);node.dispatchEvent(new Event('select'));},text);
+   await selectText(page,source,text);
    await primaryCount();await page.locator('#annotation-add').click();
   }
   await page.locator('#annotation-na').check();await saved();
@@ -70,7 +71,7 @@ const assert=require('node:assert/strict');
   assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
   await page.locator('#annotation-check button').filter({hasText:'over wie of wat'}).click();
   assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
-  await source.click();await input.evaluate(node=>{node.setSelectionRange(0,17);node.dispatchEvent(new Event('select'));});
+  await source.click();await selectText(page,source,'De kwetsbare huid');
   await page.locator('#annotation-add').click();
   // Storage failure must retain the edit and block navigation until an exact retry succeeds.
   await page.route('**/annotations/api',route=>route.abort());
