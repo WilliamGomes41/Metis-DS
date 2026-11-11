@@ -1,6 +1,9 @@
 """Current annotation check uses the same native heads and validation owners.
 
-# release-control-evidence: scope/belofte kwaliteit toegang opslag concurrent stale slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: kwaliteit
+# release-control-evidence: toegang
+# release-control-evidence: opslag concurrent stale
 """
 from uuid import uuid4
 

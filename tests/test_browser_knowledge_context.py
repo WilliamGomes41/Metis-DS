@@ -1,6 +1,9 @@
 """Actual Chromium checks for full prose, exact second review and path alternatives.
 
-# release-control-evidence: scope/belofte kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 
 Set METIS_BROWSER_EXECUTABLE to Chrome headless shell and
 METIS_PLAYWRIGHT_MODULE to the installed Node Playwright module to run this test.
