@@ -1,6 +1,9 @@
 """Actual Chromium checks for full prose, exact second review and path alternatives.
 
-# release-control-evidence: scope/belofte kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 
 Set METIS_BROWSER_EXECUTABLE to Chrome headless shell and
 METIS_PLAYWRIGHT_MODULE to the installed Node Playwright module to run this test.
@@ -32,6 +35,7 @@ import pytest
     ('tests.browser_insight_owner_fixture', 'browser_insight_owner_check.cjs'),
     ('tests.browser_review_disposition_fixture', 'browser_review_disposition_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_human_annotation_check.cjs'),
+    ('tests.browser_human_annotation_fixture', 'browser_guided_annotation_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_annotation_binding_check.cjs'),
     ('tests.browser_annotation_source_progress_fixture', 'browser_annotation_source_progress_check.cjs'),
     ('tests.browser_test_document_deletion_fixture', 'browser_test_document_deletion_check.cjs'),

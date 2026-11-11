@@ -178,3 +178,17 @@ def test_preview_reads_persisted_versions_after_restart_without_writing_objects(
     assert all(gap['block_id'] != core['block_id'] for gap in result['unaccounted_ranges'])
     assert resumed.snapshot_objects(sid, include_blocked=True) == []
     assert resumed.object_review_bindings(sid) == []
+
+
+def test_annotation_preflight_checks_draft_content_without_status_or_document_gate():
+    from src.vorming.human_annotation_preview_v1 import inspect_annotation
+    fragments, entry = stored()
+    entry['payload']['status'] = 'draft'
+    entry['payload_hash'] = stable_hash(entry['payload'])
+    before = deepcopy(entry)
+    assert inspect_annotation(entry, fragments=fragments, require_ready=False) == []
+    assert entry == before
+    assert inspect_document([entry], fragments=fragments)['entries'][0]['codes'] == ['annotation_not_ready']
+    entry['payload']['ranges'] = [r for r in entry['payload']['ranges'] if r['role'] != 'evidence']
+    entry['payload_hash'] = stable_hash(entry['payload'])
+    assert 'annotation_evidence_required' in inspect_annotation(entry, fragments=fragments, require_ready=False)

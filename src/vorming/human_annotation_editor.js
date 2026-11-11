@@ -10,7 +10,110 @@ import {bindRange} from '/annotations/binding.mjs';
   let selectingFromSource = false, activeBlock = null;
   const clone = value => JSON.parse(JSON.stringify(value));
   const fieldContract = state.field_contract;
-  let repairingLink=null;
+  let repairingLink=null, task=1, target=null, check=null, checking=false, finalizing=false, confirmation=null;
+  const hasCore = () => entry.ranges.some(a => a.role==='core');
+  const checkIsCurrent = () => check && dirty===committed && check.annotation_id===entry.annotation_id &&
+    check.revision===entry.revision && check.basis.snapshot_id===state.snapshot_id &&
+    check.basis.working_revision_id===state.working_revision_id && check.basis.normalization===state.normalization &&
+    check.basis.generation===state.generation &&
+    check.basis.extraction_hash===state.extraction_hash && check.basis.objects_revision===state.objects_revision;
+  function cancelConfirmation() {
+    const pending=confirmation;confirmation=null;el('confirm').hidden=true;pending?.cancel();
+    if(pending?.focus?.isConnected) pending.focus.focus();
+  }
+  function setEntryUrl(id) {
+    const url=new URL(location.href);
+    if(id) url.searchParams.set('annotation',id);else url.searchParams.delete('annotation');
+    history.replaceState(null,'',url);
+  }
+  function confirmChange(message, action, cancel=()=>{}) {
+    if(confirmation) return;
+    confirmation={action,cancel,focus:document.activeElement};el('confirm-message').textContent=message;el('confirm').hidden=false;
+    el('confirm-title').focus();
+  }
+  el('confirm-cancel').addEventListener('click',cancelConfirmation);
+  el('confirm-accept').addEventListener('click',()=>{const pending=confirmation;confirmation=null;el('confirm').hidden=true;pending?.action();if(pending?.focus?.isConnected) pending.focus.focus();});
+  function chooseTarget(value) {
+    cancelConfirmation();repairingLink=null;el('role').disabled=!!entry.disposition;
+    target=value;clearChoice();
+    if(value.kind==='range') el('role').value=value.role;
+    for(const select of el('fields').querySelectorAll('select')) select.hidden=value.kind!=='field' || select.dataset.missingField!==value.field;
+    for(const button of el('fields').querySelectorAll('button[data-field]')) button.setAttribute('aria-pressed',String(value.kind==='field' && button.dataset.field===value.field));
+    updateBindingControls();
+  }
+  function showTask(value, focus=false) {
+    cancelConfirmation();task=value;
+    for(let n=1;n<=3;n++) {
+      el('task-'+n).hidden=n!==task;
+      if(n===task) el('step-'+n).setAttribute('aria-current','step');else el('step-'+n).removeAttribute('aria-current');
+    }
+    if(task===1) {repairingLink=null;clearChoice();target={kind:'range',role:'core'};el('role').value='core';el('role').disabled=!!entry.disposition;}
+    else if(task===2 && target?.role==='core') target=null;
+    el('selection-tools').hidden=task===3;
+    el('linked').hidden=task===3;
+    el('back').hidden=task===1;
+    if(focus) el('heading-'+task).focus();
+    renderSummary();updateBindingControls();
+  }
+  function renderSummary() {
+    el('core-summary').textContent=hasCore() ? 'Gekozen uitspraak: '+entry.ranges.filter(a=>a.role==='core').map(a=>a.quote).join(' ') : 'Nog geen uitspraak gekoppeld.';
+    el('evidence-summary').textContent=entry.ranges.some(a=>a.role==='evidence') ? 'Brononderbouwing toegevoegd.' : entry.evidence_not_applicable ? 'Onderbouwing expliciet als niet van toepassing vastgelegd.' : 'Onderbouwing: nog niet gekoppeld.';
+    el('review-summary').replaceChildren();
+    const row=(label,text,span)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=text;
+      if(span) {const link=document.createElement('a');link.href='#'+span.block_id;link.textContent='Bekijk in bron';dd.append(' ',link);}
+      el('review-summary').append(dt,dd);};
+    row('Type',el('type').selectedOptions[0]?.textContent || 'Nog kiezen');
+    for(const a of entry.ranges) row(labels[a.role]+(a.required_for_meaning?' — essentieel':a.role!=='core'?' — niet als essentieel vastgelegd':''),a.quote,a);
+    for(const [field,label] of Object.entries(fieldContract.labels)) {
+      const e=entry.field_evidence?.[field];
+      if(![...el('field').options].some(option=>option.value===field) || entry.disposition) continue;
+      if(e?.span) row(label,literal(e.span),e.span);
+      else row(label,e?.core?'Kernuitspraak gekoppeld.':({not_stated:'Niet in de bron genoemd',not_applicable:'Niet van toepassing',uncertain:'Nog uitzoeken'})[e?.missing_reason] || 'Nog niet aangewezen');
+    }
+    row('Onderbouwing',el('evidence-summary').textContent);
+    if(checkIsCurrent()) {
+      el('check').replaceChildren();
+      const p=document.createElement('p');p.textContent=check.findings.length ? 'Er zijn nog controlepunten. Vul ze aan en controleer opnieuw.' : entry.status==='ready' ? 'Klaar voor documentcontrole. Dit is geen inhoudelijke goedkeuring of publicatie.' : 'Geen open controlepunten voor deze annotatie. Bevestig hieronder dat je klaar bent.';el('check').append(p);
+      const list=document.createElement('ul');
+      for(const finding of check.findings) {
+        const li=document.createElement('li'),button=document.createElement('button');
+        button.type='button';button.className='btn-secondary';button.textContent=finding.message+' Aanvullen';
+        button.addEventListener('click',()=>repairFinding(finding));li.append(button);list.append(li);
+      }
+      el('check').append(list);
+    } else el('check').textContent=checking ? 'Opgeslagen annotatie controleren…' : entry.status==='ready' && dirty===committed ? 'Klaar voor documentcontrole. Dit is geen inhoudelijke goedkeuring of publicatie.' : 'Nog niet actueel gecontroleerd. Wijzigingen moeten eerst opgeslagen zijn.';
+  }
+  function repairFinding(finding) {
+    const code=finding.code;
+    const step=['annotation_core_required','incomplete_sentence','no_independent_claim','annotation_source_disposition_unresolved'].includes(code) || code.startsWith('recommendation_core') ?1:2;
+    showTask(code==='annotation_pending_range' && entry.pending_range?.role==='core' ? 1 : step,true);
+    const field=finding.field;
+    if(field) {el('field').value=field;chooseTarget({kind:'field',field});el('fields').querySelector('button[data-field="'+field+'"]')?.focus();}
+    if(code==='recommendation_semantics_invalid' || code.startsWith('recommendation_direction') || code.startsWith('recommendation_strength')) {el('recommendation').open=true;el('direction').focus();}
+    if(code==='annotation_evidence_required') {el('context-tools').open=true;chooseTarget({kind:'range',role:'evidence'});el('role').focus();}
+  }
+  async function runCheck() {
+    if(checking) return;
+    checking=true;check=null;renderSummary();updateBindingControls();
+    try {
+      await flush();
+      if(!entry.revision) {status('Wijs eerst een uitspraak aan.');return;}
+      const id=entry.annotation_id, version=dirty;
+      const response=await fetch('/annotations/check?'+new URLSearchParams({document:state.snapshot_id,annotation:id}),{cache:'no-store'});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.message || 'Controle kon niet worden gelezen. Probeer opnieuw.');
+      if(entry.annotation_id===id && dirty===version) check=data;
+      if(check && !checkIsCurrent()) {check=null;status('Het opgeslagen werk is gewijzigd. Heropen de annotatie om de actuele versie te controleren.');}
+    } catch(error) {status('Controle niet gelukt. '+error.message);}
+    finally {checking=false;renderSummary();updateBindingControls();}
+  }
+  for(let n=1;n<=3;n++) el('step-'+n).addEventListener('click',()=>{showTask(n,true);if(n===3) runCheck();});
+  el('back').addEventListener('click',()=>showTask(task-1,true));
+  el('recheck').addEventListener('click',runCheck);
+  el('context-tools').addEventListener('toggle',()=>{
+    if(el('context-tools').open && !target && !entry.disposition)
+      chooseTarget({kind:'range',role:el('role').value==='core'?'context':el('role').value});
+  });
   const linkId = a => a.relationship_id || 'link-v1:'+JSON.stringify([entry.annotation_id,a.role,a.block_id,a.start,a.end]);
   const literal = span => {
     const block=state.blocks.find(b => b.block_id === span.block_id);
@@ -28,13 +131,26 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   function clearChoice() { el('essential').checked=false;el('additional').checked=false; }
   function updateBindingControls() {
-    const role=el('role').value, context=role!=='core' && !entry?.disposition;
+    const role=el('role').value, context=target?.kind==='range' && role!=='core' && !entry?.disposition;
     el('essential-choice').hidden=!context;
+    el('evidence-function').hidden=role!=='evidence' || target?.kind!=='range';
     el('additional').disabled=!!repairingLink;
-    el('add').textContent=role==='core' ? entry?.disposition ? 'Gebruik als bronstuk' : 'Gebruik als kernuitspraak' : 'Voeg toe als '+labels[role].toLowerCase();
-    el('add').disabled=!selected || context && !repairingLink && essentialChoice()===null;
+    el('essential').disabled=!!entry?.disposition || !!repairingLink;
+    el('role').disabled=!!entry?.disposition || !!repairingLink;
+    el('function').disabled=!!repairingLink;
+    const action=target?.kind==='field' ? 'Gebruik voor dit onderdeel' : target?.kind==='semantics' ? 'Gebruik voor '+(target.field==='direction'?'de richting':'de sterkte') : role==='core' ? entry?.disposition ? 'Gebruik als bronstuk' : 'Gebruik als kernuitspraak' : 'Voeg toe als '+labels[role].toLowerCase();
+    el('add').textContent=selected ? target ? action : 'Kies eerst waarvoor je de tekst gebruikt' : task===1 ? hasCore() ? 'Verder naar betekenis' : 'Selecteer tekst in de bron' : 'Naar controleren en afronden';
+    el('add').disabled=finalizing || (selected ? !target || context && !repairingLink && essentialChoice()===null : task===1 && (!hasCore() || !el('type').value));
+    el('add').hidden=task===3;
+    const confirmedReady=entry.status==='ready' && dirty===committed;
+    el('ready').hidden=task!==3 || confirmedReady;
+    el('ready').disabled=finalizing || checking || !checkIsCurrent() || check.findings.length>0;
+    el('new').hidden=task!==3 || !confirmedReady;
+    el('new').disabled=finalizing;
+    el('recheck').disabled=checking || finalizing;
     el('select-block').disabled=!activeBlock;
     el('discard').disabled=!selected;
+    el('target').textContent=target?.kind==='field' ? fieldContract.labels[target.field]+' Wijs de woorden in de bron aan.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
   }
   el('source-input').value = activeBlock?.text || '';
   function renderSourceHighlights() {
@@ -92,10 +208,13 @@ import {bindRange} from '/annotations/binding.mjs';
     el('fields').replaceChildren();
     el('recommendation').hidden=entry.object_type !== 'recommendation';
     el('source-disposition').hidden=!entry.disposition;
-    el('field').closest('details').hidden=!!entry.disposition;
+    el('meaning').hidden=!!entry.disposition;
+    el('context-tools').hidden=!!entry.disposition;
+    el('evidence').hidden=!!entry.disposition;
     el('na').closest('label').hidden=!!entry.disposition;
     for(const option of el('role').options) {
       option.disabled=!!entry.disposition && option.value!=='core';
+      option.hidden=option.value==='core';
       if(option.value==='core') option.text=entry.disposition ? 'Bronstuk' : 'Kernuitspraak';
     }
     if(entry.disposition) {el('role').value='core';el('essential').checked=false;}
@@ -104,11 +223,20 @@ import {bindRange} from '/annotations/binding.mjs';
     el('function').disabled=!!repairingLink;
     el('source-reason').value=entry.disposition?.role ? entry.disposition.role+':'+entry.disposition.reason : '';
     for(const [field,label] of Object.entries(fieldContract.labels)) {
+      if(!relevant.has(field)) continue;
       const evidence=entry.field_evidence?.[field];
-      if(!relevant.has(field) || !evidence?.span && evidence?.missing_reason !== 'not_stated') continue;
       const dt=document.createElement('dt');dt.textContent=label;
-      const dd=document.createElement('dd');dd.textContent=evidence.span ? literal(evidence.span) : 'Niet in de bron genoemd';
-      el('fields').append(dt,dd);
+      const dd=document.createElement('dd'),answer=document.createElement('p'),actions=document.createElement('div');
+      answer.textContent=evidence?.span ? literal(evidence.span) : evidence?.core ? 'De kernuitspraak is hiervoor gekoppeld.' : ({not_stated:'Niet in de bron genoemd',not_applicable:'Niet van toepassing',uncertain:'Nog uitzoeken'})[evidence?.missing_reason] || 'Nog aan te wijzen';
+      const button=document.createElement('button');button.type='button';button.className='btn-secondary';button.textContent=evidence?.span?'Andere tekst aanwijzen':'Tekst aanwijzen';button.dataset.field=field;button.setAttribute('aria-pressed',String(target?.kind==='field' && target.field===field));
+      button.addEventListener('click',()=>{el('field').value=field;chooseTarget({kind:'field',field});});
+      const missing=document.createElement('select');missing.dataset.missingField=field;missing.setAttribute('aria-label','Ontbreekreden: '+label);
+      missing.add(new Option('Ontbreekreden kiezen',''));
+      for(const [value,text] of Object.entries({uncertain:'Nog uitzoeken',not_stated:'Niet in de bron genoemd',not_applicable:'Niet van toepassing'})) missing.add(new Option(text,value));
+      missing.value=evidence?.missing_reason || '';
+      missing.hidden=target?.kind!=='field' || target.field!==field;
+      missing.addEventListener('change',()=>{if(missing.value) {entry.field_evidence[field]={span:null,missing_reason:missing.value};change();renderFields();}});
+      actions.className='annotation-field-actions';actions.append(button,missing);dd.append(answer,actions);el('fields').append(dt,dd);
     }
     const semantics=entry.recommendation_semantics || {};
     el('direction').value=semantics.direction || '';
@@ -116,15 +244,17 @@ import {bindRange} from '/annotations/binding.mjs';
     el('strength').value=semantics.strength || '';
     for(const field of ['direction','strength']) el(field+'-proof').textContent=semantics[field+'_evidence'] ? literal(semantics[field+'_evidence']) :
       field==='strength' && semantics.strength_status==='not_stated' ? 'Sterkte expliciet als niet vermeld vastgelegd.' : 'Nog geen brontekst hiervoor aangewezen.';
-    updateBindingControls();
+    renderSummary();updateBindingControls();
   }
   const status = text => { el('status').textContent = text; };
+  const loadedStatus = () => entry.revision ? entry.status==='ready' ? 'Klaar voor documentcontrole en opgeslagen.' : 'Concept opgeslagen.' : 'Nieuwe annotatie. Nog niets opgeslagen.';
   function load(id) {
     const saved = state.entries.find(e => e.annotation_id === id);
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
     activeBlock=null;el('source-input').value='';el('role').value='core';
@@ -138,11 +268,15 @@ import {bindRange} from '/annotations/binding.mjs';
       el('role').value=selected.role; el('essential').checked=!!repairingLink;
       el('function').value=selected.evidence_function || 'supported_by';
     }
-    dirty = committed = 0;
+    dirty = committed = 0;setEntryUrl(saved?.annotation_id);
     if (el('conflict')) el('conflict').hidden = true;
     el('type').value = entry.disposition ? 'source_disposition' : entry.object_type || '';
     el('na').checked = entry.evidence_not_applicable;
     render();
+    showTask(entry.status==='ready'?3:hasCore()?2:1);
+    if(task===2 && selected && repairingLink) target={kind:'range',role:el('role').value};
+    updateBindingControls();
+    if(task===3) runCheck();
   }
   function entries() {
     el('entry').replaceChildren(new Option('Nieuwe annotatie',''));
@@ -170,7 +304,7 @@ import {bindRange} from '/annotations/binding.mjs';
       const p=document.createElement('p');p.textContent='Essentieel verband ontbreekt: '+labels[link.role];
       const repair=document.createElement('button');repair.type='button';repair.className='btn-secondary';repair.textContent='Dit verband opnieuw aanwijzen';
       repair.addEventListener('click',() => {
-        repairingLink=link.relationship_id;el('role').value=link.role;el('essential').checked=true;
+        showTask(2,true);target={kind:'range',role:link.role};repairingLink=link.relationship_id;el('role').value=link.role;el('essential').checked=true;
         el('function').value=link.evidence_function || 'supported_by';
         if(selected) captureSelection(selected);
         renderFields();status(selected ? 'Voeg de aangewezen tekst toe aan dit essentiële verband.' : 'Wijs de brontekst voor dit essentiële verband aan.');
@@ -190,19 +324,30 @@ import {bindRange} from '/annotations/binding.mjs';
       const p = document.createElement('p');
       p.textContent = labels[a.role] + (a.required_for_meaning ? ' (essentieel)' : '') + ': ' + a.quote;
       const link = document.createElement('a'); link.href = '#' + a.block_id; link.textContent = 'Open in bron';
-      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Bereik verwijderen';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Deze bronkoppeling verwijderen';
       remove.className = 'btn-secondary';
       remove.addEventListener('click',() => {
-        if(a.role==='core') resetFields();
-        else if(a.required_for_meaning) entry.required_links.push({relationship_id:linkId(a),role:a.role,evidence_function:a.evidence_function,required_for_meaning:true,withdrawal_reason:null});
-        entry.ranges.splice(index,1);change();render();
+        const removeRange=()=>{
+          if(a.role==='core') {entry.field_evidence=null;resetFields();}
+          else if(a.required_for_meaning) entry.required_links.push({relationship_id:linkId(a),role:a.role,evidence_function:a.evidence_function,required_for_meaning:true,withdrawal_reason:null});
+          entry.ranges.splice(index,1);
+          // Removing a source connection also removes meaning references that
+          // depended exclusively on that connection. Keep other anchors intact.
+          const contains=(outer,inner)=>outer.block_id===inner.block_id && outer.start<=inner.start && outer.end>=inner.end;
+          for(const [field,evidence] of Object.entries(entry.field_evidence || {}))
+            if(evidence.span && contains(a,evidence.span) && !entry.ranges.some(range=>contains(range,evidence.span)))
+              entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
+          change();render();
+        };
+        if(a.role==='core') confirmChange('Deze kernkoppeling verwijderen? Betekenisvelden moeten daarna opnieuw worden gecontroleerd. Opgebouwde objecten kunnen opnieuw beoordeling nodig hebben.',removeRange);
+        else removeRange();
       });
       li.append(p,link,' ',remove); el('ranges').append(li);
     });
   }
   function change() {
-    entry.status = 'draft'; dirty += 1;
-    status('Niet opgeslagen.'); clearTimeout(timer);
+    cancelConfirmation();entry.status = 'draft'; dirty += 1;check=null;renderSummary();updateBindingControls();
+    status('Wijzigingen nog niet opgeslagen.'); clearTimeout(timer);
     timer = setTimeout(() => { flush().catch(() => {}); },600);
   }
   function requestForCurrent() {
@@ -239,6 +384,10 @@ import {bindRange} from '/annotations/binding.mjs';
               el('conflict-link').href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,annotation:data.conflicting_annotation_id});
               el('conflict').hidden = false;
             }
+            if(['annotation_write_conflict','annotation_objects_stale','annotation_representation_stale','annotation_client_contract_stale'].includes(data.error)) {
+              el('save-conflict').hidden=false;el('local-work').textContent=body.selection.ranges.map(a=>labels[a.role]+': '+a.quote).join('\n\n');
+              el('server-work').href='/annotations?'+new URLSearchParams({document:state.snapshot_id,annotation:entry.annotation_id});
+            }
             if (response.status === 422) { retryRequest = null; }
             const error = new Error(data.message || 'Opslaan mislukt.'); error.validation = response.status === 422; throw error;
           }
@@ -252,9 +401,9 @@ import {bindRange} from '/annotations/binding.mjs';
           const saved = {...clone(entry),...body.selection,revision:data.revision};
           const index = state.entries.findIndex(e => e.annotation_id === entry.annotation_id);
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
-          committed = version; retryRequest = null; entries();
+          committed = version; retryRequest = null;setEntryUrl(entry.annotation_id);entries();
           el('retry').hidden = true;
-          status(data.status === 'ready' ? 'Selectie gereed en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');
+          status(data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderSummary();updateBindingControls();
         } catch (error) {
           failed = !error.validation; el('retry').hidden = false;
           status('Opslaan mislukt. ' + error.message); throw error;
@@ -347,33 +496,51 @@ import {bindRange} from '/annotations/binding.mjs';
     if (!activeBlock) return;
     captureSelection({block_id:activeBlock.block_id,start:0,end:Array.from(activeBlock.text).length,quote:activeBlock.text});
   });
-  el('add').addEventListener('click',() => {
-    if (!selected) { status('Wijs eerst tekst in één bronblok aan.'); return; }
+  function bindSelected() {
+    if(!selected || !target) return;
+    if(target.kind==='field') {
+      const span=consumeSelected();if(!span) return;
+      entry.field_evidence[target.field]={span,missing_reason:null};target=null;change();renderFields();return;
+    }
+    if(target.kind==='semantics') {
+      const span=consumeSelected();if(!span) return;
+      semantics()[target.field+'_evidence']=span;target=null;change();renderFields();return;
+    }
     try {
-      const result=bindRange(entry,selected,{role:el('role').value,essential:essentialChoice(),
-        repairingLink,evidenceFunction:el('function').value},fieldContract);
+      const result=bindRange(entry,selected,{role:el('role').value,essential:essentialChoice(),repairingLink,evidenceFunction:el('function').value},fieldContract);
       entry=result.entry;
       if(el('role').value==='core') resetFields();
-      el('binding-note').textContent=result.fieldBinding==='preserved' ?
-        'Context toegevoegd. Het bestaande betekenisveld is behouden. Controleer bij ‘Betekenis van de uitspraak aanwijzen’ welke tekst daarbij hoort.' :
-        result.fieldBinding==='bound' ? 'Context en betekenisveld zijn samen gekoppeld.' : '';
+      el('binding-note').textContent=result.fieldBinding==='preserved' ? 'Context toegevoegd. Het bestaande betekenisveld is behouden; controleer dat onderdeel.' : result.fieldBinding==='bound' ? 'Context en betekenisveld zijn samen gekoppeld.' : '';
     } catch(error) {status(error.message);return;}
-    repairingLink=null;clearChoice();
-    window.getSelection().removeAllRanges();
-    selected = null; entry.pending_range=null; el('selection').textContent = ''; change(); render();
+    repairingLink=null;clearChoice();window.getSelection().removeAllRanges();
+    selected=null;entry.pending_range=null;el('selection').textContent='';
+    if(task===2) target=null;
+    change();render();
+  }
+  el('add').addEventListener('click',()=>{
+    if(!selected) {if(task===1 && hasCore()) showTask(2,true);else if(task===2) {showTask(3,true);runCheck();}return;}
+    if(target?.kind==='range' && el('role').value==='core' && hasCore())
+      confirmChange('Nog een kernbereik toevoegen? Controleer daarna de betekenisvelden en eventuele gevolgen voor beoordelingen.',bindSelected);
+    else bindSelected();
   });
   el('discard').addEventListener('click',() => { selected=null;repairingLink=null;clearChoice();entry.pending_range=null;el('selection').textContent='';change();renderFields(); });
   for (const id of ['role','essential','additional','function']) el(id).addEventListener('change',() => {
-    if(id==='role') clearChoice();
+    if(id==='role') {target={kind:'range',role:el('role').value};clearChoice();}
     if (selected) captureSelection(selected);
     updateBindingControls();
   });
-  el('type').addEventListener('change',() => {
-    const source=el('type').value==='source_disposition';
-    entry.object_type=source ? null : el('type').value || null;
-    if(source) {entry.disposition={role:null,reason:null};entry.evidence_not_applicable=false;el('na').checked=false;}
-    else delete entry.disposition;
-    resetFields();change();renderFields();
+  el('type').addEventListener('change',()=>{
+    const value=el('type').value, previous=entry.disposition?'source_disposition':entry.object_type || '';
+    const apply=()=>{
+      const source=value==='source_disposition';entry.object_type=source?null:value || null;
+      if(source) {entry.disposition={role:null,reason:null};entry.evidence_not_applicable=false;el('na').checked=false;}
+      else delete entry.disposition;
+      resetFields();change();renderFields();
+    };
+    if(previous && previous!==value && (entry.revision || state.object_bindings?.[entry.annotation_id])) {
+      el('type').value=previous;
+      confirmChange('Het type wijzigen? Controleer de betekenisvelden opnieuw. Opgebouwde objecten kunnen na de wijziging opnieuw beoordeling nodig hebben.',()=>{el('type').value=value;apply();});
+    } else apply();
   });
   el('source-reason').addEventListener('change',() => {
     const parts=el('source-reason').value.split(':');
@@ -388,13 +555,6 @@ import {bindRange} from '/annotations/binding.mjs';
     clearChoice();updateBindingControls();
     return span;
   }
-  el('bind-field').addEventListener('click',() => {
-    const span=consumeSelected();if(!span) return;
-    entry.field_evidence[el('field').value]={span,missing_reason:null};change();renderFields();
-  });
-  el('field-absent').addEventListener('click',() => {
-    entry.field_evidence[el('field').value]={span:null,missing_reason:'not_stated'};change();renderFields();
-  });
   function semantics() {
     return entry.recommendation_semantics ||= {direction:null,direction_evidence:null,strength_status:null,strength:null,strength_evidence:null};
   }
@@ -405,18 +565,24 @@ import {bindRange} from '/annotations/binding.mjs';
     change();renderFields();
   });
   el('strength').addEventListener('change',() => {semantics().strength=el('strength').value || null;change();});
-  for(const field of ['direction','strength']) el(field+'-evidence').addEventListener('click',() => {
-    const span=consumeSelected();if(!span) return;semantics()[field+'_evidence']=span;change();renderFields();
-  });
-  el('na').addEventListener('change',() => { entry.evidence_not_applicable = el('na').checked; change(); });
+  for(const field of ['direction','strength']) el(field+'-evidence').addEventListener('click',()=>chooseTarget({kind:'semantics',field}));
+  el('na').addEventListener('change',() => { entry.evidence_not_applicable = el('na').checked; change();renderSummary(); });
   el('retry').addEventListener('click',() => { failed = false; el('retry').hidden = true; flush().catch(() => {}); });
-  el('ready').addEventListener('click',async () => {
-    try { await flush(); entry.status = 'ready'; dirty += 1; await flush(); } catch (_) { /* Keep original work visible. */ }
+  el('ready').addEventListener('click',async()=>{
+    if(finalizing || !checkIsCurrent() || check.findings.length) return;
+    finalizing=true;el('editor-inputs').disabled=true;
+    try {
+      await flush();
+      await runCheck();
+      if(!checkIsCurrent() || check.findings.length) return;
+      entry.status='ready';dirty+=1;await flush();renderSummary();
+    } catch(_) { /* Preserve current work and the exact uncertain request. */ }
+    finally {finalizing=false;el('editor-inputs').disabled=false;updateBindingControls();}
   });
-  el('withdraw').addEventListener('click',async () => {
-    try { await flush();entry.status='withdrawn';dirty+=1;await flush();load('');entries(); } catch (_) {}
-  });
-  async function switchEntry(id) { await flush(); load(id); entries(); status('Opgeslagen werk geladen.'); }
+  el('withdraw').addEventListener('click',()=>confirmChange('De hele annotatie terugnemen, inclusief alle gekoppelde brontekst? Dit meldt de annotatie niet gereed. De bron moet nog worden verantwoord.',async()=>{
+    try {await flush();entry.status='withdrawn';dirty+=1;await flush();load('');entries();}catch(_){}
+  }));
+  async function switchEntry(id) { await flush(); load(id); entries(); status(loadedStatus()); }
   el('new').addEventListener('click',() => { switchEntry('').catch(() => {}); });
   el('entry').addEventListener('change',() => { switchEntry(el('entry').value).catch(() => {}); });
   el('pause').addEventListener('click',async () => { try { await flush(); window.location.href = '/'; } catch (_) {} });
@@ -425,5 +591,5 @@ import {bindRange} from '/annotations/binding.mjs';
   load(new URLSearchParams(window.location.search).get('annotation')); entries();
   el('editor-inputs').disabled=false;
   el('initializing').hidden=true;
-  status('Opgeslagen werk geladen.');
+  status(loadedStatus());
 })();

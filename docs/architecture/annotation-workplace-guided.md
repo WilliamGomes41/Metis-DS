@@ -1,7 +1,8 @@
 # Architectuur: een begrijpelijke annotatiewerkplek
 
-Status: vastgelegd ontwerp; uitvoering in deelslices. De volledige begeleide
-interface is nog niet geïmplementeerd. Onderzocht op `main`
+Status: vastgelegd ontwerp; uitvoering van de volledige driestappenbediening
+loopt via #1051 / MET-71. De technische implementatie wordt op de werkbranch
+geverifieerd; merge, uitrol en gebruikersacceptatie zijn afzonderlijke stappen. Onderzocht op `main`
 `fdf852841ddac688bab4dc02062b8c3fc82cbd0c` op 10 november 2026.
 
 Doel: een inhoudelijk deskundige medewerker kan brongetrouw annoteren zonder de
@@ -24,7 +25,7 @@ loopt via [#1043](https://github.com/WilliamGomes41/Metis-DS/issues/1043) en
 met het bijbehorende betekenisveld, een expliciete essentialiteitskeuze en
 geen vooraf gekozen eerste passage. Het
 [change contract](../change-contracts/1043-annotation-binding.md) begrenst deze
-slice en het bewijs. De overige begeleide stappen volgen afzonderlijk. Het ontwerp
+slice en het bewijs. De overige begeleide stappen worden als samenhangende gebruikersroute uitgevoerd in #1051 / MET-71. Het ontwerp
 veronderstelt voor de eerste implementatie Class B, stateful, `Rewrite risk:
 none`: dezelfde opgeslagen domeinbetekenis en schrijfgrens blijven bestaan.
 Een wijziging aan gereed-semantiek, bronidentiteit, review-invalidatie of het
