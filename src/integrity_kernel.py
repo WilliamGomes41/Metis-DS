@@ -157,20 +157,6 @@ def verify_source_binary(binary_path: Path, expected_sha256: str | None = None) 
     return result
 
 
-def validate_source_integrity(source: dict[str, Any], verified_sources: dict[str, str] | None = None) -> list[str]:
-    errors: list[str] = []
-    checksum = (source.get("source_checksum") or "").lower()
-    if source.get("integrity_status") != "verified":
-        errors.append("source_integrity_not_verified")
-    if not SHA256_RE.match(checksum):
-        errors.append("source_checksum_not_sha256")
-    if verified_sources is not None:
-        source_id = source.get("source_id")
-        if not source_id or verified_sources.get(source_id) != checksum:
-            errors.append("source_checksum_not_in_verified_registry")
-    return errors
-
-
 def validate_source_fragments(obj: dict[str, Any], raw_objects: dict[str, dict[str, Any]] | None = None) -> list[str]:
     errors: list[str] = []
     refs = (obj.get("provenance") or {}).get("source_fragments") or []

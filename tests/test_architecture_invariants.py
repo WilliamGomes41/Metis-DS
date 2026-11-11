@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+# #1047: existing fail-closed retrieval and canonical-hash checks remain the
+# behavioral evidence when removing an unused integrity helper; no assertion changes.
+# release-control-evidence: kwaliteit
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+
 import json
 from pathlib import Path
 

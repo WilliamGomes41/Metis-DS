@@ -1994,26 +1994,6 @@ def _review_progress_summary(objects: list[dict[str, Any]]) -> dict[str, int]:
 
 
 
-def knowledge_open_count(
-    objects: list[dict[str, Any]],
-    *,
-    review_path: str,
-    bindings: list[dict[str, Any]] | None,
-    reviewer_id: str,
-    fragments=None,
-) -> int | None:
-    """Open ReviewDuties in the contextual and batch lanes; never partition()['knowledge']."""
-    if review_path == "boom":
-        return None
-    from src.review.review_duty_v1 import review_duty_counts, reviewer_route_counts
-    if bindings is None:
-        counts = review_duty_counts(objects, review_path=review_path, bindings=None, fragments=fragments)
-        return int(counts["contextual_review_duties"]) + int(counts["batch_review_duties"])
-    counts = reviewer_route_counts(objects, review_path=review_path, reviewer_id=reviewer_id,
-                                   bindings=bindings, fragments=fragments)
-    return int(counts["actionable_contextual_duties"]) + int(counts["actionable_batch_duties"])
-
-
 def knowledge_progress(objects: list[dict[str, Any]], *, review_path: str) -> dict[str, int] | None:
     """Denominator: current content_reviewable objects; superseded is shown apart."""
     if review_path == "boom":
