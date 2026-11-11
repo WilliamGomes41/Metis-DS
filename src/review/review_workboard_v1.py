@@ -644,8 +644,8 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
         if groups[state]:
             body += '<section data-personal-group="' + state + '"><h2>' + title + '</h2><div class="doc-list">' + ''.join(groups[state]) + '</div></section>'
     if not visible:
-        body += ('<p class="review-empty">Geen documenten gevonden.</p>' if q else
-                 '<p class="review-empty">Geen aan jou toegewezen reviewdocumenten. Nieuw werk verschijnt hier zodra iemand je als reviewer kiest.</p>')
+        body += ('<p class="review-empty" data-personal-empty>Geen documenten gevonden.</p>' if q else
+                 '<p class="review-empty" data-personal-empty>Geen aan jou toegewezen reviewdocumenten. Nieuw werk verschijnt hier zodra iemand je als reviewer kiest.</p>')
     return _page(_nav(account, 'review') + '<section class="room review-room"><h1>Review</h1>' +
                  console_ui._task_links('review') + controls + body + '</section>', title='Review — Metis')
 

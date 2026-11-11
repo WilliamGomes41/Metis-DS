@@ -34,6 +34,7 @@ def test_empty_screens_name_the_next_step(production_console, production_app) ->
     assert "Een ingeleverd document verschijnt hier; publiceren kan zodra de review is afgerond." in publish
     review = client.get("/review").text
     assert review.count('class="review-empty"') == 1
+    assert review.count('data-personal-empty') == 1
     assert "Geen aan jou toegewezen reviewdocumenten." in review
     assert "geen uitvoerbare beoordelingen" not in review
 
