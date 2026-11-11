@@ -222,6 +222,10 @@
     {
       "github_issue": 1051,
       "linear_issue": "MET-71"
+    },
+    {
+      "github_issue": 1053,
+      "linear_issue": "MET-72"
     }
   ]
 }

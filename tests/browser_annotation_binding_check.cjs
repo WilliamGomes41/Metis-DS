@@ -48,7 +48,7 @@ const assert=require('node:assert/strict');
   assert.equal(await type.inputValue(),'source_disposition','type choice accepted before initialization was lost');
   assert.equal(await page.locator('#annotation-source-reason').isVisible(),true);
   await tasks.type(page,'');
-  const initialSource=await page.locator('#annotation-source-input').inputValue();
+  const initialSelection=await page.locator('#annotation-selection').innerText();
   assert.equal(await page.locator('#annotation-add').isDisabled(),true);
   await page.locator('[data-source-block]').filter({hasText:'Beoordeel de huid.'}).click();
   await page.locator('#annotation-select-block').click();
@@ -69,7 +69,7 @@ const assert=require('node:assert/strict');
   // One add must persist the context AND its meaning field without another selection.
   assert.deepEqual(entry.field_evidence.condition_span.span,anchor,'context binding did not bind its meaning field');
   assert.ok(entry.ranges.some(r=>r.role==='condition'&&r.required_for_meaning&&r.block_id===blockId));
-  assert.equal(initialSource,'','opening the editor must not preselect the document title');
+  assert.equal(initialSelection,'','opening the editor must not preselect the document title');
   assert.equal(entry.pending_range,null);
   const annotation=entry.annotation_id;
   await page.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));

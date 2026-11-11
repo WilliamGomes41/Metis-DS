@@ -46,7 +46,7 @@ const assert = require('node:assert/strict');
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
   await page.locator('[data-source-block]').first().waitFor();
   assert.equal(await page.locator('.annotation-document').count(),1);
-  assert.equal(await page.locator('#annotation-source-input').count(),1);
+  assert.equal(await page.locator('#annotation-source-input,.annotation-selection-help').count(),0);
   assert.equal(await page.locator('#annotation-select-block').count(),1);
   assert.equal(await page.locator('.annotation-document-heading').first().innerText(),'Advies');
   const block = page.locator('[data-source-block]').filter({hasText:'Controleer'});
@@ -64,14 +64,11 @@ const assert = require('node:assert/strict');
   await tasks.step(page,2);
   assert.equal(await page.locator('#annotation-field option[value=defined_term]').count(),0);
   await tasks.field(page,'recommended_action');
-  const coreInput=page.locator('#annotation-source-input');
-  await coreInput.evaluate(input => {
-    input.setSelectionRange(0,'Controleer'.length);input.dispatchEvent(new Event('select'));
-  });
+  await tasks.selectText(page,block,'Controleer');
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-recommendation summary').click();
   await page.locator('#annotation-direction').selectOption('for');
-  await coreInput.evaluate(input => {input.setSelectionRange(0,10);input.dispatchEvent(new Event('select'));});
+  await tasks.selectText(page,block,'Controleer');
   await page.locator('#annotation-direction-evidence').click();await page.locator('#annotation-add').click();
   await page.locator('#annotation-strength-status').selectOption('not_stated');
   assert.equal(await page.locator('#annotation-direction-proof').innerText(),'Controleer');
@@ -123,7 +120,7 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-select-block').click();await page.locator('#annotation-add').click();
   for(const [field,text] of [['subject_span','Onderzoek'],['predicate_span','beschrijft'],['supported_object','de bevinding']]) {
     await tasks.field(page,field);
-    await page.locator('#annotation-source-input').evaluate((node,text)=>{const start=node.value.indexOf(text);node.setSelectionRange(start,start+text.length);node.dispatchEvent(new Event('select'));},text);
+    await tasks.selectText(page,page.locator('[data-source-block]').filter({hasText:'Onderzoek beschrijft de bevinding.'}),text);
     await page.locator('#annotation-add').click();
   }
   // Removing essential context leaves a durable duty; ready cannot conceal it.
@@ -192,8 +189,8 @@ const assert = require('node:assert/strict');
   await tasks.step(page,2);
   // Keyboard/touch alternative retains the same source-reference contract.
   await page.locator('[data-source-block]').filter({hasText:'Gelijke tekst.'}).first().click();
-  await page.locator('.annotation-selection-help summary').click();
-  const input=page.locator('#annotation-source-input');await input.focus();await page.keyboard.press('Control+Home');
+  await page.locator('[data-source-block]').filter({hasText:'Gelijke tekst.'}).first().focus();
+  await page.keyboard.press('Control+Home');
   await page.keyboard.down('Shift');for(let i=0;i<7;i++)await page.keyboard.press('ArrowRight');await page.keyboard.up('Shift');
   await page.waitForFunction(() => document.getElementById('annotation-selection').textContent.includes('Gelijke'));
   await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Concept opgeslagen.');

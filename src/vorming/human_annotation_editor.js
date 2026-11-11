@@ -123,7 +123,6 @@ import {bindRange} from '/annotations/binding.mjs';
   function activateBlock(block) {
     if (!block || activeBlock?.block_id === block.block_id) return;
     activeBlock = block;
-    el('source-input').value = block.text;
     updateBindingControls();
   }
   function essentialChoice() {
@@ -152,7 +151,6 @@ import {bindRange} from '/annotations/binding.mjs';
     el('discard').disabled=!selected;
     el('target').textContent=target?.kind==='field' ? fieldContract.labels[target.field]+' Wijs de woorden in de bron aan.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
   }
-  el('source-input').value = activeBlock?.text || '';
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -257,7 +255,7 @@ import {bindRange} from '/annotations/binding.mjs';
     check=null;target=null;confirmation=null;el('confirm').hidden=true;
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
-    activeBlock=null;el('source-input').value='';el('role').value='core';
+    activeBlock=null;el('role').value='core';
     if (selected) {
       activateBlock(state.blocks.find(b => b.block_id === selected.block_id));
       el('to-source').href='#'+selected.block_id;
@@ -426,7 +424,7 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   function rememberSelection(event) {
     // Sidebar clicks must never replace an explicitly chosen block with the
-    // browser's older, still-visible selection. Textareas own their select event.
+    // browser's older, still-visible selection.
     if (event.type==='mouseup' || event.type==='touchend') {
       const started=selectingFromSource; selectingFromSource=false;
       if (!started) return;
@@ -451,6 +449,7 @@ import {bindRange} from '/annotations/binding.mjs';
   for (const node of sourceElements.values()) {
     node.addEventListener('focus',() => activateBlock(state.blocks.find(b => b.block_id === node.dataset.sourceBlock)));
     node.addEventListener('click',() => activateBlock(state.blocks.find(b => b.block_id === node.dataset.sourceBlock)));
+    node.addEventListener('keydown',event => moveSourceSelection(event,node));
   }
   function revealSource(target) {
     const node = document.getElementById(target);
@@ -467,30 +466,36 @@ import {bindRange} from '/annotations/binding.mjs';
   });
   window.addEventListener('hashchange',() => revealSource(decodeURIComponent(location.hash.slice(1))));
   if (location.hash) revealSource(decodeURIComponent(location.hash.slice(1)));
-  for (const input of [el('source-input')]) {
-    // Chromium does not move the caret with arrows in readonly textareas.
-    // Keep the source readonly and provide selection-only keyboard movement.
-    input.addEventListener('keydown',event => {
-      if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-      event.preventDefault();
-      const backwards=input.selectionDirection==='backward';
-      const anchor=backwards ? input.selectionEnd : input.selectionStart;
-      const focus=backwards ? input.selectionStart : input.selectionEnd;
-      const boundaries=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(input.value)].map(s=>s.index);
-      boundaries.push(input.value.length);
-      let next;
-      if (event.key==='Home') next=0;
-      else if (event.key==='End') next=input.value.length;
-      else if (!event.shiftKey && input.selectionStart!==input.selectionEnd) next=event.key==='ArrowLeft'?input.selectionStart:input.selectionEnd;
-      else next=event.key==='ArrowLeft' ? boundaries.filter(n=>n<focus).at(-1) ?? 0 : boundaries.find(n=>n>focus) ?? input.value.length;
-      input.setSelectionRange(event.shiftKey?Math.min(anchor,next):next,event.shiftKey?Math.max(anchor,next):next,next<anchor?'backward':'forward');
-    });
-    input.addEventListener('select',() => {
-      if (input.selectionStart === input.selectionEnd) return;
-      if (!activeBlock) return;
-      captureSelection({block_id:activeBlock.block_id,start:Array.from(input.value.slice(0,input.selectionStart)).length,
-        end:Array.from(input.value.slice(0,input.selectionEnd)).length,quote:input.value.slice(input.selectionStart,input.selectionEnd)});
-    });
+  function moveSourceSelection(event,node) {
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key) || event.altKey || event.metaKey || event.ctrlKey && !['Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    const selection=window.getSelection(),text=node.textContent;
+    const inside=node.contains(selection.anchorNode) && node.contains(selection.focusNode);
+    const offset=(container,position)=>{
+      const prefix=document.createRange();prefix.selectNodeContents(node);prefix.setEnd(container,position);
+      return prefix.toString().length;
+    };
+    const anchor=inside?offset(selection.anchorNode,selection.anchorOffset):0;
+    const focus=inside?offset(selection.focusNode,selection.focusOffset):0;
+    const boundaries=[...new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text)].map(part=>part.index);
+    boundaries.push(text.length);
+    let next;
+    if(event.key==='Home') next=0;
+    else if(event.key==='End') next=text.length;
+    else if(!event.shiftKey && anchor!==focus) next=event.key==='ArrowLeft'?Math.min(anchor,focus):Math.max(anchor,focus);
+    else next=event.key==='ArrowLeft'?boundaries.filter(n=>n<focus).at(-1)??0:boundaries.find(n=>n>focus)??text.length;
+    const point=position=>{
+      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);let child,last;
+      while((child=walker.nextNode())) {
+        if(position<=child.length) return [child,position];
+        position-=child.length;last=child;
+      }
+      return last?[last,last.length]:[node,0];
+    };
+    const start=point(event.shiftKey?anchor:next),end=point(next);
+    selection.setBaseAndExtent(start[0],start[1],end[0],end[1]);
+    // The existing keyup handler captures exact source codepoint offsets;
+    // source text and the save/receipt owner remain unchanged.
   }
   el('select-block').addEventListener('click',() => {
     if (!activeBlock) return;
