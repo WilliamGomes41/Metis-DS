@@ -179,6 +179,33 @@ _ABSENT_FIELD_CODES = {
     "predicate_span": "predicate_missing",
 }
 
+# #1060: a human annotator marks the statement, the text that belongs to it and
+# the evidence. Sentence parts and type parts are derived help for the reviewer;
+# for human-origin candidates their absence is recorded as a signal and no
+# longer blocks. Source fidelity, type, recommendation direction/strength and
+# unresolved necessary context are deliberately absent from this set.
+HUMAN_SIGNAL_CODES = frozenset({
+    *_ABSENT_FIELD_CODES.values(), "recommendation_subject_missing",
+    "type_contract_incomplete",
+    "recommendation_recommended_action_missing", "recommendation_action_object_or_goal_missing",
+    *(code for _kind, _field, code, _independent in _TARGET_EXTRAS),
+    "annotation_relation_target_missing",
+    "incomplete_sentence", "no_independent_claim", "recommendation_core_incomplete",
+})
+# type_contract_incomplete also accompanies a non-literal field; then it blocks.
+_FIDELITY_CODES = frozenset({"span_not_in_source", "source_fidelity_failure"})
+
+
+def split_human_signals(codes):
+    """Return (blocking, signals) for one human-origin candidate or annotation."""
+    codes = list(dict.fromkeys(codes))
+    if _FIDELITY_CODES & set(codes):
+        signal_codes = HUMAN_SIGNAL_CODES - {"type_contract_incomplete"}
+    else:
+        signal_codes = HUMAN_SIGNAL_CODES
+    return ([code for code in codes if code not in signal_codes],
+            [code for code in codes if code in signal_codes])
+
 
 def serving_type_for_admission_type(proposed_type: str) -> str:
     if proposed_type == "factual_finding":
@@ -771,6 +798,10 @@ def admit_candidate(
     if object_revision is not None and source_fragments is not None and realization["source_integrity"] != "verified":
         codes.append("source_fidelity_failure")
     unique = _unique_reason_codes(codes, scan_done=bool(row.get("context_scan_done")))
+    if row.get('field_formation_mode') == HUMAN_MODE:
+        unique, signals = split_human_signals(unique)
+        if signals:  # absent when empty: an existing admitted record recomputes identically
+            row["signals"] = signals
     row["reason_codes"] = unique
     row["gate_result"] = (GATE_ALLOWED, GATE_BLOCKED)[bool(unique)]
     return row

@@ -82,6 +82,24 @@ FINDINGS = {**ERRORS,
 }
 
 
+# #1060: what Metis could not derive. A question for a human, never a blocker.
+SIGNALS = {
+    'subject_missing':'Niet vastgesteld over wie of wat de uitspraak gaat.',
+    'recommendation_subject_missing':'Niet vastgesteld over wie of wat de aanbeveling gaat.',
+    'predicate_missing':'Niet vastgesteld wat erover gezegd wordt.',
+    'type_contract_incomplete':'Een onderdeel dat bij dit type hoort is niet vastgesteld.',
+    'recommendation_recommended_action_missing':'De aanbevolen handeling is niet vastgesteld.',
+    'recommendation_action_object_or_goal_missing':'Niet vastgesteld waarop de handeling gericht is.',
+    'supported_object_missing':'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?',
+    'condition_target_missing':'Niet vastgesteld waarvoor deze voorwaarde geldt. Hoort er een zin bij?',
+    'exception_target_missing':'Niet vastgesteld waarop dit een uitzondering is. Hoort er een zin bij?',
+    'annotation_relation_target_missing':'Niet vastgesteld bij welke uitspraak dit hoort. Hoort er een zin bij?',
+    'incomplete_sentence':'De uitspraak lijkt een afgebroken zin. Is de hele zin geselecteerd?',
+    'no_independent_claim':'De uitspraak staat mogelijk niet op zichzelf. Hoort er een zin bij?',
+    'recommendation_core_incomplete':'De aanbeveling lijkt afgebroken. Is de hele zin geselecteerd?',
+}
+
+
 CHECK_FIELDS = {'subject_missing':'subject_span','recommendation_subject_missing':'subject_span',
     'predicate_missing':'predicate_span','supported_object_missing':'supported_object',
     'condition_target_missing':'condition_target','exception_target_missing':'exception_target',
@@ -272,6 +290,14 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                         body += ' · <a href="'+esc(back+'&annotation='+related)+'">Andere annotatie met dezelfde kern</a>'
                     body += '</li>'
                 body += '</ul></section>'
+            noted = [entry for entry in inspection['entries'] if entry.get('signals')]
+            if noted:
+                # #1060: information for worker and reviewer; never a reason to refuse sealing.
+                body += '<section aria-labelledby="annotation-signals"><h2 id="annotation-signals">Niet vastgesteld door Metis</h2><p>Dit houdt afsluiten niet tegen.</p><ul>'
+                for entry in noted:
+                    body += '<li>'+esc(' '.join(dict.fromkeys(SIGNALS.get(code, 'Een onderdeel is niet vastgesteld.') for code in entry['signals'])))
+                    body += ' <a href="'+esc(back+'&annotation='+entry['annotation_id'])+'">Annotatie bekijken</a></li>'
+                body += '</ul></section>'
             if inspection['unaccounted_ranges']:
                 body += '<section aria-labelledby="annotation-gaps"><h2 id="annotation-gaps">Nog niet verantwoord bronmateriaal</h2><ul>'
                 for gap in inspection['unaccounted_ranges']:
@@ -372,7 +398,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 .annotation-workplace aside{align-self:start;position:sticky;top:1rem;max-height:90vh;overflow:auto;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;padding:1.25rem}.annotation-workplace aside h2{color:var(--paars)}.annotation-workplace label{display:block;margin-top:1rem}.annotation-workplace select{max-width:100%}.annotation-workplace .btn-secondary{min-height:2.75rem;white-space:normal}.annotation-workplace li{overflow-wrap:anywhere;margin-block:1rem}.annotation-workplace .actions{display:flex;flex-wrap:wrap;gap:.75rem}.annotation-workplace [hidden]{display:none!important}.annotation-workplace ::selection{background:var(--water-soft)}#annotation-controls{scroll-margin-top:6rem}.annotation-mobile-nav{display:none}
 @media(max-width:800px){.annotation-mobile-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin-block:1rem;background:var(--wit);padding:.75rem;border:1px solid var(--line);border-radius:12px}.annotation-workplace{grid-template-columns:1fr}.annotation-document{max-height:65vh}.annotation-page{padding:1.25rem}.annotation-workplace aside{position:static;max-height:none}}
 .annotation-steps ol{display:flex;gap:.25rem;list-style:none;padding:0;margin:0 0 1rem}.annotation-steps li{flex:1;margin:0}.annotation-steps button{width:100%;min-height:3.5rem;padding:.5rem;border:0;border-bottom:2px solid var(--line);background:transparent;color:var(--muted);text-align:left;font:inherit;font-size:.85rem;line-height:1.35;cursor:pointer}.annotation-steps button[aria-current]{border-color:var(--paars);color:var(--paars);font-weight:700}
-#annotation-controls h2{font-size:1.3rem;margin:0 0 1rem}#annotation-controls h3{font-size:1.1rem;line-height:1.4;margin:1.5rem 0 .5rem}#annotation-controls p{line-height:1.5;overflow-wrap:anywhere}#annotation-status{margin:.75rem 0;color:var(--muted);font-size:.9rem;min-height:1.5em}#annotation-core-summary{font-weight:600}#annotation-controls details{margin-block:1rem}#annotation-controls summary{cursor:pointer;min-height:2.75rem;display:list-item;align-content:center}#annotation-fields dt{font-weight:600;margin-top:1.25rem}#annotation-fields dd{margin:.35rem 0 1rem}#annotation-fields dd p{margin:.35rem 0}.annotation-field-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-field-actions select{font-size:1rem}#annotation-target{font-weight:600}#annotation-selection{max-height:10rem;overflow:auto;background:var(--water-soft);padding:.5rem}#annotation-selection:empty{display:none}.annotation-selection-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-task-actions{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.5rem;background:var(--wit);padding-block:1rem;border-top:1px solid var(--line);z-index:2}.annotation-task-actions .btn-primary{flex:1;min-height:2.75rem;white-space:normal}.annotation-task-actions .btn-secondary{flex:0 1 auto}#annotation-check li{margin-block:.5rem}#annotation-review-summary dd,#annotation-empty-fields dd{margin:.25rem 0 1rem;overflow-wrap:anywhere}#annotation-review-summary dt,#annotation-empty-fields dt{font-weight:600}.annotation-row-action{display:inline-block;padding:0 .25rem;border:0;background:none;color:var(--paars);font:inherit;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}.annotation-row-action:focus-visible{outline:2px solid var(--paars);outline-offset:2px}.annotation-open{margin:.35rem 0 .5rem!important;font-weight:600}@media(pointer:coarse){.annotation-row-action{min-height:2.75rem}}#annotation-controls dd[data-open]{padding:.75rem;background:var(--water-soft);border-radius:8px}#annotation-local-work{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}#annotation-controls button{touch-action:manipulation}#annotation-controls button:focus-visible,#annotation-controls summary:focus-visible{outline:2px solid var(--paars);outline-offset:3px}#annotation-controls button:active{opacity:.8}
+#annotation-controls h2{font-size:1.3rem;margin:0 0 1rem}#annotation-controls h3{font-size:1.1rem;line-height:1.4;margin:1.5rem 0 .5rem}#annotation-controls p{line-height:1.5;overflow-wrap:anywhere}#annotation-status{margin:.75rem 0;color:var(--muted);font-size:.9rem;min-height:1.5em}#annotation-core-summary{font-weight:600}#annotation-controls details{margin-block:1rem}#annotation-controls summary{cursor:pointer;min-height:2.75rem;display:list-item;align-content:center}#annotation-fields dt{font-weight:600;margin-top:1.25rem}#annotation-fields dd{margin:.35rem 0 1rem}#annotation-fields dd p{margin:.35rem 0}.annotation-field-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-field-actions select{font-size:1rem}#annotation-target{font-weight:600}#annotation-selection{max-height:10rem;overflow:auto;background:var(--water-soft);padding:.5rem}#annotation-selection:empty{display:none}.annotation-selection-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-task-actions{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.5rem;background:var(--wit);padding-block:1rem;border-top:1px solid var(--line);z-index:2}.annotation-task-actions .btn-primary{flex:1;min-height:2.75rem;white-space:normal}.annotation-task-actions .btn-secondary{flex:0 1 auto}#annotation-check li{margin-block:.5rem}#annotation-review-summary dd,#annotation-empty-fields dd{margin:.25rem 0 1rem;overflow-wrap:anywhere}#annotation-review-summary dt,#annotation-empty-fields dt{font-weight:600}.annotation-row-action{display:inline-block;padding:0 .25rem;border:0;background:none;color:var(--paars);font:inherit;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}.annotation-row-action:focus-visible{outline:2px solid var(--paars);outline-offset:2px}.annotation-open{margin:.35rem 0 .5rem!important;font-weight:600}.annotation-signal,.annotation-signals{margin:.35rem 0 .5rem!important;color:var(--muted);font-size:.9rem}.annotation-signals{padding-left:1.1rem}@media(pointer:coarse){.annotation-row-action{min-height:2.75rem}}#annotation-controls dd[data-open]{padding:.75rem;background:var(--water-soft);border-radius:8px}#annotation-local-work{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}#annotation-controls button{touch-action:manipulation}#annotation-controls button:focus-visible,#annotation-controls summary:focus-visible{outline:2px solid var(--paars);outline-offset:3px}#annotation-controls button:active{opacity:.8}
 @media(max-width:800px){.annotation-task-actions{padding-bottom:max(1rem,env(safe-area-inset-bottom))}.annotation-steps button{font-size:.8rem}#annotation-controls select{font-size:1rem}.annotation-document{max-height:60dvh}}
 </style>'''
         return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>'+css,title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
@@ -501,6 +527,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 status_code=status, headers={'Cache-Control':'no-store'})
         result['findings'] = [{'code':code,'field':CHECK_FIELDS.get(code),'message':FINDINGS.get(code,
             'Controleer de betekenisvelden en de bijbehorende bronselectie.')} for code in result.pop('codes')]
+        result['signals'] = [{'code':code,'field':CHECK_FIELDS.get(code),'message':SIGNALS.get(code,
+            'Metis kon een onderdeel van deze uitspraak niet vaststellen.')} for code in result.pop('signals')]
         return JSONResponse(result, headers={'Cache-Control':'no-store'})
 
     @app.post('/annotations/suggest')

@@ -20,12 +20,16 @@ def _span(anchor):
     return {key: anchor[key] for key in ('block_id', 'start', 'end')}
 
 
-def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None):
+def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, signals=None):
     """The same per-entry inspection for document sealing and the editor.
 
     Draft preflight omits only the workflow-status finding. Readiness validation
     is reused without saving or inferring missing answers. Cross-entry identity
     and document coverage remain exclusively in inspect_document.
+
+    Returns the blocking codes. Missing sentence/type parts are signals under
+    the admission owner's single policy; pass a list as ``signals`` to receive
+    them. They never block readiness, sealing or admission.
     """
     payload = entry['payload']
     if stable_hash(payload) != entry['payload_hash']:
@@ -93,7 +97,11 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None):
                 codes.append(str(error))
         elif not core:
             codes.append('annotation_core_required')
-    return list(dict.fromkeys(codes))
+    from src.vorming.admission_gate_v1 import split_human_signals
+    blocking, found = split_human_signals(codes)
+    if signals is not None:
+        signals.extend(found)
+    return blocking
 
 
 def inspect_document(entries, *, fragments):
@@ -120,7 +128,8 @@ def inspect_document(entries, *, fragments):
             raise ValueError('annotation_integrity_failed')
         seen.add(annotation_id)
         payload = entry['payload']
-        codes = inspect_annotation(entry, fragments=fragments, blocks=blocks)
+        signals = []
+        codes = inspect_annotation(entry, fragments=fragments, blocks=blocks, signals=signals)
         if payload['status'] == 'withdrawn':
             checked.append({'annotation_id': annotation_id, 'revision': entry['revision'], 'codes': []})
             continue
@@ -134,7 +143,8 @@ def inspect_document(entries, *, fragments):
         elif disposition is not None and payload['status'] == 'ready':
             assessments.extend({'span': span, **disposition} for span in core)
         codes = list(dict.fromkeys(codes))
-        checked.append({'annotation_id': annotation_id, 'revision': entry['revision'], 'codes': codes})
+        checked.append({'annotation_id': annotation_id, 'revision': entry['revision'], 'codes': codes,
+                        **({'signals': signals} if signals else {})})
         for code in codes:
             finding = {'annotation_id': annotation_id, 'code': code}
             if code == 'annotation_core_duplicate':

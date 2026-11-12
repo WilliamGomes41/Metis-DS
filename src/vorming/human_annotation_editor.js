@@ -82,11 +82,14 @@ import {bindRange} from '/annotations/binding.mjs';
     // A finding belongs to one row only: the first row that claims it.
     const take=test=>{const found=findings.filter(f=>!used.has(f) && test(f));for(const f of found) used.add(f);return found[0];};
     el('review-summary').replaceChildren();el('empty-fields').replaceChildren();
-    const row=(key,label,text,{open='',span=null,act,parent=el('review-summary')}={})=>{
+    // #1060: a signal is what Metis could not derive. It informs and never blocks.
+    const signals=current ? check.signals || [] : [], shown=new Set();
+    const row=(key,label,text,{open='',note='',span=null,act,parent=el('review-summary')}={})=>{
       const dt=document.createElement('dt'),dd=document.createElement('dd'),value=document.createElement('span');
       dt.textContent=label;value.textContent=text;dd.dataset.row=key;dd.append(value);
       if(span) {const link=document.createElement('a');link.href='#'+span.block_id;link.textContent='Bekijk in bron';dd.append(' ',link);}
       if(open) {const p=document.createElement('p');p.className='annotation-open';p.textContent=open;dd.dataset.open='true';dd.append(p);}
+      else if(note) {const p=document.createElement('p');p.className='annotation-signal';p.textContent=note;dd.dataset.signal='true';dd.append(p);}
       {
         const button=document.createElement('button');button.type='button';
         button.className=open ? 'btn-secondary' : 'annotation-row-action';
@@ -108,8 +111,9 @@ import {bindRange} from '/annotations/binding.mjs';
         if(!e || e.core) continue;
         const finding=take(f=>f.field===field),point=pointFor(field);
         const open=point ? reason(point) : finding ? finding.message : '';
+        const signal=signals.find(item=>item.field===field);if(signal) shown.add(signal);
         row(field,option.textContent,e.span ? literal(e.span) : missingText[e.missing_reason] || 'Nog niet aangewezen',
-          {open,act:()=>repairFinding({code:finding?.code || 'open_point',field}),parent:e.span || open ? el('review-summary') : el('empty-fields')});
+          {open,note:signal?.message || '',act:()=>repairFinding({code:finding?.code || 'open_point',field}),parent:e.span || open || signal ? el('review-summary') : el('empty-fields')});
       }
       if(entry.object_type==='recommendation') {
         const semantics=entry.recommendation_semantics || {},finding=take(f=>semanticCode(f.code));
@@ -127,7 +131,7 @@ import {bindRange} from '/annotations/binding.mjs';
     el('check').replaceChildren();
     const p=document.createElement('p');
     p.textContent=checking ? 'Controleren…' : confirmedReady ? 'Klaar voor documentcontrole. Dit is geen inhoudelijke goedkeuring of publicatie.' :
-      !current ? 'Nog niet gecontroleerd.' : findings.length ? (findings.length===1 ? 'Nog 1 controlepunt open.' : 'Nog '+findings.length+' controlepunten open.') : 'Klopt dit? Rond dan af.';
+      !current ? 'Nog niet gecontroleerd.' : findings.length ? (findings.length===1 ? 'Nog 1 controlepunt open.' : 'Nog '+findings.length+' controlepunten open.') : signals.length ? 'Je kunt afronden. Metis kon niet alles vaststellen.' : 'Alles is ingevuld. Je kunt afronden.';
     el('check').append(p);
     const rest=findings.filter(f=>!used.has(f));
     if(rest.length) {
@@ -137,6 +141,12 @@ import {bindRange} from '/annotations/binding.mjs';
         button.type='button';button.className='btn-secondary';button.textContent=finding.message+' Aanvullen';
         button.addEventListener('click',()=>repairFinding(finding));li.append(button);list.append(li);
       }
+      el('check').append(list);
+    }
+    const loose=signals.filter(item=>!shown.has(item));
+    if(loose.length && !entry.disposition) {
+      const list=document.createElement('ul');list.className='annotation-signals';
+      for(const message of new Set(loose.map(item=>item.message))) {const li=document.createElement('li');li.textContent=message;list.append(li);}
       el('check').append(list);
     }
     el('recheck').hidden=checking || current || confirmedReady;
