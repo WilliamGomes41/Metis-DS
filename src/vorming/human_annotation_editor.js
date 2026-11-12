@@ -12,6 +12,21 @@ import {bindRange} from '/annotations/binding.mjs';
   const clone = value => JSON.parse(JSON.stringify(value));
   const fieldContract = state.field_contract;
   let repairingLink=null, task=1, target=null, check=null, checking=false, finalizing=false, confirmation=null;
+  // Presentation only: why the last proposal left something open, and which
+  // part of the manual form answers the point the user opened. Never saved.
+  let openPoints=[], only=null;
+  const openField = field => {const e=entry.field_evidence?.[field];return !!e && !e.core && !e.span && e.missing_reason==='uncertain';};
+  const pointFor = field => openPoints.find(point=>point.field===field && openField(field));
+  function question(point) {
+    const label=fieldContract.labels[point.field];
+    return label+' '+(point.reason==='quote_ambiguous' ? 'De tekst “'+point.quote+'” komt meer dan eens voor in je selectie. Wijs de bedoelde plaats aan.' :
+      point.reason==='quote_not_in_selection' ? 'Metis vond hiervoor geen letterlijke tekst in je selectie. Wijs de tekst aan of kies waarom die ontbreekt.' :
+      'Metis is hier niet zeker van. Wijs de tekst aan of kies waarom die ontbreekt.');
+  }
+  function answerPoint(field) {
+    openPoints=openPoints.filter(point=>point.field!==field);
+    if(only) {showTask(3,true);runCheck();}
+  }
   const hasCore = () => entry.ranges.some(a => a.role==='core');
   const checkIsCurrent = () => check && dirty===committed && check.annotation_id===entry.annotation_id &&
     check.revision===entry.revision && check.basis.snapshot_id===state.snapshot_id &&
@@ -42,8 +57,9 @@ import {bindRange} from '/annotations/binding.mjs';
     for(const button of el('fields').querySelectorAll('button[data-field]')) button.setAttribute('aria-pressed',String(value.kind==='field' && button.dataset.field===value.field));
     updateBindingControls();
   }
-  function showTask(value, focus=false) {
+  function showTask(value, focus=false, part=null) {
     cancelConfirmation();task=value;
+    const partChanged=only!==part;only=part;
     for(let n=1;n<=3;n++) {
       el('task-'+n).hidden=n!==task;
       if(n===task) el('step-'+n).setAttribute('aria-current','step');else el('step-'+n).removeAttribute('aria-current');
@@ -53,8 +69,8 @@ import {bindRange} from '/annotations/binding.mjs';
     el('selection-tools').hidden=task===3;
     el('linked').hidden=task===3;
     el('back').hidden=task===1;
+    if(partChanged) renderFields();else {renderSummary();updateBindingControls();}
     if(focus) el('heading-'+task).focus();
-    renderSummary();updateBindingControls();
   }
   function renderSummary() {
     el('type-summary').textContent=entry.object_type ? el('type').selectedOptions[0]?.textContent : 'Nog niet vastgesteld';
@@ -76,23 +92,36 @@ import {bindRange} from '/annotations/binding.mjs';
     row('Onderbouwing',el('evidence-summary').textContent);
     if(checkIsCurrent()) {
       el('check').replaceChildren();
-      const p=document.createElement('p');p.textContent=check.findings.length ? 'Er zijn nog controlepunten. Vul ze aan en controleer opnieuw.' : entry.status==='ready' ? 'Klaar voor documentcontrole. Dit is geen inhoudelijke goedkeuring of publicatie.' : 'Geen open controlepunten voor deze annotatie. Bevestig hieronder dat je klaar bent.';el('check').append(p);
+      const relevant=new Set([...el('field').options].map(option=>option.value));
+      const extra=entry.disposition ? [] : openPoints.filter(point=>point.field && relevant.has(point.field) && pointFor(point.field)===point && !check.findings.some(finding=>finding.field===point.field));
+      const p=document.createElement('p');p.textContent=check.findings.length ? 'Deze controlepunten hebben nog een antwoord van jou nodig. Daarna kun je afronden.' : entry.status==='ready' ? 'Klaar voor documentcontrole. Dit is geen inhoudelijke goedkeuring of publicatie.' : extra.length ? 'Je kunt afronden. Metis liet deze onderdelen open; beantwoord ze als de bron er iets over zegt.' : 'Geen open controlepunten voor deze annotatie. Bevestig hieronder dat je klaar bent.';el('check').append(p);
       const list=document.createElement('ul');
-      for(const finding of check.findings) {
+      const item=(text,action)=>{
         const li=document.createElement('li'),button=document.createElement('button');
-        button.type='button';button.className='btn-secondary';button.textContent=finding.message+' Aanvullen';
-        button.addEventListener('click',()=>repairFinding(finding));li.append(button);list.append(li);
+        button.type='button';button.className='btn-secondary';button.textContent=text;
+        button.addEventListener('click',action);li.append(button);list.append(li);
+      };
+      for(const finding of check.findings) {
+        const point=finding.field && pointFor(finding.field);
+        const typeOpen=finding.code==='annotation_core_required' && hasCore() && !entry.object_type && !entry.disposition;
+        item(point ? question(point) : typeOpen ? (openPoints.some(p=>p.reason==='type_unclear') ? 'Metis kon het type niet bepalen. ' : '')+'Welk type uitspraak is dit? Kies het type.' : finding.message+' Aanvullen',()=>repairFinding(finding));
       }
+      if(entry.status!=='ready') for(const point of extra) item(question(point),()=>repairFinding({code:'open_point',field:point.field}));
       el('check').append(list);
     } else el('check').textContent=checking ? 'Opgeslagen annotatie controleren…' : entry.status==='ready' && dirty===committed ? 'Klaar voor documentcontrole. Dit is geen inhoudelijke goedkeuring of publicatie.' : 'Nog niet actueel gecontroleerd. Wijzigingen moeten eerst opgeslagen zijn.';
   }
   function repairFinding(finding) {
     const code=finding.code;
     const step=['annotation_core_required','incomplete_sentence','no_independent_claim','annotation_source_disposition_unresolved'].includes(code) || code.startsWith('recommendation_core') ?1:2;
-    showTask(code==='annotation_pending_range' && entry.pending_range?.role==='core' ? 1 : step,true);
     const field=finding.field;
+    const semantic=code==='recommendation_semantics_invalid' || code.startsWith('recommendation_direction') || code.startsWith('recommendation_strength');
+    // Show only the part that answers this point; every other code keeps the full manual form.
+    const part=field ? {field} : semantic ? {semantics:true} : code==='annotation_evidence_required' ? {evidence:true} : null;
+    const next=code==='annotation_pending_range' && entry.pending_range?.role==='core' ? 1 : step;
+    showTask(next,true,next===2 ? part : null);
+    if(next===1 && hasCore() && !entry.object_type) el('type').focus();
     if(field) {el('field').value=field;chooseTarget({kind:'field',field});el('fields').querySelector('button[data-field="'+field+'"]')?.focus();}
-    if(code==='recommendation_semantics_invalid' || code.startsWith('recommendation_direction') || code.startsWith('recommendation_strength')) {el('recommendation').open=true;el('direction').focus();}
+    if(semantic) {el('recommendation').open=true;el('direction').focus();}
     if(code==='annotation_evidence_required') {el('context-tools').open=true;chooseTarget({kind:'range',role:'evidence'});el('role').focus();}
   }
   async function runCheck() {
@@ -114,6 +143,7 @@ import {bindRange} from '/annotations/binding.mjs';
   el('change-type').addEventListener('click',()=>{showTask(1,true);el('type').focus();});
   el('back').addEventListener('click',()=>showTask(task-1,true));
   el('recheck').addEventListener('click',runCheck);
+  for(const id of ['manual','show-all']) el(id).addEventListener('click',()=>showTask(2,true));
   el('context-tools').addEventListener('toggle',()=>{
     if(el('context-tools').open && !target && !entry.disposition)
       chooseTarget({kind:'range',role:el('role').value==='core'?'context':el('role').value});
@@ -158,7 +188,7 @@ import {bindRange} from '/annotations/binding.mjs';
     el('recheck').disabled=checking || finalizing;
     el('select-block').disabled=!activeBlock;
     el('discard').disabled=!selected;
-    el('target').textContent=target?.kind==='field' ? fieldContract.labels[target.field]+' Wijs de woorden in de bron aan.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
+    el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Wijs de woorden in de bron aan.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
   }
   function renderSourceHighlights() {
     const ranges = new Map();
@@ -213,11 +243,14 @@ import {bindRange} from '/annotations/binding.mjs';
     for(const [field,label] of Object.entries(fieldContract.labels)) if(relevant.has(field)) el('field').add(new Option(label,field));
     if(relevant.has(currentField)) el('field').value=currentField;
     el('fields').replaceChildren();
-    el('recommendation').hidden=entry.object_type !== 'recommendation';
+    el('recommendation').hidden=entry.object_type !== 'recommendation' || !!only && !only.semantics;
     el('source-disposition').hidden=!entry.disposition;
-    el('meaning').hidden=!!entry.disposition;
-    el('context-tools').hidden=!!entry.disposition;
-    el('evidence').hidden=!!entry.disposition;
+    el('meaning').hidden=!!entry.disposition || !!only && !only.field;
+    el('context-tools').hidden=!!entry.disposition || !!only && !only.evidence;
+    el('evidence').hidden=!!entry.disposition || !!only && !only.evidence;
+    el('required-links').hidden=!!only;
+    el('heading-2').textContent=only ? 'Beantwoord dit punt' : 'Vul de betekenis aan of corrigeer haar';
+    el('full-intro').hidden=!!only;el('show-all').hidden=!only;
     el('na').closest('label').hidden=!!entry.disposition;
     for(const option of el('role').options) {
       option.disabled=!!entry.disposition && option.value!=='core';
@@ -230,9 +263,10 @@ import {bindRange} from '/annotations/binding.mjs';
     el('function').disabled=!!repairingLink;
     el('source-reason').value=entry.disposition?.role ? entry.disposition.role+':'+entry.disposition.reason : '';
     for(const [field,label] of Object.entries(fieldContract.labels)) {
-      if(!relevant.has(field)) continue;
+      if(!relevant.has(field) || only && only.field!==field) continue;
       const evidence=entry.field_evidence?.[field];
-      const dt=document.createElement('dt');dt.textContent=label;
+      const point=only && pointFor(field);
+      const dt=document.createElement('dt');dt.textContent=point ? question(point) : label;
       const dd=document.createElement('dd'),answer=document.createElement('p'),actions=document.createElement('div');
       answer.textContent=evidence?.span ? literal(evidence.span) : evidence?.core ? 'De kernuitspraak is hiervoor gekoppeld.' : ({not_stated:'Niet in de bron genoemd',not_applicable:'Niet van toepassing',uncertain:'Nog uitzoeken'})[evidence?.missing_reason] || 'Nog aan te wijzen';
       const button=document.createElement('button');button.type='button';button.className='btn-secondary';button.textContent=evidence?.span?'Andere tekst aanwijzen':'Tekst aanwijzen';button.dataset.field=field;button.setAttribute('aria-pressed',String(target?.kind==='field' && target.field===field));
@@ -240,9 +274,9 @@ import {bindRange} from '/annotations/binding.mjs';
       const missing=document.createElement('select');missing.dataset.missingField=field;missing.setAttribute('aria-label','Ontbreekreden: '+label);
       missing.add(new Option('Ontbreekreden kiezen',''));
       for(const [value,text] of Object.entries({uncertain:'Nog uitzoeken',not_stated:'Niet in de bron genoemd',not_applicable:'Niet van toepassing'})) missing.add(new Option(text,value));
-      missing.value=evidence?.missing_reason || '';
+      missing.value=point ? '' : evidence?.missing_reason || '';answer.hidden=!!point;
       missing.hidden=target?.kind!=='field' || target.field!==field;
-      missing.addEventListener('change',()=>{if(missing.value) {entry.field_evidence[field]={span:null,missing_reason:missing.value};change();renderFields();}});
+      missing.addEventListener('change',()=>{if(missing.value) {entry.field_evidence[field]={span:null,missing_reason:missing.value};change();renderFields();answerPoint(field);}});
       actions.className='annotation-field-actions';actions.append(button,missing);dd.append(answer,actions);el('fields').append(dt,dd);
     }
     const semantics=entry.recommendation_semantics || {};
@@ -261,7 +295,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;target=null;confirmation=null;el('confirm').hidden=true;
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
@@ -281,7 +315,7 @@ import {bindRange} from '/annotations/binding.mjs';
     el('type').value = entry.disposition ? 'source_disposition' : entry.object_type || '';
     el('na').checked = entry.evidence_not_applicable;
     render();
-    showTask(entry.status==='ready'?3:hasCore()?2:1);
+    showTask(entry.status==='ready' || hasCore() && !selected && !entry.disposition ? 3 : hasCore() ? 2 : 1);
     if(task===2 && selected && repairingLink) target={kind:'range',role:el('role').value};
     updateBindingControls();
     if(task===3) runCheck();
@@ -515,7 +549,7 @@ import {bindRange} from '/annotations/binding.mjs';
     if(!selected || !target) return;
     if(target.kind==='field') {
       const span=consumeSelected();if(!span) return;
-      entry.field_evidence[target.field]={span,missing_reason:null};target=null;change();renderFields();return;
+      const field=target.field;entry.field_evidence[field]={span,missing_reason:null};target=null;change();renderFields();answerPoint(field);return;
     }
     if(target.kind==='semantics') {
       const span=consumeSelected();if(!span) return;
@@ -531,6 +565,7 @@ import {bindRange} from '/annotations/binding.mjs';
     selected=null;entry.pending_range=null;el('selection').textContent='';
     if(task===2) target=null;
     change();render();
+    if(only?.evidence && entry.ranges.some(a=>a.role==='evidence')) {showTask(3,true);runCheck();}
   }
   el('add').addEventListener('click',()=>{
     if(!selected) {if(task===1 && hasCore()) showTask(2,true);else if(task===2) {showTask(3,true);runCheck();}return;}
@@ -564,12 +599,14 @@ import {bindRange} from '/annotations/binding.mjs';
       // Ordinary draft save remains the only writer; no approval/status shortcut.
       entry.object_type=data.object_type;entry.field_evidence=data.field_evidence;
       entry.recommendation_semantics=data.recommendation_semantics;
-      el('type').value=entry.object_type || '';change();renderFields();showTask(2);
+      openPoints=Array.isArray(data.open_points) ? data.open_points : [];
+      el('type').value=entry.object_type || '';change();renderFields();showTask(3);
       el('controls').scrollTop=0;
       if(window.matchMedia('(max-width:800px)').matches) el('controls').scrollIntoView({block:'start'});
-      el('heading-2').focus({preventScroll:true});
+      el('heading-3').focus({preventScroll:true});
       await flush();
-      el('suggestion-note').textContent='Betekenisvoorstel als concept opgeslagen. Controleer de antwoorden; dit is nog geen goedkeuring.';
+      await runCheck();
+      el('suggestion-note').textContent='Betekenisvoorstel als concept opgeslagen. Dit is nog geen goedkeuring.';
     } catch(error) {
       el('suggestion-note').textContent=(error.name==='AbortError' ? 'Het voorstel duurde te lang.' : error.message)+' Je opgeslagen werk blijft bewaard. Probeer opnieuw of vul de betekenis zelf in.';
     } finally {
@@ -625,7 +662,7 @@ import {bindRange} from '/annotations/binding.mjs';
   });
   el('strength').addEventListener('change',() => {semantics().strength=el('strength').value || null;change();});
   for(const field of ['direction','strength']) el(field+'-evidence').addEventListener('click',()=>chooseTarget({kind:'semantics',field}));
-  el('na').addEventListener('change',() => { entry.evidence_not_applicable = el('na').checked; change();renderSummary(); });
+  el('na').addEventListener('change',() => { entry.evidence_not_applicable = el('na').checked; change();renderSummary();if(only?.evidence && el('na').checked) {showTask(3,true);runCheck();} });
   el('retry').addEventListener('click',() => { failed = false; el('retry').hidden = true; flush().catch(() => {}); });
   el('ready').addEventListener('click',async()=>{
     if(finalizing || !checkIsCurrent() || check.findings.length) return;

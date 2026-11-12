@@ -304,7 +304,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
         type_options = '<option value="">Laat Metis het type voorstellen</option>'+''.join('<option value="'+key+'">'+label+'</option>' for key,label in TYPES.items() if key in CLOSED_OBJECT_TYPES)+'<option value="source_disposition">Dit bronstuk verantwoorden</option>'
         data = json.dumps(state,ensure_ascii=False).replace('<','\\u003c')
-        body = intro + '''<p>Selecteer één volledige uitspraak. Metis stelt de betekenis voor; jij controleert en corrigeert voordat je afrondt.</p>
+        body = intro + '''<p>Selecteer één volledige uitspraak. Metis vult de betekenis in en vraagt alleen wat het niet zeker weet; jij rondt af.</p>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
@@ -312,7 +312,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <fieldset id="annotation-editor-inputs" aria-label="Annotatie bewerken" disabled>
 <nav class="annotation-steps" aria-label="Annotatiestappen"><ol>
 <li><button type="button" id="annotation-step-1" aria-current="step">1. Uitspraak kiezen</button></li>
-<li><button type="button" id="annotation-step-2">2. Voorstel controleren</button></li>
+<li><button type="button" id="annotation-step-2">2. Aanvullen</button></li>
 <li><button type="button" id="annotation-step-3">3. Afronden</button></li></ol></nav>
 <p id="annotation-status" role="status" aria-live="polite"></p>
 <label for="annotation-entry">Huidige annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
@@ -323,10 +323,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
 <p id="annotation-core-summary"></p></section>
 <p id="annotation-suggestion-note" role="status" aria-live="polite"></p>
-<section id="annotation-task-2" aria-labelledby="annotation-heading-2" hidden><h3 id="annotation-heading-2" tabindex="-1">Controleer het betekenisvoorstel</h3>
-<p>Type: <strong id="annotation-type-summary"></strong> <button class="btn-secondary" type="button" id="annotation-change-type">Type aanpassen</button></p>
+<section id="annotation-task-2" aria-labelledby="annotation-heading-2" hidden><h3 id="annotation-heading-2" tabindex="-1">Vul de betekenis aan of corrigeer haar</h3>
 <blockquote id="annotation-proposal-core"></blockquote>
-<p>Controleer de antwoorden. Pas alleen aan wat ontbreekt of niet klopt. De volledige uitspraak hoef je niet opnieuw te selecteren.</p>
+<div id="annotation-full-intro"><p>Type: <strong id="annotation-type-summary"></strong> <button class="btn-secondary" type="button" id="annotation-change-type">Type aanpassen</button></p>
+<p>Pas alleen aan wat ontbreekt of niet klopt. De volledige uitspraak hoef je niet opnieuw te selecteren.</p></div>
 <div id="annotation-meaning"><label for="annotation-field" hidden>Onderdeel</label><select id="annotation-field" hidden></select><dl id="annotation-fields"></dl></div>
 <details id="annotation-context-tools"><summary>Context of onderbouwing toevoegen</summary><p>Kies wat je wilt toevoegen en wijs de tekst in de bron aan.</p>
 <label for="annotation-role">Wat wil je toevoegen?</label><select id="annotation-role">'''+role_options+'''</select>
@@ -341,11 +341,12 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <label for="annotation-strength-status">Is de sterkte vermeld?</label><select id="annotation-strength-status"><option value="">Kiezen</option><option value="not_stated">Niet vermeld</option><option value="explicit">Ja, expliciet vermeld</option><option value="unmapped">Vermeld, betekenis nog onzeker</option></select>
 <label for="annotation-strength">Vermelde sterkte</label><select id="annotation-strength"><option value="">Kiezen</option><option value="strong">Sterk</option><option value="weak">Zwak</option></select>
 <button class="btn-secondary" type="button" id="annotation-strength-evidence">Brontekst voor de sterkte aanwijzen</button><p id="annotation-strength-proof"></p></details>
-<div id="annotation-required-links" aria-live="polite"></div></section>
+<div id="annotation-required-links" aria-live="polite"></div>
+<button class="btn-secondary" type="button" id="annotation-show-all" hidden>Alle onderdelen tonen</button></section>
 <section id="annotation-task-3" aria-labelledby="annotation-heading-3" hidden><h3 id="annotation-heading-3" tabindex="-1">Controleer je annotatie</h3>
 <p>Lees de uitspraak en de gekoppelde tekst terug. Deze controle gaat over deze annotatie; het hele document controleer je daarna.</p>
 <div id="annotation-check" aria-live="polite"><p>De opgeslagen annotatie is nog niet gecontroleerd.</p></div><dl id="annotation-review-summary"></dl>
-<button class="btn-secondary" type="button" id="annotation-recheck">Opnieuw controleren</button></section>
+<div class="annotation-selection-actions"><button class="btn-secondary" type="button" id="annotation-recheck">Opnieuw controleren</button><button class="btn-secondary" type="button" id="annotation-manual">Zelf corrigeren</button></div></section>
 <div id="annotation-selection-tools"><p id="annotation-target" role="status">Wijs de kernuitspraak aan in de bron.</p>
 <div class="annotation-selection-actions"><button class="btn-secondary" type="button" id="annotation-select-block">Hele passage aanwijzen</button><button class="btn-secondary" type="button" id="annotation-discard">Selectie wissen</button></div>
 <p id="annotation-selection" aria-live="polite"></p><p id="annotation-binding-note" aria-live="polite"></p></div>

@@ -1,4 +1,4 @@
-# Aanwijzen, daarna alleen open punten
+# #1058 — Aanwijzen, daarna alleen open punten
 
 Change class: B
 Promise: Na één bronselectie ziet de annotator alleen nog de punten die Metis niet zelf brongetrouw kon invullen, als gerichte vraag; daarna rondt de annotator met één handeling af.
@@ -6,9 +6,8 @@ Proof: Native browser/PostgreSQL-proef: selectie → voorstel → nul bevindinge
 Touches lifecycle invariants: no
 Rewrite risk: none
 
-Opdracht William, 12 november 2026: maak het change contract. Dit is nog geen
-implementatie-GO. GitHub-issue en Linear-werkpakket moeten nog worden toegewezen;
-hernoem dit bestand dan naar het issuenummer.
+Part of MET-74. GO William, 12 november 2026: start implementatie na vastlegging
+in Linear/GitHub ([#1058](https://github.com/WilliamGomes41/Metis-DS/issues/1058)).
 
 Vervolg op [#1055](1055-meaning-proposals.md) en
 [#1051](1051-guided-annotation-workspace.md). Dit contract dekt stap 1 en 2 uit
@@ -73,7 +72,7 @@ query. Zij wordt niet opgeslagen en is geen nieuwe autoriteit of status.
 
 | Reden | Wanneer | Vraag aan de annotator |
 | --- | --- | --- |
-| `quote_ambiguous` | Quote komt meer dan eens voor in de kern | Welke van deze plaatsen bedoelt de bron? (de plaatsen worden getoond) |
+| `quote_ambiguous` | Quote komt meer dan eens voor in de kern | De tekst komt meer dan eens voor; wijs de bedoelde plaats aan (de letterlijke tekst wordt getoond) |
 | `quote_not_in_selection` | Quote staat niet letterlijk in de kern | Wijs dit onderdeel aan of kies een ontbreekreden |
 | `type_unclear` | `object_type` is `null` | Welk type uitspraak is dit? |
 | `model_uncertain` | Model gaf zelf `uncertain` | Wijs dit onderdeel aan of kies een ontbreekreden |
@@ -108,6 +107,27 @@ Audit/evidence requirement: bestaande immutable annotatieversies en receipts; `o
 Frontend valt onder Impeccable en de Emil-skills volgens `AGENTS.md`. Technisch
 bewijs meet geen lagere werklast en geen inhoudelijke juistheid van live
 modeluitvoer; dat vraagt de praktijktoets met een bevroren referentie.
+
+## Uitgevoerd en afwijkingen van het ontwerp
+
+- Na een voorstel opent taak 3 met de bestaande servercontrole. Een bevinding
+  of open punt opent alleen het bijbehorende onderdeel (‘Beantwoord dit punt’);
+  na een veldantwoord, gekoppelde onderbouwing of ‘niet van toepassing’ keert de
+  editor terug naar de controle. Richting en sterkte keren niet automatisch
+  terug, omdat daar meerdere antwoorden bij horen.
+- Een hervat concept met een kern opent de controle in plaats van het volledige
+  formulier, tenzij er nog een bronselectie klaarstaat.
+- `open_points` toont bij `quote_ambiguous` de letterlijke tekst, niet de
+  afzonderlijke plaatsen. Een modelquote die niet in de selectie staat wordt
+  niet teruggestuurd. `type_unclear` verandert alleen de formulering van de
+  bestaande bevinding.
+- Open punten bij niet-verplichte onderdelen blokkeren afronden niet; alleen de
+  servercontrole doet dat.
+- **Gevonden bestaande fout (#1055):** het voorstel kon type `factual_finding`
+  teruggeven, dat `annotations.save` weigert (`annotation_selection_invalid`).
+  De voorsteltypen zijn nu beperkt tot `CLOSED_OBJECT_TYPES`; een unittest
+  bewaakt dat elk voorstelbaar type opslaanbaar is.
+- Geen bestand onder `src/review/` gewijzigd; geen migratie, nieuw veld of route.
 
 ## Buiten deze slice
 
