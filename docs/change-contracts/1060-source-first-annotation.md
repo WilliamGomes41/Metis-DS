@@ -136,3 +136,13 @@ controle en afrondregels worden gebruikt; er is geen nieuwe route of opslag.
 Open voor slice 5 (besluit nodig): het weghalen van gekoppelde tekst loopt nog
 via de bestaande verplichting om opnieuw aan te wijzen of een reden te geven.
 Die regel is vastgelegd in kernel en database en is hier niet gewijzigd.
+
+## Slice 3 uitgevoerd: signalen op de reviewkaart
+
+De reviewer leest de signalen onder de bestaande vraag ‘Is dit compleet?’, in de
+toelichtingsregel die die vraag al had. Bij een nog niet bevestigd type staat
+‘voorgesteld type’. Geen nieuwe sectie, vraag, knop of gate; de signalen komen
+uit het toelatingsrecord van precies de getoonde objectversie
+(`ko_review_page_v1._completeness_signals`). Goedkeuren, afwijzen en de drie
+vragen werken ongewijzigd. Hiermee vervalt de reden om uitrol tot na slice 3
+uit te stellen; de praktijkproef blijft voorwaarde.

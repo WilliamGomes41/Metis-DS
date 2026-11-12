@@ -9,6 +9,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ### Added
 - Eén bronselectie kan type en brongebonden betekenis voorstellen; de gebruiker controleert/corrigeert het concept vóór afronden (#1055).
+- De reviewkaart toont onder ‘Is dit compleet?’ wat Metis niet kon vaststellen, en ‘voorgesteld type’ bij een nog niet bevestigd type (#1060, slice 3).
 - De annotatiekaart toont drie regels: uitspraak, hoort erbij en onderbouwing. Metis leidt type en onderdelen op de achtergrond af; het stappenformulier blijft bereikbaar als uitgebreid formulier (#1060, slice 2).
 - Voor menselijke annotatie zijn ontbrekende zinsdelen en type-onderdelen signalen: ze worden vastgelegd in het toelatingsrecord en getoond, maar houden afronden, afsluiten en toelating niet meer tegen. Brongetrouwheid, type, richting/sterkte en de onderbouwingskeuze blijven verplicht (#1060, slice 1).
 - Na een betekenisvoorstel opent de annotatiewerkplek één overzicht waarin elk onderdeel direct aanpasbaar is; een dubbelzinnig of ontbrekend onderdeel staat als open punt in zijn eigen rij en het antwoord keert terug naar het overzicht. Overbodige uitleg en knoppen zijn uit de kaart gehaald. Voorstellen bevatten alleen typen die de annotatieopslag accepteert (#1058).

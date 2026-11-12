@@ -103,6 +103,34 @@ def _question(name, label, value, *, subline=''):
             + ('<p class="ko-question-place">' + subline + '</p>' if subline else '') + '</fieldset>')
 
 
+def _completeness_signals(obj):
+    """#1060: what Metis could not establish, as text under the completeness question.
+
+    Signals come from the admission owner's record of this exact object version.
+    They inform the reviewer's own judgement and add no question, section or gate.
+    """
+    from src.vorming.admission_gate_v1 import admission_of
+    codes = set(admission_of(obj).get('signals') or [])
+    if not codes:
+        return ''
+    linked = any(entry.get('annotation_role') != 'evidence' and entry.get('text')
+                 for entry in ((obj.get('metadata') or {}).get('source_bound_context') or {}).get('entries', []))
+    lines = []
+    if codes & {'incomplete_sentence', 'recommendation_core_incomplete'}:
+        lines.append('De uitspraak lijkt een afgebroken zin.')
+    if codes & {'supported_object_missing', 'condition_target_missing', 'exception_target_missing',
+                'annotation_relation_target_missing', 'no_independent_claim'}:
+        lines.append('De uitspraak leunt mogelijk op andere tekst. ' + (
+            'Controleer of de gekoppelde tekst volstaat.' if linked else 'Er is geen tekst bij gekoppeld.'))
+    if codes & {'subject_missing', 'recommendation_subject_missing'}:
+        lines.append('Niet vastgesteld over wie of wat de uitspraak gaat.')
+    if 'predicate_missing' in codes:
+        lines.append('Niet vastgesteld wat erover gezegd wordt.')
+    if codes & {'recommendation_recommended_action_missing', 'recommendation_action_object_or_goal_missing'}:
+        lines.append('De aanbevolen handeling of het doel ervan is niet vastgesteld.')
+    return '<span data-ko-signals>Let op: ' + escape(' '.join(lines)) + '</span>' if lines else ''
+
+
 def _additional_relations(descriptor):
     from src.operations_console_app import RELATION_LABELS
     items = []
@@ -304,7 +332,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + _source_panel(console, inputs, obj, task=task)
             + '<section class="ko-object-panel" aria-labelledby="ko-object-title"><h2 id="ko-object-title">Te beoordelen kennisobject</h2>'
             '<p class="ko-claim" data-full-knowledge-passage data-reviewed-version="' + escape(descriptor.object_version, quote=True) + '">'
-            + escape(descriptor.text) + '</p><p class="ko-type">' + escape(_object_type_label(descriptor.object_type)) + '</p>'
+            + escape(descriptor.text) + '</p><p class="ko-type">' + escape(_object_type_label(descriptor.object_type))
+            + (' · voorgesteld type' if annotation and not obj.get('confirmed_object_type') else '') + '</p>'
             + semantics + _continuation_proposal(obj, sid, inputs.revision, task) + _summary_table(rows)
             + '<details class="ko-evidence"' + (' open' if context_open else '') + '><summary>Bekijk gekoppelde onderbouwing, broncontext en bronbewijs</summary>'
             + context_html + _additional_relations(descriptor) + _source_bound_fields_html(obj) + '</details>'
@@ -317,7 +346,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
                if not literal_support and not any(row.get('relation_type') in {'supported_by', 'explains'}
                           and row.get('resolution') == 'current' for row in descriptor.relations) else '')
             + _question('applicable', 'Is dit toepasbaar?', draft.get('applicable'))
-            + _question('complete', 'Is dit compleet?', draft.get('complete'))
+            + _question('complete', 'Is dit compleet?', draft.get('complete'), subline=_completeness_signals(obj))
             + _question('placed_correctly', 'Staat dit op de juiste plek?', draft.get('placed_correctly'), subline=place)
             + '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">'
             + ('Bronselectie corrigeren' if annotation else 'Open de gerichte correctie') + '</a>.</p>'

@@ -129,6 +129,18 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
     assert {'subject_missing', 'predicate_missing', 'supported_object_missing'} <= set(admission['signals'])
     assert [entry['text'] for entry in obj['metadata']['source_bound_context']['entries']] == [introduction['quote']]
 
+    # Slice 3: the reviewer reads the signals under the existing completeness question.
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': 'lijst', 'password': 'human-list-secret'})
+        card = client.get('/review', params={'document': sid, 'object': obj['object_id']}).text
+    question = card[card.index('Is dit compleet?'):card.index('Staat dit op de juiste plek?')]
+    assert 'De uitspraak leunt mogelijk op andere tekst. Controleer of de gekoppelde tekst volstaat.' in question
+    assert 'Niet vastgesteld over wie of wat de uitspraak gaat.' in question
+    assert 'Toelichting · voorgesteld type' in card
+    assert card.count('<fieldset class="ko-question">') == 3 and card.count('data-ko-signals') == 1
+
     approve(console, sid, obj['object_id'], actor)
     from src.review.knowledge_object_state_v1 import derive_ko_state
     state = derive_ko_state(candidate(console, sid), review_path='richtlijn',
