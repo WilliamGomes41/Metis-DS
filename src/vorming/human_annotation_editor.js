@@ -165,54 +165,74 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     el('recheck').hidden=checking || current || confirmedReady;
   }
+  // Selecting text is the statement. '+' adds text to a row, '−' removes it.
+  let armed=null, queued=null;
   function removeRange(anchor) {
     const index=entry.ranges.indexOf(anchor);if(index<0) return;
     if(anchor.required_for_meaning) entry.required_links.push({relationship_id:linkId(anchor),role:anchor.role,evidence_function:anchor.evidence_function,required_for_meaning:true,withdrawal_reason:null});
     entry.ranges.splice(index,1);change();render();runCheck();
   }
-  function setNoEvidence(value) {entry.evidence_not_applicable=value;el('na').checked=value;change();runCheck();}
+  // Removing a piece changes the statement: what Metis derived from it no longer holds.
+  function removeStatement(anchor) {
+    if(selected && !hasCore()) {el('discard').click();return;}
+    entry.ranges=entry.ranges.filter(a=>anchor ? a!==anchor : a.role!=='core');entry.object_type=null;el('type').value='';
+    entry.field_evidence=null;resetFields();armed=null;change();render();
+    if(hasCore()) derive().catch(()=>{});
+  }
+  async function setNoEvidence(value) {
+    if(value && !hasCore()) {await useAs('core');if(!hasCore()) return;}
+    entry.evidence_not_applicable=value;el('na').checked=value;change();await runCheck();
+  }
   function renderSimple() {
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
-    const done=entry.status==='ready' && dirty===committed,current=checkIsCurrent(),pick=replacingCore || !core.length;
-    el('simple-heading').textContent=pick ? 'Wijs de uitspraak aan' : done ? 'Klaar voor documentcontrole' : '';
+    const done=entry.status==='ready' && dirty===committed,current=checkIsCurrent(),provisional=!core.length && !!selected;
+    el('simple-heading').textContent=!core.length && !selected ? 'Selecteer de uitspraak in de bron' : done ? 'Klaar voor documentcontrole' : '';
     el('simple-heading').hidden=!el('simple-heading').textContent;
     const findings=current ? check.findings : [],signals=current ? check.signals || [] : [];
     const rows=el('simple-rows');rows.replaceChildren();
-    const text=(dd,value,hint=false)=>{const p=document.createElement('p');p.textContent=value;if(hint) p.className='annotation-hint';dd.append(p);return p;};
-    const action=(parent,label,run,name,primary=false)=>{const button=document.createElement('button');button.type='button';button.className=primary ? 'btn-secondary' : 'annotation-row-action';button.textContent=label;button.setAttribute('aria-label',label+': '+name);button.addEventListener('click',run);parent.append(' ',button);};
+    const hint=(dd,value)=>{const p=document.createElement('p');p.textContent=value;p.className='annotation-hint';dd.append(p);};
+    const sign=(parent,glyph,label,run,pressed=null)=>{const button=document.createElement('button');button.type='button';button.className='annotation-sign';button.textContent=glyph;button.setAttribute('aria-label',label);button.title=label;if(pressed!==null) button.setAttribute('aria-pressed',String(pressed));button.addEventListener('click',run);parent.append(button);return button;};
+    const line=(dd,value,label,remove)=>{const div=document.createElement('div'),p=document.createElement('p');div.className='annotation-line';p.textContent=value;div.append(p);sign(div,'−',label,remove);dd.append(div);};
     const row=(key,label,build)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.dataset.row=key;build(dd);rows.append(dt,dd);};
-    row('core','Uitspraak',dd=>{
-      if(!core.length) {text(dd,'Selecteer de volledige uitspraak in de bron.',true);return;}
-      const p=text(dd,core.map(a=>a.quote).join(' '));
-      if(signals.some(item=>broken.has(item.code))) text(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?',true);
-      if(replacingCore) action(p,'Toch behouden',()=>{replacingCore=false;renderSimple();},'Uitspraak');
-      else action(p,'Andere tekst kiezen',()=>{replacingCore=true;renderSimple();el('simple-heading').focus();},'Uitspraak');
+    if(core.length || provisional) row('core','Uitspraak',dd=>{
+      if(provisional) line(dd,selected.quote,'Selectie weghalen',()=>removeStatement());
+      for(const a of core) line(dd,a.quote,'Weghalen uit de uitspraak: '+a.quote,()=>removeStatement(a));
+      if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
+      if(core.length) sign(dd,'+','Nog een stuk van de uitspraak toevoegen',()=>arm('core'),armed==='core');
+      if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
+      if(provisional) {const none=document.createElement('button');none.type='button';none.className='annotation-row-action';none.id='annotation-simple-none';none.textContent='Dit is geen uitspraak, maar een kop of documentgegevens';
+        none.addEventListener('click',()=>{setAdvanced(true);el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));});dd.append(none);}
     });
-    if(core.length) {
+    if(core.length || provisional) {
       row('belongs','Hoort erbij',dd=>{
-        for(const a of belongs) action(text(dd,a.quote),'Weghalen',()=>removeRange(a),a.quote);
-        if(!belongs.length) text(dd,signals.some(item=>leaning.has(item.code)) ? 'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij? Selecteer die in de bron.' : 'Niets gekoppeld. Selecteer tekst in de bron als de uitspraak zonder die tekst niet te begrijpen is.',true);
+        for(const a of belongs) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
+        if(armed==='context') hint(dd,'Selecteer de tekst in de bron.');
+        else if(!belongs.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
+        sign(dd,'+','Tekst toevoegen aan Hoort erbij',()=>arm('context'),armed==='context');
       });
       row('evidence','Onderbouwing',dd=>{
-        for(const a of evidence) action(text(dd,a.quote),'Weghalen',()=>removeRange(a),a.quote);
-        if(evidence.length) return;
-        if(entry.evidence_not_applicable) action(text(dd,'Staat niet in de bron.'),'Wijzigen',()=>setNoEvidence(false),'Onderbouwing');
-        else {dd.dataset.open='true';action(text(dd,'Selecteer de onderbouwing in de bron, of kies:'),'Staat niet in de bron',()=>setNoEvidence(true),'Onderbouwing',true);}
+        for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
+        if(!evidence.length && entry.evidence_not_applicable) line(dd,'Staat niet in de bron.','Keuze weghalen: staat niet in de bron',()=>{setNoEvidence(false).catch(()=>{});});
+        if(armed==='evidence') hint(dd,'Selecteer de onderbouwing in de bron.');
+        sign(dd,'+','Tekst toevoegen aan Onderbouwing',()=>arm('evidence'),armed==='evidence');
+        if(!evidence.length && !entry.evidence_not_applicable) {
+          dd.dataset.open='true';
+          const none=document.createElement('button');none.type='button';none.className='btn-secondary';none.textContent='Staat niet in de bron';
+          none.addEventListener('click',()=>{setNoEvidence(true).catch(()=>{});});dd.append(' ',none);
+        }
       });
     }
     el('simple-type').hidden=!core.length || !!entry.object_type || deriving;
     if(!el('simple-type').hidden) el('simple-type-select').value='';
     const own=finding=>finding.code==='annotation_evidence_required' || finding.code==='annotation_core_required' && !entry.object_type;
     const lost=!selected && el('selection').textContent.startsWith('Wijs één bereik') ? el('selection').textContent : '';
-    el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…' : lost || (!core.length ? '' : done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' :
-      checking ? 'Controleren…' : current && !findings.length ? 'Je kunt afronden.' : '');
+    el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : lost ||
+      (core.length && selected && !armed ? 'Klik op + bij de regel waar de geselecteerde tekst bij hoort.' : !core.length ? '' :
+       done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' : checking ? 'Controleren…' : current && !findings.length ? 'Je kunt afronden.' : '');
     const notes=el('simple-notes');notes.replaceChildren();
-    for(const finding of findings.filter(f=>!own(f))) {const li=document.createElement('li');action(li,finding.message+' Aanvullen',()=>repairFinding(finding),'controlepunt',true);notes.append(li);}
-    el('simple-selection').hidden=!selected;
-    if(selected) {
-      el('simple-quote').textContent=selected.quote;
-      el('simple-core').hidden=!pick;el('simple-none').hidden=!!core.length;
-      el('simple-belongs').hidden=pick;el('simple-evidence').hidden=pick;
+    for(const finding of findings.filter(f=>!own(f))) {
+      const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
+      button.textContent=finding.message+' Aanvullen';button.addEventListener('click',()=>repairFinding(finding));li.append(button);notes.append(li);
     }
   }
   async function derive() {
@@ -220,27 +240,38 @@ import {bindRange} from '/annotations/binding.mjs';
     try {await proposeMeaning();}
     finally {
       deriving=false;
-      if(simple()) {el('suggestion-note').textContent='';await runCheck();el('simple-rows').querySelector('button')?.focus({preventScroll:true});}
+      if(simple()) {
+        el('suggestion-note').textContent='';await runCheck();
+        if(queued) {const value=queued;queued=null;captureSelection(value);}
+      }
     }
   }
   async function useAs(kind) {
     if(!selected || finalizing || deriving) return;
     if(kind==='core') {
-      if(hasCore()) {entry.ranges=entry.ranges.filter(a=>a.role!=='core');entry.object_type=null;el('type').value='';entry.field_evidence=null;resetFields();}
-      replacingCore=false;target={kind:'range',role:'core'};el('role').value='core';
+      target={kind:'range',role:'core'};el('role').value='core';
       bindSelected();if(selected) return;
       await derive();return;
     }
     el('role').value=kind==='evidence' ? 'evidence' : 'context';target={kind:'range',role:el('role').value};
-    el('essential').checked=kind!=='evidence';el('additional').checked=kind==='evidence';el('function').value='supported_by';
+    // The card asks no essentiality question: what is linked belongs, and '−' simply removes it.
+    el('essential').checked=false;el('additional').checked=true;el('function').value='supported_by';
     if(kind==='evidence') {entry.evidence_not_applicable=false;el('na').checked=false;}
     bindSelected();await runCheck();
   }
-  el('simple-core').addEventListener('click',()=>{useAs('core').catch(()=>{});});
-  el('simple-belongs').addEventListener('click',()=>{useAs('context').catch(()=>{});});
-  el('simple-evidence').addEventListener('click',()=>{useAs('evidence').catch(()=>{});});
-  el('simple-clear').addEventListener('click',()=>el('discard').click());
-  el('simple-none').addEventListener('click',()=>{setAdvanced(true);el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));});
+  // '+' on a row: use the current selection, or wait for the next one.
+  function arm(kind) {
+    (async()=>{
+      if(finalizing || deriving) return;
+      if(!hasCore()) {if(!selected) return;armed=kind;await useAs('core');renderSimple();return;}
+      if(selected) {armed=null;await useAs(kind);return;}
+      armed=armed===kind ? null : kind;renderSimple();
+    })().catch(()=>{});
+  }
+  function simpleSelection() {
+    if(!hasCore() || !armed) {renderSimple();return;}
+    const kind=armed;armed=null;useAs(kind).catch(()=>{});
+  }
   for(const option of el('type').options) if(option.value && option.value!=='source_disposition') el('simple-type-select').add(new Option(option.textContent,option.value));
   el('simple-type-select').addEventListener('change',()=>{
     const value=el('simple-type-select').value;if(!value) return;
@@ -452,7 +483,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
@@ -612,6 +643,8 @@ import {bindRange} from '/annotations/binding.mjs';
     try { await running; } finally { running = null; }
   }
   function captureSelection(value) {
+    // A selection made while Metis reads the statement waits; it must not make that answer stale.
+    if(simple() && deriving) {queued=value;renderSimple();return;}
     activateBlock(state.blocks.find(b => b.block_id === value.block_id));
     selected=value;
     el('to-source').href='#'+value.block_id;
@@ -622,6 +655,7 @@ import {bindRange} from '/annotations/binding.mjs';
     el('selection').textContent='Aangewezen: '+selected.quote;
     change();
     updateBindingControls();
+    if(simple()) simpleSelection();
   }
   function rememberSelection(event) {
     // Sidebar clicks must never replace an explicitly chosen block with the

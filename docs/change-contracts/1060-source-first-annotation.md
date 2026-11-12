@@ -146,3 +146,19 @@ uit het toelatingsrecord van precies de getoonde objectversie
 (`ko_review_page_v1._completeness_signals`). Goedkeuren, afwijzen en de drie
 vragen werken ongewijzigd. Hiermee vervalt de reden om uitrol tot na slice 3
 uit te stellen; de praktijkproef blijft voorwaarde.
+
+## Bijsturing William, 12 november 2026: selecteren is de uitspraak, + en − per regel
+
+- Een selectie in de bron ís de uitspraak; zij verschijnt direct in de regel en
+  wordt vastgelegd zodra de medewerker verder gaat. Een nieuwe selectie vervangt
+  haar tot dat moment.
+- Elke regel heeft een + om tekst toe te voegen en per tekst een − om haar weg
+  te halen. De + werkt in beide volgordes: eerst + en dan selecteren, of eerst
+  selecteren en dan +. De regel Uitspraak heeft een + voor een volgend stuk.
+- ‘Hoort erbij’ wordt opgeslagen zonder essentialiteitsclaim
+  (`required_for_meaning: false`), zodat − een gewone verwijdering is en geen
+  verplichting tot herstel of reden oproept. Dit vervangt de eerdere keuze in
+  slice 2 om gekoppelde tekst als essentieel vast te leggen.
+- ‘Klopt dit?’ en de keuzelijst met annotaties boven de kaart zijn vervallen;
+  een gemarkeerde passage in de bron opent haar eigen annotatie.
+- Een selectie terwijl Metis de uitspraak leest wacht en wordt daarna verwerkt.

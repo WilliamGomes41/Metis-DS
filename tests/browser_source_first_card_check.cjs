@@ -28,31 +28,32 @@ const tasks=require('./browser_annotation_tasks.cjs');
  const buttons=()=>page.locator('#annotation-controls button:visible').count();
  // Empty card: one instruction, no steps, no form, no competing actions.
  assert.equal(await page.locator('#annotation-steps').isVisible(),false);
- assert.equal(await page.locator('#annotation-simple-heading').innerText(),'Wijs de uitspraak aan');
- assert.equal(await page.locator('#annotation-fields, #annotation-type, #annotation-suggest').filter({visible:true}).count(),0);
+ assert.equal(await page.locator('#annotation-simple-heading').innerText(),'Selecteer de uitspraak in de bron');
+ assert.equal(await page.locator('#annotation-fields, #annotation-type, #annotation-suggest, #annotation-entry').filter({visible:true}).count(),0);
  assert.equal(await buttons(),0);
- // 1. The statement. Metis derives type and parts in the background; nothing to fill in.
+ const plus=key=>row(key).locator('button.annotation-sign').filter({hasText:'+'});
+ const minus=(key,text)=>row(key).locator('.annotation-line').filter({hasText:text}).locator('button.annotation-sign');
+ // 1. Selecting is the statement: the text appears, nothing to confirm or fill in.
+ await tasks.selectText(page,block(item),item.slice(0,40));
+ await row('core').getByText(item.slice(0,40),{exact:true}).waitFor();
+ // A new selection simply replaces it while nothing else has been done.
  await tasks.selectText(page,block(item),item);
- assert.equal(await page.locator('#annotation-simple-core').isVisible(),true);
- assert.equal(await page.locator('#annotation-simple-belongs').isVisible(),false);
- await page.locator('#annotation-simple-core').click();
- await row('evidence').and(page.locator('[data-open]')).waitFor();await row('belongs').getByText(/leunt mogelijk/).waitFor();
- // No question about what the worker just did, and no annotation switcher above the work.
+ await row('core').getByText(item,{exact:true}).waitFor();
+ assert.equal(await row('core').locator('.annotation-line').count(),1);
  assert.equal(await page.locator('#annotation-simple-heading').isVisible(),false);
- assert.equal(await page.locator('#annotation-entry').isVisible(),false);
- assert.match(await row('core').innerText(),/Bij diabetes mellitus/);
+ // 2. '+' on "Hoort erbij": Metis reads the statement in the background, then the next selection is added.
+ await plus('belongs').click();
+ await row('belongs').getByText(/leunt mogelijk op andere tekst|Selecteer de tekst in de bron/).waitFor();
+ await page.waitForFunction(()=>!document.getElementById('annotation-simple-status').textContent.startsWith('Metis leest'));
  assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);
- assert.match(await row('belongs').innerText(),/leunt mogelijk op andere tekst/);
- assert.equal(await page.locator('#annotation-simple-notes li').count(),0);
- assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
+ assert.equal(await plus('belongs').getAttribute('aria-pressed'),'true');
  await page.screenshot({path:output+'/card-statement.png',fullPage:true});
- // 2. The text that belongs to it.
  await tasks.selectText(page,block(intro),intro);
- assert.equal(await page.locator('#annotation-simple-core').isVisible(),false);
- await page.locator('#annotation-simple-belongs').click();
- await row('belongs').getByText(intro).waitFor();
+ await row('belongs').getByText(intro,{exact:true}).waitFor();
+ assert.equal(await plus('belongs').getAttribute('aria-pressed'),'false');
  // 3. The evidence choice. Then one button finishes.
- await row('evidence').getByRole('button',{name:/Staat niet in de bron/}).click();
+ assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
+ await row('evidence').getByRole('button',{name:'Staat niet in de bron',exact:true}).click();
  await page.locator('#annotation-ready:enabled').waitFor();
  assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
  await page.screenshot({path:output+'/card-complete.png',fullPage:true});
@@ -60,30 +61,40 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Klaar voor documentcontrole en opgeslagen.');
  let entry=await current();
  assert.equal(entry.status,'ready');assert.equal(entry.object_type,'explanation');assert.equal(entry.evidence_not_applicable,true);
- assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['context',intro,true]]);
+ assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['context',intro,false]]);
  assert.deepEqual(entry.field_evidence.supported_object,{span:null,missing_reason:'not_stated'});
- // Metis unavailable: the only question is the type; evidence can be pointed at in the source.
+ assert.deepEqual(entry.required_links,[]);
+ // Metis unavailable: the only question is the type. Evidence is added with '+' and removed with '−'.
  await page.locator('#annotation-new').click();
- await tasks.selectText(page,block(failing),failing);await page.locator('#annotation-simple-core').click();
+ await tasks.selectText(page,block(failing),failing.slice(0,13));
+ await plus('evidence').click();
  await page.locator('#annotation-simple-type').waitFor();
  await page.locator('#annotation-simple-type-select').selectOption('explanation');
  await page.waitForFunction(()=>document.getElementById('annotation-simple-type').hidden);
- await tasks.selectText(page,block(support),support);await page.locator('#annotation-simple-evidence').click();
- await row('evidence').getByText(support).waitFor();
+ await tasks.selectText(page,block(support),support);
+ await row('evidence').getByText(support,{exact:true}).waitFor();
+ // A statement in two pieces: '+' on "Uitspraak" adds the next piece.
+ await plus('core').click();await tasks.selectText(page,block(failing),failing.slice(14));
+ await row('core').getByText(failing.slice(14),{exact:true}).waitFor();
  await page.locator('#annotation-ready:enabled').waitFor();
+ assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);  // the chosen type is kept
  entry=await current();
  assert.equal(entry.status,'draft');assert.equal(entry.object_type,'explanation');
- assert.deepEqual(entry.ranges.map(a=>[a.role,a.evidence_function]),[['core',null],['evidence','supported_by']]);
+ assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.evidence_function]),
+  [['core',failing.slice(0,13),null],['evidence',support,'supported_by'],['core',failing.slice(14),null]]);
+ // '−' removes without asking for a reason and reopens the evidence choice.
+ await minus('evidence',support).click();
+ await row('evidence').and(page.locator('[data-open]')).waitFor();
+ await page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
+ assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
+ entry=await current();
+ assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.deepEqual(entry.required_links,[]);
+ await page.locator('#annotation-required-links').waitFor({state:'attached'});
+ assert.equal(await page.locator('#annotation-required-links *').count(),0);
  // A marked passage in the source opens its own annotation.
  await block(item).locator('mark[data-annotation]').first().click();
- await row('belongs').getByText(intro).waitFor();
+ await row('belongs').getByText(intro,{exact:true}).waitFor();
  assert.match(await row('core').innerText(),/Bij diabetes mellitus/);
- await block(failing).locator('mark[data-annotation]').first().click();
- await row('evidence').getByText(support).waitFor();
- // Removing linked evidence reopens the choice without leaving the card.
- await row('evidence').getByRole('button',{name:/Weghalen/}).click();
- await row('evidence').and(page.locator('[data-open]')).waitFor();
- assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:output+'/card-mobile.png',fullPage:true});
