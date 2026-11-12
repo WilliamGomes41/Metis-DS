@@ -98,6 +98,16 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.deepEqual(entry.required_links,[]);
  await page.locator('#annotation-required-links').waitFor({state:'attached'});
  assert.equal(await page.locator('#annotation-required-links *').count(),0);
+ // Removing the last piece of the statement removes the object: no empty draft stays behind.
+ const second=new URL(page.url()).searchParams.get('annotation');
+ await minus('core',failing.slice(14)).click();
+ await page.locator('#annotation-simple-type').waitFor();
+ assert.equal(await row('core').locator('.annotation-line').count(),1);
+ await minus('core',failing.slice(0,13)).click();
+ await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
+ assert.equal((await read()).entries.find(e=>e.annotation_id===second).status,'withdrawn');
+ // Nothing but the work and the two ways forward: no extra menu in the card.
+ assert.equal(await page.locator('#annotation-more').isVisible(),false);
  // A marked passage in the source opens its own annotation.
  await block(item).locator('mark[data-annotation]').first().click();
  await row('belongs').getByText(intro,{exact:true}).waitFor();
@@ -110,11 +120,12 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-finish:enabled').click();
  await page.waitForURL(u=>u.searchParams.get('overview')==='true');
  await page.getByRole('link',{name:'Verder aanwijzen'}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
- // The step form stays reachable as the advanced form and survives a reload.
- await page.setViewportSize({width:1440,height:1000});await tasks.advanced(page);
+ // Source text that is no statement opens the step form for that one object only.
+ await tasks.selectText(page,page.locator('[data-source-block]').filter({hasText:'Smetten'}).first(),'Smetten');
+ await page.locator('#annotation-simple-none').click();
+ await page.locator('#annotation-source-reason').waitFor();
  assert.equal(await page.locator('#annotation-steps').isVisible(),true);
- await page.reload();await page.locator('#annotation-editor-inputs:enabled').waitFor();
- assert.equal(await page.locator('#annotation-steps').isVisible(),true);
+ assert.equal(await page.evaluate(()=>localStorage.getItem('metis-annotation-form')),null);
  assert.deepEqual(errors,[]);
  fs.writeFileSync(output+'/source-first-card-result.json',JSON.stringify({threeRows:true,derivedInBackground:true,typeQuestionOnlyOnFailure:true,errors}));
  }finally{await browser.close();}

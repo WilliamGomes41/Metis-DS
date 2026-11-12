@@ -168,3 +168,11 @@ uit te stellen; de praktijkproef blijft voorwaarde.
   om vanuit de kaart een nieuwe annotatie te beginnen zonder af te ronden is
   vervallen; een eerder object open je via zijn gemarkeerde passage in de bron.
   De + staat naast de regeltitel, de − naast elke tekst, in één kolom.
+- Het uitklapblok ‘Bewaren, document en meer acties’ is uit de kaart. Opslaan
+  gebeurt automatisch, de documentcontrole zit achter ‘bronselectie beëindigen’,
+  en de − bij het laatste stuk van de uitspraak neemt de annotatie zelf terug,
+  zodat geen leeg concept het afsluiten blokkeert. Een al opgebouwd object wordt
+  niet teruggenomen; daar vervangt − alleen de tekst.
+- Het stappenformulier opent alleen nog vanzelf, voor het ene object dat het
+  nodig heeft (brontekst die geen uitspraak is; richting en sterkte van een
+  aanbeveling die Metis niet kon bepalen), en verdwijnt bij het volgende object.

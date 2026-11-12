@@ -19,7 +19,9 @@ import {bindRange} from '/annotations/binding.mjs';
   // source. The step form remains as the advanced form until it is retired.
   // The choice of form is a per-browser convenience; the page works without storage.
   const formKey='metis-annotation-form';
-  let advanced=(()=>{try {return localStorage.getItem(formKey)==='uitgebreid';} catch(_) {return false;}})(), replacingCore=false, deriving=false;
+  const storedForm = () => {try {return localStorage.getItem(formKey)==='uitgebreid';} catch(_) {return false;}};
+  // The step form also opens by itself for the one object that needs it; that never outlives the object.
+  let advanced=storedForm(), replacingCore=false, deriving=false;
   const simple = () => !advanced && !entry?.disposition;
   function setAdvanced(value) {
     advanced=value;
@@ -173,11 +175,21 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.ranges.splice(index,1);change();render();runCheck();
   }
   // Removing a piece changes the statement: what Metis derived from it no longer holds.
+  // Removing the last piece removes the object itself, so no empty draft is left to block the document.
   function removeStatement(anchor) {
-    if(selected && !hasCore()) {el('discard').click();return;}
+    const rest=anchor ? entry.ranges.filter(a=>a.role==='core' && a!==anchor) : [];
+    if(!rest.length && !state.object_bindings?.[entry.annotation_id]) {discardObject().catch(()=>{});return;}
     entry.ranges=entry.ranges.filter(a=>anchor ? a!==anchor : a.role!=='core');entry.object_type=null;el('type').value='';
     entry.field_evidence=null;resetFields();armed=null;change();render();
     if(hasCore()) derive().catch(()=>{});
+  }
+  async function discardObject() {
+    armed=null;queued=null;
+    try {
+      await flush();
+      if(entry.revision) {entry.status='withdrawn';dirty+=1;await flush();}
+      load('');entries();status('Weggehaald. Selecteer de volgende uitspraak.');
+    } catch(_) { /* The save status says what failed; the work stays visible. */ }
   }
   async function setNoEvidence(value) {
     if(value && !hasCore()) {await useAs('core');if(!hasCore()) return;}
@@ -200,7 +212,7 @@ import {bindRange} from '/annotations/binding.mjs';
       if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
       if(provisional) {const none=document.createElement('button');none.type='button';none.className='annotation-row-action';none.id='annotation-simple-none';none.textContent='Dit is geen uitspraak, maar een kop of documentgegevens';
-        none.addEventListener('click',()=>{setAdvanced(true);el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));});dd.append(none);}
+        none.addEventListener('click',()=>{el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));showTask(1,true);});dd.append(none);}
     },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
     if(core.length || provisional) {
       row('belongs','Hoort erbij',dd=>{
@@ -274,7 +286,6 @@ import {bindRange} from '/annotations/binding.mjs';
     const value=el('simple-type-select').value;if(!value) return;
     el('type').value=value;el('type').dispatchEvent(new Event('change'));runCheck();
   });
-  el('advanced').addEventListener('click',()=>setAdvanced(true));
   document.addEventListener('click',event=>{
     const mark=event.target.closest?.('mark[data-annotation]');
     if(!mark || !simple() || !window.getSelection().isCollapsed) return;
@@ -366,7 +377,7 @@ import {bindRange} from '/annotations/binding.mjs';
     // The card has one way forward: finish this object, then the next. An earlier
     // object is reopened from its marked passage in the source.
     el('entry-box').hidden=simple();
-    el('advanced').hidden=advanced;el('simple-back').hidden=!advanced;
+    el('more').hidden=simple();el('simple-back').hidden=!storedForm();
     if(simple()) {
       for(const id of ['selection-tools','linked','back','add','suggest']) el(id).hidden=true;
       const complete=confirmedReady || checkIsCurrent() && !check.findings.length;
@@ -485,7 +496,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;advanced=storedForm();
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';

@@ -67,6 +67,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-review-summary dd[data-open]').first().waitFor();
  const asked=page.locator('#annotation-review-summary dd[data-row=predicate_span][data-open]');
  await asked.waitFor();assert.match(await asked.innerText(),/“is” komt meer dan eens voor/);
+ await page.locator('#annotation-review-summary dd[data-row=evidence][data-open]').waitFor();
  assert.equal(await page.locator('#annotation-review-summary dd[data-open]').count(),2);
  let open=(await read()).entries.find(e=>e.annotation_id===new URL(page.url()).searchParams.get('annotation'));
  assert.deepEqual(open.field_evidence.predicate_span,{span:null,missing_reason:'uncertain'});

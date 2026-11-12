@@ -4,9 +4,8 @@ const assert=require('node:assert/strict');
 async function advanced(page) {
  await page.locator('#annotation-editor-inputs:enabled').waitFor();
  if(await page.locator('#annotation-steps').isVisible()) return;
- const details=page.locator('#annotation-more');
- if(!await details.evaluate(node=>node.open)) await details.locator(':scope > summary').click();
- await page.locator('#annotation-advanced').click();
+ await page.evaluate(()=>localStorage.setItem('metis-annotation-form','uitgebreid'));
+ await page.reload();await page.locator('#annotation-editor-inputs:enabled').waitFor();
 }
 async function step(page,n) {await advanced(page);await page.locator('#annotation-step-'+n).click();}
 async function open(page,id) {
