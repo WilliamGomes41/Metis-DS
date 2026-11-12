@@ -193,34 +193,31 @@ import {bindRange} from '/annotations/binding.mjs';
     const hint=(dd,value)=>{const p=document.createElement('p');p.textContent=value;p.className='annotation-hint';dd.append(p);};
     const sign=(parent,glyph,label,run,pressed=null)=>{const button=document.createElement('button');button.type='button';button.className='annotation-sign';button.textContent=glyph;button.setAttribute('aria-label',label);button.title=label;if(pressed!==null) button.setAttribute('aria-pressed',String(pressed));button.addEventListener('click',run);parent.append(button);return button;};
     const line=(dd,value,label,remove)=>{const div=document.createElement('div'),p=document.createElement('p');div.className='annotation-line';p.textContent=value;div.append(p);sign(div,'−',label,remove);dd.append(div);};
-    const row=(key,label,build)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.dataset.row=key;build(dd);rows.append(dt,dd);};
+    const row=(key,label,build,add=null)=>{const dt=document.createElement('dt'),dd=document.createElement('dd'),name=document.createElement('span');name.textContent=label;dt.append(name);dt.dataset.row=key;dd.dataset.row=key;if(add) sign(dt,'+',add.label,add.run,add.pressed);build(dd);rows.append(dt,dd);};
     if(core.length || provisional) row('core','Uitspraak',dd=>{
       if(provisional) line(dd,selected.quote,'Selectie weghalen',()=>removeStatement());
       for(const a of core) line(dd,a.quote,'Weghalen uit de uitspraak: '+a.quote,()=>removeStatement(a));
       if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
-      if(core.length) sign(dd,'+','Nog een stuk van de uitspraak toevoegen',()=>arm('core'),armed==='core');
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
       if(provisional) {const none=document.createElement('button');none.type='button';none.className='annotation-row-action';none.id='annotation-simple-none';none.textContent='Dit is geen uitspraak, maar een kop of documentgegevens';
         none.addEventListener('click',()=>{setAdvanced(true);el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));});dd.append(none);}
-    });
+    },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
     if(core.length || provisional) {
       row('belongs','Hoort erbij',dd=>{
         for(const a of belongs) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
         if(armed==='context') hint(dd,'Selecteer de tekst in de bron.');
         else if(!belongs.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
-        sign(dd,'+','Tekst toevoegen aan Hoort erbij',()=>arm('context'),armed==='context');
-      });
+      },{label:'Tekst toevoegen aan Hoort erbij',run:()=>arm('context'),pressed:armed==='context'});
       row('evidence','Onderbouwing',dd=>{
         for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
         if(!evidence.length && entry.evidence_not_applicable) line(dd,'Staat niet in de bron.','Keuze weghalen: staat niet in de bron',()=>{setNoEvidence(false).catch(()=>{});});
         if(armed==='evidence') hint(dd,'Selecteer de onderbouwing in de bron.');
-        sign(dd,'+','Tekst toevoegen aan Onderbouwing',()=>arm('evidence'),armed==='evidence');
         if(!evidence.length && !entry.evidence_not_applicable) {
           dd.dataset.open='true';
           const none=document.createElement('button');none.type='button';none.className='btn-secondary';none.textContent='Staat niet in de bron';
-          none.addEventListener('click',()=>{setNoEvidence(true).catch(()=>{});});dd.append(' ',none);
+          none.addEventListener('click',()=>{setNoEvidence(true).catch(()=>{});});dd.append(none);
         }
-      });
+      },{label:'Tekst toevoegen aan Onderbouwing',run:()=>arm('evidence'),pressed:armed==='evidence'});
     }
     el('simple-type').hidden=!core.length || !!entry.object_type || deriving;
     if(!el('simple-type').hidden) el('simple-type-select').value='';
@@ -228,7 +225,7 @@ import {bindRange} from '/annotations/binding.mjs';
     const lost=!selected && el('selection').textContent.startsWith('Wijs één bereik') ? el('selection').textContent : '';
     el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : lost ||
       (core.length && selected && !armed ? 'Klik op + bij de regel waar de geselecteerde tekst bij hoort.' : !core.length ? '' :
-       done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' : checking ? 'Controleren…' : current && !findings.length ? 'Je kunt afronden.' : '');
+       done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' : checking ? 'Controleren…' : '');
     const notes=el('simple-notes');notes.replaceChildren();
     for(const finding of findings.filter(f=>!own(f))) {
       const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
@@ -362,15 +359,20 @@ import {bindRange} from '/annotations/binding.mjs';
     el('linked').hidden=task===3 || !entry.ranges.length || !!only && !only.evidence;
     el('target').hidden=!!only?.field;
     el('steps').hidden=simple();el('simple').hidden=!simple();
+    el('ready').textContent=simple() ? 'Opslaan en naar volgend kennisobject' : 'Annotatie klaar voor documentcontrole';
+    if(!simple()) el('finish').hidden=true;
     // Switching annotations is navigation: in the card it lives with the other document actions,
     // and a marked passage in the source opens its own annotation.
-    const box=el('entry-box'),home=simple() ? el('entry-slot') : el('status').parentNode;
-    if(box.parentNode!==home) {if(simple()) home.append(box);else el('status').after(box);}
-    el('entry-label').textContent=simple() ? 'Andere annotatie openen' : 'Huidige annotatie';
+    // The card has one way forward: finish this object, then the next. An earlier
+    // object is reopened from its marked passage in the source.
+    el('entry-box').hidden=simple();
     el('advanced').hidden=advanced;el('simple-back').hidden=!advanced;
     if(simple()) {
       for(const id of ['selection-tools','linked','back','add','suggest']) el(id).hidden=true;
-      el('ready').hidden=!hasCore() || confirmedReady;el('new').hidden=!confirmedReady;
+      const complete=confirmedReady || checkIsCurrent() && !check.findings.length;
+      el('new').hidden=true;el('ready').hidden=!hasCore();el('finish').hidden=false;
+      el('ready').disabled=finalizing || checking || deriving || !complete;
+      el('finish').disabled=finalizing || checking || deriving || (hasCore() ? !complete : !!selected);
       renderSimple();
     }
     el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Selecteer de woorden in de bron.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
@@ -855,16 +857,27 @@ import {bindRange} from '/annotations/binding.mjs';
   for(const field of ['direction','strength']) el(field+'-evidence').addEventListener('click',()=>chooseTarget({kind:'semantics',field}));
   el('na').addEventListener('change',() => { entry.evidence_not_applicable = el('na').checked; change();renderSummary();if(only?.evidence && el('na').checked) {showTask(3,true);runCheck();} });
   el('retry').addEventListener('click',() => { failed = false; el('retry').hidden = true; flush().catch(() => {}); });
-  el('ready').addEventListener('click',async()=>{
-    if(finalizing || !checkIsCurrent() || check.findings.length) return;
+  // Marks the current object ready through the existing check and save. True when it is saved as ready.
+  async function finishCurrent() {
+    if(entry.status==='ready' && dirty===committed) return true;
+    if(finalizing || !checkIsCurrent() || check.findings.length) return false;
     finalizing=true;el('editor-inputs').disabled=true;
     try {
       await flush();
       await runCheck();
-      if(!checkIsCurrent() || check.findings.length) return;
+      if(!checkIsCurrent() || check.findings.length) return false;
       entry.status='ready';dirty+=1;await flush();renderSummary();
-    } catch(_) { /* Preserve current work and the exact uncertain request. */ }
+      return entry.status==='ready' && dirty===committed;
+    } catch(_) { return false; /* Preserve current work and the exact uncertain request. */ }
     finally {finalizing=false;el('editor-inputs').disabled=false;updateBindingControls();}
+  }
+  const toOverview = () => { window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); };
+  el('ready').addEventListener('click',async()=>{
+    const saved=await finishCurrent();
+    if(saved && simple()) {load('');entries();status('Opgeslagen. Selecteer de volgende uitspraak.');}
+  });
+  el('finish').addEventListener('click',async()=>{
+    if(hasCore() ? await finishCurrent() : !selected) toOverview();
   });
   el('withdraw').addEventListener('click',()=>confirmChange('De hele annotatie terugnemen, inclusief alle gekoppelde brontekst? Dit meldt de annotatie niet gereed. De bron moet nog worden verantwoord.',async()=>{
     try {await flush();entry.status='withdrawn';dirty+=1;await flush();load('');entries();}catch(_){}

@@ -30,8 +30,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-steps').isVisible(),false);
  assert.equal(await page.locator('#annotation-simple-heading').innerText(),'Selecteer de uitspraak in de bron');
  assert.equal(await page.locator('#annotation-fields, #annotation-type, #annotation-suggest, #annotation-entry').filter({visible:true}).count(),0);
- assert.equal(await buttons(),0);
- const plus=key=>row(key).locator('button.annotation-sign').filter({hasText:'+'});
+ // Only one action exists before anything is selected: there is nothing to save yet.
+ assert.deepEqual(await page.locator('#annotation-controls button:visible').allInnerTexts(),['Opslaan en bronselectie beëindigen']);
+ const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
  const minus=(key,text)=>row(key).locator('.annotation-line').filter({hasText:text}).locator('button.annotation-sign');
  // 1. Selecting is the statement: the text appears, nothing to confirm or fill in.
  await tasks.selectText(page,block(item),item.slice(0,40));
@@ -57,15 +58,21 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-ready:enabled').waitFor();
  assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
  await page.screenshot({path:output+'/card-complete.png',fullPage:true});
+ // "+" and "−" share one column: add beside the row title, remove beside each text.
+ const column=await page.evaluate(()=>[...document.querySelectorAll('#annotation-simple-rows .annotation-sign')].map(b=>Math.round(b.getBoundingClientRect().right)));
+ assert.equal(new Set(column).size,1,JSON.stringify(column));
+ assert.equal(await page.locator('#annotation-ready').innerText(),'Opslaan en naar volgend kennisobject');
+ const first=new URL(page.url()).searchParams.get('annotation');
  await page.locator('#annotation-ready').click();
- await page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Klaar voor documentcontrole en opgeslagen.');
- let entry=await current();
+ // Saved as ready, and the card is empty for the next statement: no second click, no other route.
+ await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
+ assert.equal(await page.locator('#annotation-entry').isVisible(),false);
+ let entry=(await read()).entries.find(e=>e.annotation_id===first);
  assert.equal(entry.status,'ready');assert.equal(entry.object_type,'explanation');assert.equal(entry.evidence_not_applicable,true);
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['context',intro,false]]);
  assert.deepEqual(entry.field_evidence.supported_object,{span:null,missing_reason:'not_stated'});
  assert.deepEqual(entry.required_links,[]);
  // Metis unavailable: the only question is the type. Evidence is added with '+' and removed with '−'.
- await page.locator('#annotation-new').click();
  await tasks.selectText(page,block(failing),failing.slice(0,13));
  await plus('evidence').click();
  await page.locator('#annotation-simple-type').waitFor();
@@ -98,6 +105,11 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:output+'/card-mobile.png',fullPage:true});
+ await page.setViewportSize({width:1440,height:1000});
+ // Ending source selection saves and opens the document check, where the next phase starts.
+ await page.locator('#annotation-finish:enabled').click();
+ await page.waitForURL(u=>u.searchParams.get('overview')==='true');
+ await page.getByRole('link',{name:'Verder aanwijzen'}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
  // The step form stays reachable as the advanced form and survives a reload.
  await page.setViewportSize({width:1440,height:1000});await tasks.advanced(page);
  assert.equal(await page.locator('#annotation-steps').isVisible(),true);

@@ -162,3 +162,9 @@ uit te stellen; de praktijkproef blijft voorwaarde.
 - ‘Klopt dit?’ en de keuzelijst met annotaties boven de kaart zijn vervallen;
   een gemarkeerde passage in de bron opent haar eigen annotatie.
 - Een selectie terwijl Metis de uitspraak leest wacht en wordt daarna verwerkt.
+- Eén weg vooruit: ‘Opslaan en naar volgend kennisobject’ rondt af en maakt de
+  kaart leeg; ‘Opslaan en bronselectie beëindigen’ rondt af en opent de
+  bestaande documentcontrole, waar afsluiten en opbouwen starten. De mogelijkheid
+  om vanuit de kaart een nieuwe annotatie te beginnen zonder af te ronden is
+  vervallen; een eerder object open je via zijn gemarkeerde passage in de bron.
+  De + staat naast de regeltitel, de − naast elke tekst, in één kolom.
