@@ -243,6 +243,11 @@ import {bindRange} from '/annotations/binding.mjs';
       (core.length && selected && !armed ? 'Klik op + bij de regel waar de geselecteerde tekst bij hoort.' : !core.length ? '' :
        done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' : checking ? 'Controleren…' : '');
     const notes=el('simple-notes');notes.replaceChildren();
+    // A check that failed or never ran must not strand a complete object: offer the retry here.
+    if(core.length && !current && !checking && !deriving && !done) {
+      const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
+      button.id='annotation-simple-recheck';button.textContent='Opnieuw controleren';button.addEventListener('click',()=>{runCheck();});li.append(button);notes.append(li);
+    }
     for(const finding of findings.filter(f=>!own(f))) {
       const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
       button.textContent=finding.message+' Aanvullen';button.addEventListener('click',()=>repairFinding(finding));li.append(button);notes.append(li);

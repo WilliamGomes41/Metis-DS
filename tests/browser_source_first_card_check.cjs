@@ -71,6 +71,17 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['context',intro,false]]);
  assert.deepEqual(entry.field_evidence.supported_object,{span:null,missing_reason:'not_stated'});
  assert.deepEqual(entry.required_links,[]);
+ // A failed check leaves a visible retry in the card instead of two dead buttons.
+ await block(item).locator('mark[data-annotation]').first().click();
+ await row('belongs').getByText(intro,{exact:true}).waitFor();
+ await page.route('**/annotations/check**',route=>route.abort());
+ await minus('belongs',intro).click();
+ await page.locator('#annotation-simple-recheck').waitFor();
+ assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
+ await page.unroute('**/annotations/check**');
+ await page.locator('#annotation-simple-recheck').click();
+ await page.locator('#annotation-ready:enabled').click();
+ await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
  // A statement on its own is a complete object: select it and save, without touching '+'.
  await tasks.selectText(page,block(alone),alone);
  await row('core').getByText(alone,{exact:true}).waitFor();
@@ -115,8 +126,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-more').isVisible(),false);
  // A marked passage in the source opens its own annotation.
  await block(item).locator('mark[data-annotation]').first().click();
- await row('belongs').getByText(intro,{exact:true}).waitFor();
- assert.match(await row('core').innerText(),/Bij diabetes mellitus/);
+ await row('core').getByText(item,{exact:true}).waitFor();
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.screenshot({path:output+'/card-mobile.png',fullPage:true});
