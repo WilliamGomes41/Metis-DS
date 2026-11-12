@@ -42,9 +42,9 @@ const assert=require('node:assert/strict');
   assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
   assert.equal(await page.locator('#annotation-type').isVisible(),false);await primaryCount();
   // Run the same server checks before claiming completion, without a circular draft gate.
-  await step(3);await page.locator('#annotation-check').getByText(/controlepunt/).waitFor();
-  assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
-  assert.match(await page.locator('#annotation-task-3 dd[data-open]').first().innerText(),/Beantwoorden/);
+  // #1060: unidentified parts and unlinked evidence are no open points for the worker.
+  await step(3);await page.locator('#annotation-ready:enabled').waitFor();
+  assert.equal(await page.locator('#annotation-task-3 dd[data-open]').count(),0);
   let view=await read();assert.equal(view.entries[0].status,'draft');
   assert.equal(await page.locator('#annotation-check').innerText().then(t=>t.includes('nog niet gereed')),false);
   await step(2);

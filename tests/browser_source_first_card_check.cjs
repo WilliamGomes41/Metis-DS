@@ -52,9 +52,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await tasks.selectText(page,block(intro),intro);
  await row('belongs').getByText(intro,{exact:true}).waitFor();
  assert.equal(await plus('belongs').getAttribute('aria-pressed'),'false');
- // 3. The evidence choice. Then one button finishes.
- assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
- await row('evidence').getByRole('button',{name:'Staat niet in de bron',exact:true}).click();
+ // 3. Evidence is added when the source has it; the card asks no choice. One button finishes.
+ assert.equal(await row('evidence').getByRole('button',{name:/Staat niet in de bron|niet van toepassing/}).count(),0);
  await page.locator('#annotation-ready:enabled').waitFor();
  assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
  await page.screenshot({path:output+'/card-complete.png',fullPage:true});
@@ -68,7 +67,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
  assert.equal(await page.locator('#annotation-entry').isVisible(),false);
  let entry=(await read()).entries.find(e=>e.annotation_id===first);
- assert.equal(entry.status,'ready');assert.equal(entry.object_type,'explanation');assert.equal(entry.evidence_not_applicable,true);
+ assert.equal(entry.status,'ready');assert.equal(entry.object_type,'explanation');assert.equal(entry.evidence_not_applicable,false);
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['context',intro,false]]);
  assert.deepEqual(entry.field_evidence.supported_object,{span:null,missing_reason:'not_stated'});
  assert.deepEqual(entry.required_links,[]);
@@ -89,11 +88,10 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(entry.status,'draft');assert.equal(entry.object_type,'explanation');
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.evidence_function]),
   [['core',failing.slice(0,13),null],['evidence',support,'supported_by'],['core',failing.slice(14),null]]);
- // '−' removes without asking for a reason and reopens the evidence choice.
+ // '−' removes without asking for a reason; the object can still be saved without evidence.
  await minus('evidence',support).click();
- await row('evidence').and(page.locator('[data-open]')).waitFor();
- await page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
- assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
+ await row('evidence').getByText(/Niets gekoppeld/).waitFor();
+ await page.locator('#annotation-ready:enabled').waitFor();
  entry=await current();
  assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.deepEqual(entry.required_links,[]);
  await page.locator('#annotation-required-links').waitFor({state:'attached'});

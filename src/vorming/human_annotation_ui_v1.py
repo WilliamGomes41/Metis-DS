@@ -45,7 +45,7 @@ ERRORS = {
     'annotation_anchor_mismatch':'De geselecteerde tekst past niet bij deze bronpositie. Open de bron opnieuw en wijs het bereik opnieuw aan.',
     'annotation_grapheme_boundary_invalid':'De selectie knipt een samengesteld teken door. Selecteer het volledige teken.',
     'annotation_representation_stale':'De bronversie wijkt af. Hervat de oorspronkelijke werkversie; oude selecties worden niet verplaatst.',
-    'annotation_evidence_required':'Wijs onderbouwing aan, of leg expliciet vast dat onderbouwing niet van toepassing is.',
+    'annotation_evidence_required':'Er is onderbouwing gekoppeld én vastgelegd dat die niet van toepassing is. Kies één van beide.',
     'annotation_core_required':'Wijs een kernuitspraak aan en kies het type voordat je deze selectie gereed meldt.',
     'annotation_pending_range':'Er staat nog een aanwijzing klaar. Voeg die toe aan de annotatie of neem haar terug.',
     'annotation_evidence_function_required':'Kies bij onderbouwing of deze de uitspraak onderbouwt of verklaart.',

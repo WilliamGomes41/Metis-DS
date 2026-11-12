@@ -176,3 +176,24 @@ uit te stellen; de praktijkproef blijft voorwaarde.
 - Het stappenformulier opent alleen nog vanzelf, voor het ene object dat het
   nodig heeft (brontekst die geen uitspraak is; richting en sterkte van een
   aanbeveling die Metis niet kon bepalen), en verdwijnt bij het volgende object.
+
+## Besluit William, 12 november 2026: de onderbouwingskeuze vervalt bij de medewerker
+
+GO projectlead: “Pak 1 op.” De medewerker koppelt onderbouwing als die in de
+bron staat en kiest verder niets. Dit wijzigt één afrondregel in
+`human_annotation_v1._validate`: een annotatie zonder gekoppelde onderbouwing
+mag gereed worden gemeld. Geweigerd blijft alleen de tegenstrijdigheid:
+onderbouwing gekoppeld én ‘niet van toepassing’.
+
+De beslissing verdwijnt niet, zij ligt op één plek. De reviewtransitie weigert
+goedkeuring zonder onderbouwing (`knowledge_evidence_required`) totdat de
+reviewer expliciet kiest dat die niet van toepassing is; die regel en de
+reviewkaart zijn ongewijzigd. Dit vervangt de eerdere regel in dit contract
+dat ‘de onderbouwingskeuze’ bij de medewerker blijft blokkeren.
+
+- Geen schemawijziging; bestaande annotaties met een eerdere keuze blijven
+  geldig en tonen die keuze, met − om haar weg te halen.
+- Wat het kost: de reviewer ziet niet meer of de medewerker bewust niets vond
+  of het vergat.
+- Bewijs: de ketenproef rondt af zonder keuze, wordt bij review eerst geweigerd
+  en pas goedgekeurd na de keuze van de reviewer.

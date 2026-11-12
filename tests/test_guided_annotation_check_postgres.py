@@ -25,7 +25,8 @@ def test_check_is_authorized_read_only_and_names_exact_saved_basis(production_co
     assert check['basis']['generation'] == before['generation']
     assert check['basis']['objects_revision'] == before['objects_revision']
     assert check['basis']['extraction_hash'] == before['extraction_hash']
-    assert 'annotation_evidence_required' in check['codes']  # Underbouwing is nog niet beantwoord.
+    # #1060: linking no evidence is no open point for the worker; the reviewer decides.
+    assert 'annotation_evidence_required' not in check['codes'] and 'annotation_fields_required' in check['codes']
     assert 'annotation_not_ready' not in check['codes']
     assert 'annotation_source_unaccounted' not in check['codes']
     client=TestClient(production_app(console),base_url='https://testserver')
@@ -34,7 +35,7 @@ def test_check_is_authorized_read_only_and_names_exact_saved_basis(production_co
     assert response.status_code==200
     assert response.headers['cache-control']=='no-store'
     assert response.json()['basis']==check['basis']
-    assert any(finding['code']=='annotation_evidence_required' and finding['message'] for finding in response.json()['findings'])
+    assert any(finding['code']=='annotation_fields_required' and finding['message'] for finding in response.json()['findings'])
     assert annotations.overview(console, actor_id=actor, snapshot_id=sid) == before
     with console.workflow_document_store._connect() as con:
         assert con.execute('SELECT count(*) AS n FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['n']==1

@@ -193,4 +193,9 @@ def test_annotation_preflight_checks_draft_content_without_status_or_document_ga
     assert inspect_document([entry], fragments=fragments)['entries'][0]['codes'] == ['annotation_not_ready']
     entry['payload']['ranges'] = [r for r in entry['payload']['ranges'] if r['role'] != 'evidence']
     entry['payload_hash'] = stable_hash(entry['payload'])
+    # #1060: no linked evidence is not a finding; the review transition asks the reviewer.
+    assert inspect_annotation(entry, fragments=fragments, require_ready=False) == []
+    entry['payload']['evidence_not_applicable'] = True
+    entry['payload']['ranges'] = before['payload']['ranges']
+    entry['payload_hash'] = stable_hash(entry['payload'])
     assert 'annotation_evidence_required' in inspect_annotation(entry, fragments=fragments, require_ready=False)

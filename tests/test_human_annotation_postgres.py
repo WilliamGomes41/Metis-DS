@@ -144,7 +144,8 @@ def test_unicode_duplicate_positions_stale_witness_and_roles(tmp_path, productio
     rejected(lambda r:r['selection']['ranges'][0].update(quote='Andere tekst'), 'annotation_anchor_mismatch')
     text = next(b['text'] for b in view['blocks'] if 'Controleer' in b['text'])
     rejected(lambda r:r['selection']['ranges'][0].update(end=text.index('👩')+1), 'annotation_grapheme_boundary_invalid')
-    rejected(lambda r:r['selection'].update(status='ready'), 'annotation_evidence_required')
+    # #1060: only evidence together with 'not applicable' is refused; neither is the reviewer's call.
+    rejected(lambda r:(r['selection'].update(status='ready',evidence_not_applicable=True),r['selection']['ranges'].append(anchor(view,'Onderzoek',role='evidence',function='supported_by'))), 'annotation_evidence_required')
     rejected(lambda r:r['selection']['ranges'][0].update(role='evidence'), 'annotation_evidence_function_required')
     with pytest.raises(ConsoleError,match='reviewer_not_named_on_snapshot|researcher_role_required'):
         other = console.create_account(username='outsider',password='annotation-secret',roles=('reviewer',))

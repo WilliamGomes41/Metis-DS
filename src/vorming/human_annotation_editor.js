@@ -222,18 +222,15 @@ import {bindRange} from '/annotations/binding.mjs';
       },{label:'Tekst toevoegen aan Hoort erbij',run:()=>arm('context'),pressed:armed==='context'});
       row('evidence','Onderbouwing',dd=>{
         for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
-        if(!evidence.length && entry.evidence_not_applicable) line(dd,'Staat niet in de bron.','Keuze weghalen: staat niet in de bron',()=>{setNoEvidence(false).catch(()=>{});});
+        // An earlier explicit choice stays visible and removable; the card no longer asks for it.
+        if(!evidence.length && entry.evidence_not_applicable) line(dd,'Vastgelegd als niet van toepassing.','Keuze weghalen: niet van toepassing',()=>{setNoEvidence(false).catch(()=>{});});
         if(armed==='evidence') hint(dd,'Selecteer de onderbouwing in de bron.');
-        if(!evidence.length && !entry.evidence_not_applicable) {
-          dd.dataset.open='true';
-          const none=document.createElement('button');none.type='button';none.className='btn-secondary';none.textContent='Staat niet in de bron';
-          none.addEventListener('click',()=>{setNoEvidence(true).catch(()=>{});});dd.append(none);
-        }
+        if(!evidence.length && !entry.evidence_not_applicable && armed!=='evidence') hint(dd,'Niets gekoppeld. Staat de onderbouwing in de bron? Voeg haar toe met +.');
       },{label:'Tekst toevoegen aan Onderbouwing',run:()=>arm('evidence'),pressed:armed==='evidence'});
     }
     el('simple-type').hidden=!core.length || !!entry.object_type || deriving;
     if(!el('simple-type').hidden) el('simple-type-select').value='';
-    const own=finding=>finding.code==='annotation_evidence_required' || finding.code==='annotation_core_required' && !entry.object_type;
+    const own=finding=>finding.code==='annotation_core_required' && !entry.object_type;
     const lost=!selected && el('selection').textContent.startsWith('Wijs één bereik') ? el('selection').textContent : '';
     el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : lost ||
       (core.length && selected && !armed ? 'Klik op + bij de regel waar de geselecteerde tekst bij hoort.' : !core.length ? '' :

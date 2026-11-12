@@ -107,11 +107,12 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
     view = annotation.prepare(console, actor_id=actor, snapshot_id=sid, expected_revision=console.objects_revision(sid))
     core = anchor(view, 'Bij diabetes')
     introduction = {**anchor(view, 'De volgende mechanismen', role='list_introduction'), 'required_for_meaning': True}
-    # The worker marked statement, belonging text and the evidence choice. No sentence part is filled in.
+    # The worker marked the statement and the text that belongs to it. No sentence part is filled in and
+    # no evidence choice is made: with nothing linked, that decision is the reviewer's.
     fields = {key: {'span': None, 'missing_reason': 'uncertain'} for key in FIELDS}
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core, introduction], status='ready')
-    request['selection'].update(object_type='explanation', evidence_not_applicable=True,
+    request['selection'].update(object_type='explanation', evidence_not_applicable=False,
                                 field_evidence=fields, required_links=[])
     annotation.save(console, actor_id=actor, **request)
 
@@ -141,6 +142,14 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
     assert 'Toelichting · voorgesteld type' in card
     assert card.count('<fieldset class="ko-question">') == 3 and card.count('data-ko-signals') == 1
 
+    # Approval without linked evidence is refused until the reviewer decides it is not applicable.
+    import pytest
+    from src.operations_console_v1 import ConsoleError
+    from tests.ko_review_fixture_support import affirmative_assessment
+    with pytest.raises(ConsoleError) as refused:
+        console.review_object(actor_id=actor, snapshot_id=sid, object_id=obj['object_id'], decision='approve',
+                              confirmed_object_type='explanation', assessment=affirmative_assessment())
+    assert refused.value.code == 'knowledge_evidence_required'
     approve(console, sid, obj['object_id'], actor)
     from src.review.knowledge_object_state_v1 import derive_ko_state
     state = derive_ko_state(candidate(console, sid), review_path='richtlijn',
