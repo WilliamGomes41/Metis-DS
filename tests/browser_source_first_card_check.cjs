@@ -14,8 +14,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.goto(base+'/ingest');
  const intro='De volgende mechanismen spelen mogelijk een rol bij het risico op smetten:';
  const item='Bij diabetes mellitus zou de huid vatbaarder kunnen zijn voor irritatie en infecties.';
- const support='Onderzoek beschrijft dit verband.',failing='Foutvoorbeeld voor handmatig herstel.';
- await page.locator('[name=file]').setInputFiles({name:'smetten.html',mimeType:'text/html',buffer:Buffer.from('<html><body><h1>Smetten</h1><p>'+intro+'</p><p>'+item+'</p><p>'+support+'</p><p>'+failing+'</p></body></html>')});
+ const support='Onderzoek beschrijft dit verband.',failing='Foutvoorbeeld voor handmatig herstel.',alone='De huid wordt dagelijks gecontroleerd.';
+ await page.locator('[name=file]').setInputFiles({name:'smetten.html',mimeType:'text/html',buffer:Buffer.from('<html><body><h1>Smetten</h1><p>'+intro+'</p><p>'+item+'</p><p>'+support+'</p><p>'+failing+'</p><p>'+alone+'</p></body></html>')});
  for(const [name,value] of Object.entries({title:'Richtlijn Smetten',version:'1',date:'2026-11-12',family:'test'}))await page.locator(`[name=${name}]`).fill(value);
  await page.locator('[name=class_]').selectOption('richtlijn');await page.locator('[name=review_option][value=uploader_sole]').check();
  await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
@@ -71,6 +71,13 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['context',intro,false]]);
  assert.deepEqual(entry.field_evidence.supported_object,{span:null,missing_reason:'not_stated'});
  assert.deepEqual(entry.required_links,[]);
+ // A statement on its own is a complete object: select it and save, without touching '+'.
+ await tasks.selectText(page,block(alone),alone);
+ await row('core').getByText(alone,{exact:true}).waitFor();
+ await page.locator('#annotation-ready:enabled').click();
+ await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
+ entry=(await read()).entries.find(e=>e.ranges.some(a=>a.quote===alone));
+ assert.equal(entry.status,'ready');assert.deepEqual(entry.ranges.map(a=>a.role),['core']);
  // Metis unavailable: the only question is the type. Evidence is added with '+' and removed with '−'.
  await tasks.selectText(page,block(failing),failing.slice(0,13));
  await plus('evidence').click();

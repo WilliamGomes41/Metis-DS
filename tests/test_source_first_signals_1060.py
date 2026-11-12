@@ -156,3 +156,15 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
                             bindings=console.object_review_bindings(sid),
                             fragments=console.review_source_fragments(sid))
     assert state['state'] == 'Goedgekeurd', state
+
+
+def test_every_recorded_signal_reaches_the_reviewer_even_without_its_own_sentence():
+    from src.review.ko_review_page_v1 import _completeness_signals
+
+    def card(*codes):
+        return _completeness_signals({'metadata': {'admission': {'gate_result': 'allowed', 'signals': list(codes)}}})
+    assert card() == ''
+    assert 'Een onderdeel dat bij dit type uitspraak hoort is niet vastgesteld.' in card('type_contract_incomplete')
+    assert 'leunt mogelijk op andere tekst' in card('type_contract_incomplete', 'supported_object_missing')
+    for code in sorted(HUMAN_SIGNAL_CODES):
+        assert card(code).startswith('<span data-ko-signals>Let op: '), code

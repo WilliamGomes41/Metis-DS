@@ -128,6 +128,9 @@ def _completeness_signals(obj):
         lines.append('Niet vastgesteld wat erover gezegd wordt.')
     if codes & {'recommendation_recommended_action_missing', 'recommendation_action_object_or_goal_missing'}:
         lines.append('De aanbevolen handeling of het doel ervan is niet vastgesteld.')
+    if not lines:
+        # Every recorded signal is represented; a code without its own sentence still warns.
+        lines.append('Een onderdeel dat bij dit type uitspraak hoort is niet vastgesteld.')
     return '<span data-ko-signals>Let op: ' + escape(' '.join(lines)) + '</span>' if lines else ''
 
 

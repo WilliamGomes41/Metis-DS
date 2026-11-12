@@ -169,10 +169,17 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   // Selecting text is the statement. '+' adds text to a row, '−' removes it.
   let armed=null, queued=null;
+  // A meaning reference that lay only inside a removed range no longer has a source.
+  function clearDependentFields(removed) {
+    const contains=(outer,inner)=>outer.block_id===inner.block_id && outer.start<=inner.start && outer.end>=inner.end;
+    for(const [field,evidence] of Object.entries(entry.field_evidence || {}))
+      if(evidence.span && contains(removed,evidence.span) && !entry.ranges.some(range=>contains(range,evidence.span)))
+        entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
+  }
   function removeRange(anchor) {
     const index=entry.ranges.indexOf(anchor);if(index<0) return;
     if(anchor.required_for_meaning) entry.required_links.push({relationship_id:linkId(anchor),role:anchor.role,evidence_function:anchor.evidence_function,required_for_meaning:true,withdrawal_reason:null});
-    entry.ranges.splice(index,1);change();render();runCheck();
+    entry.ranges.splice(index,1);clearDependentFields(anchor);change();render();runCheck();
   }
   // Removing a piece changes the statement: what Metis derived from it no longer holds.
   // Removing the last piece removes the object itself, so no empty draft is left to block the document.
@@ -378,9 +385,12 @@ import {bindRange} from '/annotations/binding.mjs';
     if(simple()) {
       for(const id of ['selection-tools','linked','back','add','suggest']) el(id).hidden=true;
       const complete=confirmedReady || checkIsCurrent() && !check.findings.length;
-      el('new').hidden=true;el('ready').hidden=!hasCore();el('finish').hidden=false;
-      el('ready').disabled=finalizing || checking || deriving || !complete;
-      el('finish').disabled=finalizing || checking || deriving || (hasCore() ? !complete : !!selected);
+      // A selected statement alone is a complete object: saving commits it first.
+      // A saved object that lost its statement must get one back before leaving.
+      const provisional=!hasCore() && !!selected,busy=finalizing || checking || deriving;
+      el('new').hidden=true;el('ready').hidden=!hasCore() && !provisional;el('finish').hidden=false;
+      el('ready').disabled=busy || !(provisional || complete);
+      el('finish').disabled=busy || (hasCore() ? !complete : !provisional && !!entry.revision);
       renderSimple();
     }
     el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Selecteer de woorden in de bron.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
@@ -573,10 +583,7 @@ import {bindRange} from '/annotations/binding.mjs';
           entry.ranges.splice(index,1);
           // Removing a source connection also removes meaning references that
           // depended exclusively on that connection. Keep other anchors intact.
-          const contains=(outer,inner)=>outer.block_id===inner.block_id && outer.start<=inner.start && outer.end>=inner.end;
-          for(const [field,evidence] of Object.entries(entry.field_evidence || {}))
-            if(evidence.span && contains(a,evidence.span) && !entry.ranges.some(range=>contains(range,evidence.span)))
-              entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
+          clearDependentFields(a);
           change();render();
         };
         if(a.role==='core') confirmChange('Deze kernkoppeling verwijderen? Betekenisvelden moeten daarna opnieuw worden gecontroleerd. Opgebouwde objecten kunnen opnieuw beoordeling nodig hebben.',removeRange);
@@ -880,12 +887,17 @@ import {bindRange} from '/annotations/binding.mjs';
     finally {finalizing=false;el('editor-inputs').disabled=false;updateBindingControls();}
   }
   const toOverview = () => { window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); };
+  // In the card, saving first commits a statement that was only selected.
+  async function saveCard() {
+    if(simple() && !hasCore() && selected) await useAs('core');
+    return hasCore() && await finishCurrent();
+  }
   el('ready').addEventListener('click',async()=>{
-    const saved=await finishCurrent();
+    const saved=await saveCard();
     if(saved && simple()) {load('');entries();status('Opgeslagen. Selecteer de volgende uitspraak.');}
   });
   el('finish').addEventListener('click',async()=>{
-    if(hasCore() ? await finishCurrent() : !selected) toOverview();
+    if(hasCore() || selected ? await saveCard() : !entry.revision) toOverview();
   });
   el('withdraw').addEventListener('click',()=>confirmChange('De hele annotatie terugnemen, inclusief alle gekoppelde brontekst? Dit meldt de annotatie niet gereed. De bron moet nog worden verantwoord.',async()=>{
     try {await flush();entry.status='withdrawn';dirty+=1;await flush();load('');entries();}catch(_){}
