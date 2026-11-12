@@ -1,6 +1,14 @@
 // Public guided UI actions shared by native browser regressions.
 const assert=require('node:assert/strict');
-async function step(page,n) {await page.locator('#annotation-step-'+n).click();}
+// #1060: the step form is the advanced form; the default card needs no steps.
+async function advanced(page) {
+ await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ if(await page.locator('#annotation-steps').isVisible()) return;
+ const details=page.locator('#annotation-more');
+ if(!await details.evaluate(node=>node.open)) await details.locator(':scope > summary').click();
+ await page.locator('#annotation-advanced').click();
+}
+async function step(page,n) {await advanced(page);await page.locator('#annotation-step-'+n).click();}
 async function open(page,id) {
  const details=page.locator('#annotation-'+id);
  if(!await details.evaluate(node=>node.open)) await details.locator(':scope > summary').click();
@@ -20,7 +28,16 @@ async function ready(page) {
 async function more(page) {await open(page,'more');}
 async function linked(page) {await open(page,'linked');}
 async function confirm(page) {await page.locator('#annotation-confirm-accept').click();}
-module.exports={step,open,type,role,field,ready,more,linked,confirm};
+// Proofs of the step form keep it open across pages and reloads, as a user who chose it would.
+function useAdvancedForm(browser) {
+ const create=browser.newContext.bind(browser);
+ browser.newContext=async options=>{
+  const context=await create(options);
+  await context.addInitScript(()=>{try {localStorage.setItem('metis-annotation-form','uitgebreid');} catch(_) {}});
+  return context;
+ };
+}
+module.exports={useAdvancedForm,advanced,step,open,type,role,field,ready,more,linked,confirm};
 
 // Select real source DOM text; field-binding workflows use the same capture
 // boundary as keyboard/mouse selection, without a duplicate textarea.

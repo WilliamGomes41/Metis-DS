@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
   fs.mkdirSync(output,{recursive:true});
   const m = await (await fetch(base+'/browser-manifest')).json();
   const browser = await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
+  require('./browser_annotation_tasks.cjs').useAdvancedForm(browser);
   const context = await browser.newContext({viewport:{width:1440,height:1000}});
   let page = await context.newPage();
   const errors = [];

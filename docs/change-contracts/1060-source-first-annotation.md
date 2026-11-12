@@ -110,3 +110,29 @@ Adversarial proof matrix: zie hieronder.
 
 Vóór merge van elke slice die toelating raakt: een aparte adversarial review
 volgens `docs/agents/continuous-development.md`.
+
+## Slice 2 uitgevoerd: de kaart met drie regels
+
+De standaardkaart toont Uitspraak, Hoort erbij en Onderbouwing. De medewerker
+selecteert tekst in de bron en kiest waar die voor is; Metis leidt type en
+onderdelen op de achtergrond af met de bestaande voorstelquery. Dezelfde save,
+controle en afrondregels worden gebruikt; er is geen nieuwe route of opslag.
+
+- **Opslag van de drie keuzes in het bestaande contract:** de uitspraak als
+  kernbereik; “hoort erbij” als contextbereik met de bestaande rol `context`,
+  vastgelegd als essentieel; onderbouwing als bereik met functie `supported_by`,
+  of de bestaande vlag `evidence_not_applicable`.
+- **Label:** de medewerker ziet “Staat niet in de bron”; de opgeslagen vlag en
+  de formulering op de reviewkaart zijn ongewijzigd.
+- **Eén vraag bij uitval:** kan Metis het type niet bepalen, dan vraagt de kaart
+  alleen het type.
+- **Signalen** staan in de regel waar ze over gaan: “leunt mogelijk op andere
+  tekst” bij Hoort erbij, “afgebroken zin” bij Uitspraak. Signalen voor de
+  reviewer komen in slice 3.
+- **Het stappenformulier** blijft bereikbaar via “Uitgebreid formulier openen”
+  en wordt gebruikt voor bronstukken zonder uitspraak en voor zeldzame
+  controlepunten. De keuze wordt per browser onthouden.
+
+Open voor slice 5 (besluit nodig): het weghalen van gekoppelde tekst loopt nog
+via de bestaande verplichting om opnieuw aan te wijzen of een reden te geven.
+Die regel is vastgelegd in kernel en database en is hier niet gewijzigd.

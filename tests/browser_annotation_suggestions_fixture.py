@@ -13,6 +13,11 @@ def controlled_transport(url, headers, payload, limits):
     time.sleep(1)
     if 'Foutvoorbeeld' in text:
         raise ConsoleError('pre_review_llm_timeout')
+    if 'diabetes' in text:
+        raw = proposal(subject_span='de huid', predicate_span='vatbaarder kunnen zijn', support_span=text, type_evidence_spans=text)
+        raw['fields']['supported_object'] = {'quote': None, 'missing_reason': 'not_stated'}
+        raw['object_type'] = 'explanation'
+        return provider(raw)
     if 'De huid is droog' in text:
         raw = proposal(subject_span='De huid', predicate_span='is', defined_term='De huid',
                        definiens_span='droog en de huid is rood.', type_evidence_spans=text)

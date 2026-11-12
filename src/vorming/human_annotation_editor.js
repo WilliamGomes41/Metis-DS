@@ -15,6 +15,20 @@ import {bindRange} from '/annotations/binding.mjs';
   // Presentation only: why the last proposal left something open, and which
   // part of the manual form answers the point the user opened. Never saved.
   let openPoints=[], only=null;
+  // #1060 slice 2: the default card asks three things in the language of the
+  // source. The step form remains as the advanced form until it is retired.
+  // The choice of form is a per-browser convenience; the page works without storage.
+  const formKey='metis-annotation-form';
+  let advanced=(()=>{try {return localStorage.getItem(formKey)==='uitgebreid';} catch(_) {return false;}})(), replacingCore=false, deriving=false;
+  const simple = () => !advanced && !entry?.disposition;
+  function setAdvanced(value) {
+    advanced=value;
+    try {if(value) localStorage.setItem(formKey,'uitgebreid');else localStorage.removeItem(formKey);} catch(_) { /* stays for this page only */ }
+    showTask(task);
+  }
+  // Signals a worker can act on, shown in the row they are about.
+  const leaning=new Set(['supported_object_missing','condition_target_missing','exception_target_missing','annotation_relation_target_missing','no_independent_claim']);
+  const broken=new Set(['incomplete_sentence','recommendation_core_incomplete']);
   const openField = field => {const e=entry.field_evidence?.[field];return !!e && !e.core && !e.span && e.missing_reason==='uncertain';};
   const pointFor = field => openPoints.find(point=>point.field===field && openField(field));
   const reason = point => point.reason==='quote_ambiguous' ? 'De tekst “'+point.quote+'” komt meer dan eens voor in je selectie. Wijs de bedoelde plaats aan.' :
@@ -57,7 +71,7 @@ import {bindRange} from '/annotations/binding.mjs';
     cancelConfirmation();task=value;
     const partChanged=only!==part;only=part;
     for(let n=1;n<=3;n++) {
-      el('task-'+n).hidden=n!==task;
+      el('task-'+n).hidden=simple() || n!==task;
       if(n===task) el('step-'+n).setAttribute('aria-current','step');else el('step-'+n).removeAttribute('aria-current');
     }
     if(task===1) {repairingLink=null;clearChoice();target={kind:'range',role:'core'};el('role').value='core';el('role').disabled=!!entry.disposition;}
@@ -151,11 +165,94 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     el('recheck').hidden=checking || current || confirmedReady;
   }
+  function removeRange(anchor) {
+    const index=entry.ranges.indexOf(anchor);if(index<0) return;
+    if(anchor.required_for_meaning) entry.required_links.push({relationship_id:linkId(anchor),role:anchor.role,evidence_function:anchor.evidence_function,required_for_meaning:true,withdrawal_reason:null});
+    entry.ranges.splice(index,1);change();render();runCheck();
+  }
+  function setNoEvidence(value) {entry.evidence_not_applicable=value;el('na').checked=value;change();runCheck();}
+  function renderSimple() {
+    const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
+    const done=entry.status==='ready' && dirty===committed,current=checkIsCurrent(),pick=replacingCore || !core.length;
+    el('simple-heading').textContent=pick ? 'Wijs de uitspraak aan' : done ? 'Klaar voor documentcontrole' : 'Klopt dit?';
+    const findings=current ? check.findings : [],signals=current ? check.signals || [] : [];
+    const rows=el('simple-rows');rows.replaceChildren();
+    const text=(dd,value,hint=false)=>{const p=document.createElement('p');p.textContent=value;if(hint) p.className='annotation-hint';dd.append(p);return p;};
+    const action=(parent,label,run,name,primary=false)=>{const button=document.createElement('button');button.type='button';button.className=primary ? 'btn-secondary' : 'annotation-row-action';button.textContent=label;button.setAttribute('aria-label',label+': '+name);button.addEventListener('click',run);parent.append(' ',button);};
+    const row=(key,label,build)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.dataset.row=key;build(dd);rows.append(dt,dd);};
+    row('core','Uitspraak',dd=>{
+      if(!core.length) {text(dd,'Selecteer de volledige uitspraak in de bron.',true);return;}
+      const p=text(dd,core.map(a=>a.quote).join(' '));
+      if(signals.some(item=>broken.has(item.code))) text(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?',true);
+      if(replacingCore) action(p,'Toch behouden',()=>{replacingCore=false;renderSimple();},'Uitspraak');
+      else action(p,'Andere tekst kiezen',()=>{replacingCore=true;renderSimple();el('simple-heading').focus();},'Uitspraak');
+    });
+    if(core.length) {
+      row('belongs','Hoort erbij',dd=>{
+        for(const a of belongs) action(text(dd,a.quote),'Weghalen',()=>removeRange(a),a.quote);
+        if(!belongs.length) text(dd,signals.some(item=>leaning.has(item.code)) ? 'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij? Selecteer die in de bron.' : 'Niets gekoppeld. Selecteer tekst in de bron als de uitspraak zonder die tekst niet te begrijpen is.',true);
+      });
+      row('evidence','Onderbouwing',dd=>{
+        for(const a of evidence) action(text(dd,a.quote),'Weghalen',()=>removeRange(a),a.quote);
+        if(evidence.length) return;
+        if(entry.evidence_not_applicable) action(text(dd,'Staat niet in de bron.'),'Wijzigen',()=>setNoEvidence(false),'Onderbouwing');
+        else {dd.dataset.open='true';action(text(dd,'Selecteer de onderbouwing in de bron, of kies:'),'Staat niet in de bron',()=>setNoEvidence(true),'Onderbouwing',true);}
+      });
+    }
+    el('simple-type').hidden=!core.length || !!entry.object_type || deriving;
+    if(!el('simple-type').hidden) el('simple-type-select').value='';
+    const own=finding=>finding.code==='annotation_evidence_required' || finding.code==='annotation_core_required' && !entry.object_type;
+    const lost=!selected && el('selection').textContent.startsWith('Wijs één bereik') ? el('selection').textContent : '';
+    el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…' : lost || (!core.length ? '' : done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' :
+      checking ? 'Controleren…' : current && !findings.length ? 'Je kunt afronden.' : '');
+    const notes=el('simple-notes');notes.replaceChildren();
+    for(const finding of findings.filter(f=>!own(f))) {const li=document.createElement('li');action(li,finding.message+' Aanvullen',()=>repairFinding(finding),'controlepunt',true);notes.append(li);}
+    el('simple-selection').hidden=!selected;
+    if(selected) {
+      el('simple-quote').textContent=selected.quote;
+      el('simple-core').hidden=!pick;el('simple-none').hidden=!!core.length;
+      el('simple-belongs').hidden=pick;el('simple-evidence').hidden=pick;
+    }
+  }
+  async function derive() {
+    deriving=true;renderSimple();
+    try {await proposeMeaning();}
+    finally {
+      deriving=false;
+      if(simple()) {el('suggestion-note').textContent='';await runCheck();el('simple-heading').focus({preventScroll:true});}
+    }
+  }
+  async function useAs(kind) {
+    if(!selected || finalizing || deriving) return;
+    if(kind==='core') {
+      if(hasCore()) {entry.ranges=entry.ranges.filter(a=>a.role!=='core');entry.object_type=null;el('type').value='';entry.field_evidence=null;resetFields();}
+      replacingCore=false;target={kind:'range',role:'core'};el('role').value='core';
+      bindSelected();if(selected) return;
+      await derive();return;
+    }
+    el('role').value=kind==='evidence' ? 'evidence' : 'context';target={kind:'range',role:el('role').value};
+    el('essential').checked=kind!=='evidence';el('additional').checked=kind==='evidence';el('function').value='supported_by';
+    if(kind==='evidence') {entry.evidence_not_applicable=false;el('na').checked=false;}
+    bindSelected();await runCheck();
+  }
+  el('simple-core').addEventListener('click',()=>{useAs('core').catch(()=>{});});
+  el('simple-belongs').addEventListener('click',()=>{useAs('context').catch(()=>{});});
+  el('simple-evidence').addEventListener('click',()=>{useAs('evidence').catch(()=>{});});
+  el('simple-clear').addEventListener('click',()=>el('discard').click());
+  el('simple-none').addEventListener('click',()=>{setAdvanced(true);el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));});
+  for(const option of el('type').options) if(option.value && option.value!=='source_disposition') el('simple-type-select').add(new Option(option.textContent,option.value));
+  el('simple-type-select').addEventListener('change',()=>{
+    const value=el('simple-type-select').value;if(!value) return;
+    el('type').value=value;el('type').dispatchEvent(new Event('change'));runCheck();
+  });
+  el('advanced').addEventListener('click',()=>setAdvanced(true));
+  el('simple-back').addEventListener('click',()=>{setAdvanced(false);if(hasCore()) runCheck();});
   function repairFinding(finding) {
     const code=finding.code,field=finding.field,semantic=semanticCode(code);
     // Open only the part that answers this point; unknown codes keep the full form.
     const part=field ? {field} : semantic ? {semantics:true} : code==='annotation_evidence_required' ? {evidence:true} : null;
     const next=code==='annotation_pending_range' && entry.pending_range?.role==='core' || coreCode(code) ? 1 : 2;
+    if(simple()) advanced=true;
     showTask(next,true,next===2 ? part : null);
     if(next===1 && hasCore() && !entry.object_type) el('type').focus();
     if(field) {el('field').value=field;chooseTarget({kind:'field',field});}
@@ -227,6 +324,13 @@ import {bindRange} from '/annotations/binding.mjs';
     el('discard').hidden=!selected;
     el('linked').hidden=task===3 || !entry.ranges.length || !!only && !only.evidence;
     el('target').hidden=!!only?.field;
+    el('steps').hidden=simple();el('simple').hidden=!simple();
+    el('advanced').hidden=advanced;el('simple-back').hidden=!advanced;
+    if(simple()) {
+      for(const id of ['selection-tools','linked','back','add','suggest']) el(id).hidden=true;
+      el('ready').hidden=!hasCore() || confirmedReady;el('new').hidden=!confirmedReady;
+      renderSimple();
+    }
     el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Selecteer de woorden in de bron.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
   }
   function renderSourceHighlights() {
@@ -336,7 +440,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
@@ -359,7 +463,7 @@ import {bindRange} from '/annotations/binding.mjs';
     showTask(entry.status==='ready' || hasCore() && !selected && !entry.disposition ? 3 : hasCore() ? 2 : 1);
     if(task===2 && selected && repairingLink) target={kind:'range',role:el('role').value};
     updateBindingControls();
-    if(task===3) runCheck();
+    if(task===3 || simple() && hasCore()) runCheck();
   }
   function entries() {
     el('entry').replaceChildren(new Option('Nieuwe annotatie',''));
@@ -387,7 +491,7 @@ import {bindRange} from '/annotations/binding.mjs';
       const p=document.createElement('p');p.textContent='Essentieel verband ontbreekt: '+labels[link.role];
       const repair=document.createElement('button');repair.type='button';repair.className='btn-secondary';repair.textContent='Dit verband opnieuw aanwijzen';
       repair.addEventListener('click',() => {
-        showTask(2,true);target={kind:'range',role:link.role};repairingLink=link.relationship_id;el('role').value=link.role;el('essential').checked=true;
+        advanced=true;showTask(2,true);target={kind:'range',role:link.role};repairingLink=link.relationship_id;el('role').value=link.role;el('essential').checked=true;
         el('function').value=link.evidence_function || 'supported_by';
         if(selected) captureSelection(selected);
         renderFields();status(selected ? 'Voeg de aangewezen tekst toe aan dit essentiële verband.' : 'Wijs de brontekst voor dit essentiële verband aan.');
