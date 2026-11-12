@@ -9,6 +9,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ### Added
 - Eén bronselectie kan type en brongebonden betekenis voorstellen; de gebruiker controleert/corrigeert het concept vóór afronden (#1055).
+- Voor menselijke annotatie zijn ontbrekende zinsdelen en type-onderdelen signalen: ze worden vastgelegd in het toelatingsrecord en getoond, maar houden afronden, afsluiten en toelating niet meer tegen. Brongetrouwheid, type, richting/sterkte en de onderbouwingskeuze blijven verplicht (#1060, slice 1).
 - Na een betekenisvoorstel opent de annotatiewerkplek één overzicht waarin elk onderdeel direct aanpasbaar is; een dubbelzinnig of ontbrekend onderdeel staat als open punt in zijn eigen rij en het antwoord keert terug naar het overzicht. Overbodige uitleg en knoppen zijn uit de kaart gehaald. Voorstellen bevatten alleen typen die de annotatieopslag accepteert (#1058).
 - Issue #1053: remove the duplicate annotation selection helper and current-passage text field. Keyboard selection now works directly in the read-only source, preserving grapheme boundaries, mouse/touch selection and existing saved source anchors.
 - Issue #1051: the annotation card guides statement selection, meaning and explicit completion in three tasks with one main action per task. A read-only check of the saved current annotation reuses document inspection; edits invalidate that check. Source links, save/retry, essential relationships and existing version/review/publication boundaries remain in place.

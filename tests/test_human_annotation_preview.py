@@ -78,7 +78,9 @@ def test_missing_field_is_reported_without_inference_or_overwriting():
     fragments, entry = stored()
     entry['payload']['field_evidence']['predicate_span'] = {'span': None, 'missing_reason': 'uncertain'}
     result = inspect(entry, fragments)
-    assert {'annotation_id': entry['annotation_id'], 'code': 'predicate_missing'} in result['findings']
+    # #1060: reported as a signal for worker and reviewer; it no longer blocks sealing.
+    assert result['entries'][0]['signals'] == ['predicate_missing']
+    assert {'annotation_id': entry['annotation_id'], 'code': 'predicate_missing'} not in result['findings']
     assert entry['payload']['field_evidence']['predicate_span'] == {'span': None, 'missing_reason': 'uncertain'}
 
 

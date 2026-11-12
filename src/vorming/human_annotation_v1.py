@@ -580,10 +580,11 @@ def check_current(console, *, actor_id, snapshot_id, annotation_id):
     if entry is None:
         fail('annotation_not_found')
     from src.vorming.human_annotation_preview_v1 import inspect_annotation
-    codes = inspect_annotation(entry, fragments=fragments, require_ready=False)
+    signals = []
+    codes = inspect_annotation(entry, fragments=fragments, require_ready=False, signals=signals)
     return {'annotation_id': annotation_id, 'revision': entry['revision'],
             'basis': {'snapshot_id': snapshot_id, 'working_revision_id': row['working_revision_id'],
                       'extraction_hash': row['extraction_hash'], 'normalization': row['normalization'],
                       'generation': capture['generation'],
                       'objects_revision': console.workflow_document_store.revision_for_rows(history)},
-            'codes': codes}
+            'codes': codes, 'signals': signals}

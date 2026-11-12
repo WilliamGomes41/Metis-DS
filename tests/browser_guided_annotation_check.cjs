@@ -67,9 +67,11 @@ const assert=require('node:assert/strict');
   await page.locator('#annotation-ready:enabled').waitFor();await primaryCount();
   // Changing an answer invalidates the previous check immediately.
   await step(2);await page.locator('[data-field=subject_span]').click();await page.locator('#annotation-fields select:visible').selectOption('uncertain');
-  await step(3);await page.locator('#annotation-check').getByText(/controlepunt/).waitFor();
-  assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
-  await page.locator('#annotation-review-summary dd[data-row=subject_span][data-open] button').click();
+  // #1060: an unidentified subject is a signal for worker and reviewer; it no longer blocks.
+  await step(3);await page.locator('#annotation-review-summary dd[data-row=subject_span][data-signal]').waitFor();
+  await page.locator('#annotation-ready:enabled').waitFor();
+  assert.match(await page.locator('#annotation-check').innerText(),/Je kunt afronden/);
+  await page.locator('#annotation-review-summary dd[data-row=subject_span] button').click();
   assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
   await source.click();await selectText(page,source,'De kwetsbare huid');
   await page.locator('#annotation-add').click();
