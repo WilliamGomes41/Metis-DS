@@ -33,6 +33,7 @@ const assert = require('node:assert/strict');
   assert.ok(sid, uploaded.url);
   await page.goto(base+'/annotations?document='+sid);
   await page.getByRole('button', {name:'Bron openen voor annotatie'}).click();
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
   await page.goto(base+'/annotations?document='+sid+'&overview=true');
   assert.equal(await page.locator('#annotation-finalize').count(),0);
   await page.getByRole('heading',{name:'Nog niet verantwoord bronmateriaal'}).waitFor();

@@ -109,6 +109,12 @@
       ]
     ],
     [
+      "/annotations/suggest",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/audit",
       [
         "GET"
