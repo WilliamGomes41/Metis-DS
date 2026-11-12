@@ -41,9 +41,9 @@ const assert=require('node:assert/strict');
   assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
   assert.equal(await page.locator('#annotation-type').isVisible(),false);await primaryCount();
   // Run the same server checks before claiming completion, without a circular draft gate.
-  await step(3);await page.locator('#annotation-check').getByText(/controlepunten/).waitFor();
+  await step(3);await page.locator('#annotation-check').getByText(/controlepunt/).waitFor();
   assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
-  assert.match(await page.locator('#annotation-check').innerText(),/onderbouwing|onderwerp|gezegd/);
+  assert.match(await page.locator('#annotation-task-3 dd[data-open]').first().innerText(),/Beantwoorden/);
   let view=await read();assert.equal(view.entries[0].status,'draft');
   assert.equal(await page.locator('#annotation-check').innerText().then(t=>t.includes('nog niet gereed')),false);
   await step(2);
@@ -67,14 +67,17 @@ const assert=require('node:assert/strict');
   await page.locator('#annotation-ready:enabled').waitFor();await primaryCount();
   // Changing an answer invalidates the previous check immediately.
   await step(2);await page.locator('[data-field=subject_span]').click();await page.locator('#annotation-fields select:visible').selectOption('uncertain');
-  await step(3);await page.locator('#annotation-check').getByText(/controlepunten/).waitFor();
+  await step(3);await page.locator('#annotation-check').getByText(/controlepunt/).waitFor();
   assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
-  await page.locator('#annotation-check button').filter({hasText:'over wie of wat'}).click();
+  await page.locator('#annotation-review-summary dd[data-row=subject_span][data-open] button').click();
   assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
   await source.click();await selectText(page,source,'De kwetsbare huid');
   await page.locator('#annotation-add').click();
+  // Answering the opened point returns to the check; other fields stayed out of view.
+  await page.locator('#annotation-ready:enabled').waitFor();
+  assert.equal(await page.locator('#annotation-task-3').isVisible(),true);
   // Storage failure must retain the edit and block navigation until an exact retry succeeds.
-  await page.route('**/annotations/api',route=>route.abort());
+  await step(2);await page.route('**/annotations/api',route=>route.abort());
   await page.locator('#annotation-na').uncheck();
   await page.waitForFunction(()=>document.getElementById('annotation-status').textContent.startsWith('Opslaan mislukt.'));
   await page.locator('#annotation-more summary').click();await page.locator('#annotation-pause').click();assert.equal(new URL(page.url()).pathname,'/annotations');
@@ -86,7 +89,7 @@ const assert=require('node:assert/strict');
   // use its newer basis with our older writer, without silently overwriting it.
   const other=await page.context().newPage();
   await other.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
-  await other.locator('#annotation-na').uncheck();
+  await other.locator('#annotation-step-2').click();await other.locator('#annotation-na').uncheck();
   await other.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   await other.locator('#annotation-na').check();
   await other.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');

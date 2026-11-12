@@ -452,3 +452,12 @@ De query schrijft niets en controleert vóór en na provider-I/O dezelfde bron-,
 werk-, annotatie- en objectversie. Bij fout of stale antwoord blijven opgeslagen
 keuzes intact; er volgt geen automatische retry of invulling met gegokte tekst.
 Zie [ontwerp en bewijsgrenzen](../change-contracts/1055-meaning-proposals.md).
+
+## Aanwijzen, daarna alleen open punten (#1058 / MET-74)
+
+Na het voorstel opent de editor de controle in plaats van het veldformulier:
+**Uitspraak kiezen → open punten beantwoorden → Afronden**. Het voorstelantwoord
+benoemt vluchtig waarom een onderdeel open bleef; de editor toont dat als gerichte
+vraag en keert na het antwoord terug naar de controle. Elk onderdeel is in dat
+overzicht direct aanpasbaar; het volledige formulier blijft stap 2. Opslag, controle, bouw en de reviewkaart
+zijn ongewijzigd. Zie [contract en bewijs](../change-contracts/1058-annotation-point-then-check.md).

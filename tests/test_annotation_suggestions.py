@@ -49,6 +49,31 @@ def test_literal_binding_unicode_and_ambiguous_words():
     assert suggestions.bind_quote('cafe', rows) is None  # no Unicode/quote normalization guessing
 
 
+def test_every_proposable_type_is_storable_by_the_annotation_kernel():
+    from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
+    assert suggestions.TYPES and set(suggestions.TYPES) <= set(CLOSED_OBJECT_TYPES) - {'heading'}
+    assert set(suggestions.schema()['properties']['object_type']['enum']) == {None, *suggestions.TYPES}
+
+
+def test_open_points_explain_every_unbound_answer_without_echoing_unbound_text():
+    rows = [{'block_id': 'b', 'start': 0, 'end': 20, 'text': 'huid huid café.'}]
+    raw = proposal(subject_span='café', predicate_span='huid', actor_span='verpleegkundige')
+    raw['object_type'] = None
+    raw['fields']['recommended_action'] = {'quote': None, 'missing_reason': 'uncertain'}
+    result = suggestions.bind_proposal(raw, rows)
+    assert result['open_points'] == [
+        {'field': None, 'reason': 'type_unclear'},
+        {'field': 'predicate_span', 'reason': 'quote_ambiguous', 'quote': 'huid'},
+        {'field': 'recommended_action', 'reason': 'model_uncertain'},
+        {'field': 'actor_span', 'reason': 'quote_not_in_selection'}]
+    # The explanation changes no binding: every open answer stays uncertain.
+    for field in ('predicate_span', 'recommended_action', 'actor_span'):
+        assert result['field_evidence'][field] == {'span': None, 'missing_reason': 'uncertain'}
+    assert 'verpleegkundige' not in json.dumps(result, ensure_ascii=False)
+    bound = suggestions.bind_proposal(proposal(subject_span='café'), rows)
+    assert bound['open_points'] == []  # not_applicable/not_stated are answers, not questions
+
+
 @pytest.mark.parametrize('corruption', ['extra', 'type', 'free_text', 'missing', 'semantics'])
 def test_closed_provider_contract(corruption):
     raw = proposal()
