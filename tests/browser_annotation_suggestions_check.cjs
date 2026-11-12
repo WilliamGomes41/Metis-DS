@@ -107,6 +107,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-editor-inputs').isDisabled(),false);
  latest=(await read()).entries.find(e=>e.annotation_id===new URL(page.url()).searchParams.get('annotation'));
  assert.equal(latest.status,'draft');assert.equal(latest.ranges[0].quote,'Foutvoorbeeld voor handmatig herstel.');
+ // A chosen core without a type is one open point on the type row, not also on the core row.
+ await tasks.step(page,3);await page.locator('#annotation-review-summary dd[data-row=type][data-open]').waitFor();
+ assert.equal(await page.locator('#annotation-review-summary dd[data-row=core][data-open]').count(),0);
  assert.deepEqual(errors,[]);
  fs.writeFileSync(output+'/suggestions-result.json',JSON.stringify({singleSelection:true,onlyOpenPoints:true,targetedQuestion:true,proposedType:true,draftOnly:true,correctedAndResumed:true,staleRejected:true,failurePreserved:true,errors}));
  }finally{await browser.close();}

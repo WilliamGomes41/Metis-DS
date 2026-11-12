@@ -79,7 +79,8 @@ import {bindRange} from '/annotations/binding.mjs';
     // One overview. A part that needs an answer says so in its own row, and
     // every part can be changed from the row that shows it.
     const current=checkIsCurrent(), findings=current ? check.findings : [], used=new Set();
-    const take=test=>{const found=findings.filter(test);for(const f of found) used.add(f);return found[0];};
+    // A finding belongs to one row only: the first row that claims it.
+    const take=test=>{const found=findings.filter(f=>!used.has(f) && test(f));for(const f of found) used.add(f);return found[0];};
     el('review-summary').replaceChildren();el('empty-fields').replaceChildren();
     const row=(key,label,text,{open='',span=null,act,parent=el('review-summary')}={})=>{
       const dt=document.createElement('dt'),dd=document.createElement('dd'),value=document.createElement('span');
