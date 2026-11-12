@@ -308,20 +308,28 @@ import {bindRange} from '/annotations/binding.mjs';
     if(semantic) {el('recommendation').open=true;el('direction').focus();}
     if(code==='annotation_evidence_required') {el('context-tools').open=true;chooseTarget({kind:'range',role:'evidence'});}
   }
-  async function runCheck() {
-    if(checking) return;
-    checking=true;check=null;renderSummary();updateBindingControls();
-    try {
-      await flush();
-      if(!entry.revision) {status('Wijs eerst een uitspraak aan.');return;}
-      const id=entry.annotation_id, version=dirty;
-      const response=await fetch('/annotations/check?'+new URLSearchParams({document:state.snapshot_id,annotation:id}),{cache:'no-store'});
-      const data=await response.json();
-      if(!response.ok) throw new Error(data.message || 'Controle kon niet worden gelezen. Probeer opnieuw.');
-      if(entry.annotation_id===id && dirty===version) check=data;
-      if(check && !checkIsCurrent()) {check=null;status('Het opgeslagen werk is gewijzigd. Heropen de annotatie om de actuele versie te controleren.');}
-    } catch(error) {status('Controle niet gelukt. '+error.message);}
-    finally {checking=false;renderSummary();updateBindingControls();}
+  // One check at a time. An edit made while a check is running invalidates that
+  // answer, so the same run checks again instead of leaving the card unchecked.
+  let checkRun=null, checkAgain=false;
+  function runCheck() {
+    if(checkRun) {checkAgain=true;return checkRun;}
+    checkRun=(async()=>{
+      do {
+        checkAgain=false;checking=true;check=null;renderSummary();updateBindingControls();
+        try {
+          await flush();
+          if(!entry.revision) {status('Wijs eerst een uitspraak aan.');break;}
+          const id=entry.annotation_id, version=dirty;
+          const response=await fetch('/annotations/check?'+new URLSearchParams({document:state.snapshot_id,annotation:id}),{cache:'no-store'});
+          const data=await response.json();
+          if(!response.ok) throw new Error(data.message || 'Controle kon niet worden gelezen. Probeer opnieuw.');
+          if(entry.annotation_id===id && dirty===version) check=data;
+          else checkAgain=true;
+          if(check && !checkIsCurrent()) {check=null;status('Het opgeslagen werk is gewijzigd. Heropen de annotatie om de actuele versie te controleren.');}
+        } catch(error) {status('Controle niet gelukt. '+error.message);checkAgain=false;}
+      } while(checkAgain);
+    })().finally(()=>{checkRun=null;checking=false;renderSummary();updateBindingControls();});
+    return checkRun;
   }
   for(let n=1;n<=3;n++) el('step-'+n).addEventListener('click',()=>{showTask(n,true);if(n===3) runCheck();});
   el('change-type').addEventListener('click',()=>{showTask(1,true);el('type').focus();});
@@ -390,7 +398,7 @@ import {bindRange} from '/annotations/binding.mjs';
       const provisional=!hasCore() && !!selected,busy=finalizing || checking || deriving;
       el('new').hidden=true;el('ready').hidden=!hasCore() && !provisional;el('finish').hidden=false;
       el('ready').disabled=busy || !(provisional || complete);
-      el('finish').disabled=busy || (hasCore() ? !complete : !provisional && !!entry.revision);
+      el('finish').disabled=busy || (hasCore() ? !complete : !provisional && !!entry.revision && !!state.object_bindings?.[entry.annotation_id]);
       renderSimple();
     }
     el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Selecteer de woorden in de bron.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
@@ -687,7 +695,8 @@ import {bindRange} from '/annotations/binding.mjs';
     const parent = node => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement).closest('[data-source-block]');
     const first = parent(range.startContainer), last = parent(range.endContainer);
     if (!first || first !== last) {
-      selected = null;entry.pending_range=null;change();updateBindingControls();el('selection').textContent = 'Wijs één bereik binnen een tekstblok aan. Voeg een volgende alinea afzonderlijk toe.'; return;
+      // Nothing was selected, so nothing changes: an invalid drag must not create an empty draft.
+      const had=!!(selected || entry.pending_range);selected = null;entry.pending_range=null;if(had) change();updateBindingControls();el('selection').textContent = 'Wijs één bereik binnen een tekstblok aan. Voeg een volgende alinea afzonderlijk toe.'; return;
     }
     const prefix = document.createRange(); prefix.selectNodeContents(first); prefix.setEnd(range.startContainer,range.startOffset);
     const endPrefix = document.createRange(); endPrefix.selectNodeContents(first); endPrefix.setEnd(range.endContainer,range.endOffset);
@@ -897,7 +906,12 @@ import {bindRange} from '/annotations/binding.mjs';
     if(saved && simple()) {load('');entries();status('Opgeslagen. Selecteer de volgende uitspraak.');}
   });
   el('finish').addEventListener('click',async()=>{
-    if(hasCore() || selected ? await saveCard() : !entry.revision) toOverview();
+    if(hasCore() || selected) {if(await saveCard()) toOverview();return;}
+    // An object that holds nothing is not left behind to block the document. A built
+    // object keeps its identity and must get its statement back first.
+    if(state.object_bindings?.[entry.annotation_id]) return;
+    if(entry.revision) {await discardObject();if(entry.revision) return;}
+    toOverview();
   });
   el('withdraw').addEventListener('click',()=>confirmChange('De hele annotatie terugnemen, inclusief alle gekoppelde brontekst? Dit meldt de annotatie niet gereed. De bron moet nog worden verantwoord.',async()=>{
     try {await flush();entry.status='withdrawn';dirty+=1;await flush();load('');entries();}catch(_){}
