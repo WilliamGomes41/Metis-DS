@@ -37,7 +37,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-simple-belongs').isVisible(),false);
  await page.locator('#annotation-simple-core').click();
  await row('evidence').and(page.locator('[data-open]')).waitFor();await row('belongs').getByText(/leunt mogelijk/).waitFor();
- assert.equal(await page.locator('#annotation-simple-heading').innerText(),'Klopt dit?');
+ // No question about what the worker just did, and no annotation switcher above the work.
+ assert.equal(await page.locator('#annotation-simple-heading').isVisible(),false);
+ assert.equal(await page.locator('#annotation-entry').isVisible(),false);
  assert.match(await row('core').innerText(),/Bij diabetes mellitus/);
  assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);
  assert.match(await row('belongs').innerText(),/leunt mogelijk op andere tekst/);
@@ -72,6 +74,12 @@ const tasks=require('./browser_annotation_tasks.cjs');
  entry=await current();
  assert.equal(entry.status,'draft');assert.equal(entry.object_type,'explanation');
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.evidence_function]),[['core',null],['evidence','supported_by']]);
+ // A marked passage in the source opens its own annotation.
+ await block(item).locator('mark[data-annotation]').first().click();
+ await row('belongs').getByText(intro).waitFor();
+ assert.match(await row('core').innerText(),/Bij diabetes mellitus/);
+ await block(failing).locator('mark[data-annotation]').first().click();
+ await row('evidence').getByText(support).waitFor();
  // Removing linked evidence reopens the choice without leaving the card.
  await row('evidence').getByRole('button',{name:/Weghalen/}).click();
  await row('evidence').and(page.locator('[data-open]')).waitFor();

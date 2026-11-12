@@ -174,7 +174,8 @@ import {bindRange} from '/annotations/binding.mjs';
   function renderSimple() {
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
     const done=entry.status==='ready' && dirty===committed,current=checkIsCurrent(),pick=replacingCore || !core.length;
-    el('simple-heading').textContent=pick ? 'Wijs de uitspraak aan' : done ? 'Klaar voor documentcontrole' : 'Klopt dit?';
+    el('simple-heading').textContent=pick ? 'Wijs de uitspraak aan' : done ? 'Klaar voor documentcontrole' : '';
+    el('simple-heading').hidden=!el('simple-heading').textContent;
     const findings=current ? check.findings : [],signals=current ? check.signals || [] : [];
     const rows=el('simple-rows');rows.replaceChildren();
     const text=(dd,value,hint=false)=>{const p=document.createElement('p');p.textContent=value;if(hint) p.className='annotation-hint';dd.append(p);return p;};
@@ -219,7 +220,7 @@ import {bindRange} from '/annotations/binding.mjs';
     try {await proposeMeaning();}
     finally {
       deriving=false;
-      if(simple()) {el('suggestion-note').textContent='';await runCheck();el('simple-heading').focus({preventScroll:true});}
+      if(simple()) {el('suggestion-note').textContent='';await runCheck();el('simple-rows').querySelector('button')?.focus({preventScroll:true});}
     }
   }
   async function useAs(kind) {
@@ -246,6 +247,11 @@ import {bindRange} from '/annotations/binding.mjs';
     el('type').value=value;el('type').dispatchEvent(new Event('change'));runCheck();
   });
   el('advanced').addEventListener('click',()=>setAdvanced(true));
+  document.addEventListener('click',event=>{
+    const mark=event.target.closest?.('mark[data-annotation]');
+    if(!mark || !simple() || !window.getSelection().isCollapsed) return;
+    switchEntry(mark.dataset.annotation).catch(()=>{});
+  });
   el('simple-back').addEventListener('click',()=>{setAdvanced(false);if(hasCore()) runCheck();});
   function repairFinding(finding) {
     const code=finding.code,field=finding.field,semantic=semanticCode(code);
@@ -325,6 +331,11 @@ import {bindRange} from '/annotations/binding.mjs';
     el('linked').hidden=task===3 || !entry.ranges.length || !!only && !only.evidence;
     el('target').hidden=!!only?.field;
     el('steps').hidden=simple();el('simple').hidden=!simple();
+    // Switching annotations is navigation: in the card it lives with the other document actions,
+    // and a marked passage in the source opens its own annotation.
+    const box=el('entry-box'),home=simple() ? el('entry-slot') : el('status').parentNode;
+    if(box.parentNode!==home) {if(simple()) home.append(box);else el('status').after(box);}
+    el('entry-label').textContent=simple() ? 'Andere annotatie openen' : 'Huidige annotatie';
     el('advanced').hidden=advanced;el('simple-back').hidden=!advanced;
     if(simple()) {
       for(const id of ['selection-tools','linked','back','add','suggest']) el(id).hidden=true;
@@ -338,7 +349,7 @@ import {bindRange} from '/annotations/binding.mjs';
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
       for (const anchor of saved.ranges || []) {
         if (!ranges.has(anchor.block_id)) ranges.set(anchor.block_id,[]);
-        ranges.get(anchor.block_id).push({...anchor,current:saved.annotation_id === entry.annotation_id});
+        ranges.get(anchor.block_id).push({...anchor,current:saved.annotation_id === entry.annotation_id,owner:saved.annotation_id});
       }
     }
     for (const block of state.blocks) {
@@ -359,6 +370,7 @@ import {bindRange} from '/annotations/binding.mjs';
         if (covering.length) {
           const mark=document.createElement('mark');
           if (covering.some(a => a.current)) mark.dataset.current='true';
+          else if (simple()) {mark.dataset.annotation=covering[0].owner;mark.title='Deze annotatie openen';}
           mark.textContent=value;content.append(mark);
         } else content.append(document.createTextNode(value));
       }
