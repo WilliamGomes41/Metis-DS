@@ -129,6 +129,27 @@ modeluitvoer; dat vraagt de praktijktoets met een bevroren referentie.
   bewaakt dat elk voorstelbaar type opslaanbaar is.
 - Geen bestand onder `src/review/` gewijzigd; geen migratie, nieuw veld of route.
 
+## Bijsturing William, 12 november 2026: aanpassen in het overzicht, minder kaart
+
+Feedback na de eerste uitvoering: wat niet klopt moet in de controlefase zelf
+aan te passen zijn, en de kaart bevat te veel knoppen en uitleg. Uitgevoerd:
+
+- De controle is één overzicht (‘Klopt dit?’). Elke rij toont een onderdeel met
+  ‘Aanpassen’; een open punt staat in zijn eigen rij met ‘Beantwoorden’. Beide
+  openen alleen dat onderdeel en keren na het antwoord terug naar het overzicht.
+  Dit vervangt ‘Zelf corrigeren’ en de aparte lijst controlepunten; alleen
+  bevindingen zonder eigen rij blijven als lijst boven het overzicht.
+- Lege onderdelen (niet genoemd, niet van toepassing) staan ingeklapt onder
+  ‘Niet ingevuld (n)’ en blijven daar aanpasbaar.
+- Verwijderd: de uitlegalinea’s in taak 1, 2 en 3, de bevestigingstekst na een
+  voorstel, ‘Alle onderdelen tonen’, ‘Zelf corrigeren’ en ‘Vorige stap’ buiten
+  het volledige formulier. ‘Opnieuw controleren’, ‘Selectie wissen’, ‘Hele
+  passage aanwijzen’ en ‘Gekoppelde brontekst’ verschijnen alleen wanneer ze
+  iets kunnen doen.
+- Het volledige formulier blijft bereikbaar via stap 2.
+
+Gedrag van opslag, controle en afronden is hierdoor niet gewijzigd.
+
 ## Buiten deze slice
 
 - Omliggende bron naar het model; context of onderbouwing buiten de kern zoeken.

@@ -458,6 +458,6 @@ Zie [ontwerp en bewijsgrenzen](../change-contracts/1055-meaning-proposals.md).
 Na het voorstel opent de editor de controle in plaats van het veldformulier:
 **Uitspraak kiezen → open punten beantwoorden → Afronden**. Het voorstelantwoord
 benoemt vluchtig waarom een onderdeel open bleef; de editor toont dat als gerichte
-vraag en keert na het antwoord terug naar de controle. Het volledige formulier
-blijft bereikbaar via ‘Zelf corrigeren’. Opslag, controle, bouw en de reviewkaart
+vraag en keert na het antwoord terug naar de controle. Elk onderdeel is in dat
+overzicht direct aanpasbaar; het volledige formulier blijft stap 2. Opslag, controle, bouw en de reviewkaart
 zijn ongewijzigd. Zie [contract en bewijs](../change-contracts/1058-annotation-point-then-check.md).
