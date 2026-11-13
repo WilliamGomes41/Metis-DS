@@ -3902,6 +3902,53 @@ class OperationsConsole:
             )
             return deepcopy(updated)
 
+    def _second_review_scope(self, actor_id, snapshot_id, object_id, expected_revision, interaction_evidence):
+        """Shared checks of both second-review decisions; callers hold the snapshot mutation lock."""
+        reviewer = self._require_role(actor_id, "reviewer")
+        if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
+            raise ConsoleError("forbidden_reviewer_identity")
+        envelope = self._envelope(snapshot_id)
+        if actor_id not in set(envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        if interaction_evidence is not None:
+            try:
+                validate_review_interaction_identity(
+                    interaction_evidence,
+                    read_events(self._ledger_path),
+                )
+            except ValueError as exc:
+                raise ConsoleError(str(exc)) from exc
+
+        objects, revision = self.snapshot_objects_and_revision(snapshot_id)
+        if expected_revision is not None and revision != expected_revision:
+            raise ConsoleError(
+                SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                current_revision=revision,
+            )
+        target = next((row for row in objects if row.get("object_id") == object_id), None)
+        if target is None:
+            raise ConsoleError("unknown_object")
+        review_path = review_path_for_klasse(envelope["class"])
+        source_fragments = None
+        if review_path != "boom":
+            from src.review.knowledge_path_v1 import content_reviewable
+            if not content_reviewable(target):
+                raise ConsoleError("content_duty_required")
+            source_fragments = self._require_resolved_candidate_source(envelope, target)
+        from src.review.review_policy_v1 import object_policy, required_reviewers
+        policy = object_policy(target)
+        if policy != envelope.get("review_policy"):
+            raise ConsoleError("review_policy_projection_mismatch")
+        if policy is None and not requires_four_eyes(
+            target,
+            confirmed_type=str(target.get("confirmed_object_type") or "") or None,
+        ):
+            raise ConsoleError("second_review_not_required")
+
+        bindings = self.object_review_bindings(snapshot_id)
+        return (reviewer, envelope, objects, revision, target, review_path, source_fragments, policy, bindings,
+                exact_current_approver_ids(target, bindings))
+
     def approve_second_review(
         self,
         *,
@@ -3922,53 +3969,13 @@ class OperationsConsole:
         """
 
         with self._atomic_snapshot_mutation(snapshot_id):
-            reviewer = self._require_role(actor_id, "reviewer")
-            if _is_forbidden_identity(reviewer["username"]) or _is_forbidden_identity(reviewer["display_name"]):
-                raise ConsoleError("forbidden_reviewer_identity")
-            envelope = self._envelope(snapshot_id)
-            if actor_id not in set(envelope.get("named_reviewers") or []):
-                raise ConsoleError("reviewer_not_named_on_snapshot")
-            if interaction_evidence is not None:
-                try:
-                    validate_review_interaction_identity(
-                        interaction_evidence,
-                        read_events(self._ledger_path),
-                    )
-                except ValueError as exc:
-                    raise ConsoleError(str(exc)) from exc
-
-            objects, revision = self.snapshot_objects_and_revision(snapshot_id)
-            if expected_revision is not None and revision != expected_revision:
-                raise ConsoleError(
-                    SNAPSHOT_OBJECT_WRITE_CONFLICT,
-                    current_revision=revision,
-                )
-            target = next((row for row in objects if row.get("object_id") == object_id), None)
-            if target is None:
-                raise ConsoleError("unknown_object")
-            review_path = review_path_for_klasse(envelope["class"])
-            source_fragments = None
-            if review_path != "boom":
-                from src.review.knowledge_path_v1 import content_reviewable
-                if not content_reviewable(target):
-                    raise ConsoleError("content_duty_required")
-                source_fragments = self._require_resolved_candidate_source(envelope, target)
-            from src.review.review_policy_v1 import object_policy, required_reviewers
-            policy = object_policy(target)
-            if policy != envelope.get("review_policy"):
-                raise ConsoleError("review_policy_projection_mismatch")
-            if policy is None and not requires_four_eyes(
-                target,
-                confirmed_type=str(target.get("confirmed_object_type") or "") or None,
-            ):
-                raise ConsoleError("second_review_not_required")
-
-            bindings = self.object_review_bindings(snapshot_id)
+            (reviewer, envelope, objects, revision, target, review_path, source_fragments, policy, bindings,
+             approvers) = self._second_review_scope(actor_id, snapshot_id, object_id, expected_revision,
+                                                    interaction_evidence)
             from src.review.ko_transitions_v1 import command_assessment
             assessment = command_assessment(assessment, interaction_evidence)
             if type(evidence_not_applicable) is not bool:
                 raise ConsoleError('supporting_evidence_choice_invalid')
-            approvers = exact_current_approver_ids(target, bindings)
             completed = (policy is not None and actor_id in approvers) or (policy is None and len(approvers) >= 2)
             if completed and (assessment is not None or evidence_not_applicable):
                 expected_evidence = {'version': 'ko-supporting-evidence-v1',
@@ -4052,6 +4059,88 @@ class OperationsConsole:
                             if interaction_evidence is not None
                             else {}
                         ),
+                    },
+                ),
+            )
+            return deepcopy(current_target)
+
+    def reject_second_review(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        comment: str,
+        expected_revision: str | None = None,
+        interaction_evidence: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """#1064: the independent second reviewer rejects one exact current tuple.
+
+        A final curatorial decision, like a first-review rejection: the version
+        becomes rejected, the first approval of this version no longer counts
+        (kept as history), and nothing is returned to anyone. Same authority
+        checks as the second approval; one store transaction with the ledger.
+        """
+        if not isinstance(comment, str) or not comment.strip():
+            raise ConsoleError("review_comment_required")
+        with self._atomic_snapshot_mutation(snapshot_id):
+            (reviewer, envelope, objects, revision, target, review_path, source_fragments, policy, bindings,
+             approvers) = self._second_review_scope(actor_id, snapshot_id, object_id, expected_revision,
+                                                    interaction_evidence)
+            if review_path == "boom":
+                raise ConsoleError("second_review_not_available")
+            if policy is not None and policy["primary"] not in approvers or not approvers:
+                raise ConsoleError("first_review_required")
+            if actor_id in set(approvers):
+                raise ConsoleError("independent_second_reviewer_required")
+            route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
+                                       bindings=bindings, fragments=source_fragments)
+            if not route or route["stage"] != SECOND_REVIEW or not route["actionable"]:
+                raise ConsoleError("second_review_not_available")
+            self._require_open_original(snapshot_id, object_id)
+
+            canonical_hash = compute_canonical_object_hash(target)
+            history = self._load_objects(snapshot_id)
+            current_target = next(
+                row for row in reversed(history)
+                if row.get("object_id") == object_id
+                and row.get("object_version") == target.get("object_version")
+            )
+            reviewed_at = utc_now()
+            governance = current_target.setdefault("governance", {})
+            governance.update(validation_status="rejected", validated_by=reviewer["username"],
+                              validation_date=reviewed_at[:10])
+            governance["second_review"] = {**(governance.get("second_review") or {}), "required": True,
+                "status": "rejected", "reviewer": reviewer["username"], "review_date": reviewed_at}
+            # Governance only: the canonical content and its hash do not change.
+            stamp_canonical_hashes(current_target)
+            from src.publication.publish_authorization_v1 import invalidate_for_object
+            after = invalidate_for_object(bindings, object_id)
+            from src.review.ko_transitions_v1 import apply_ko_event
+            apply_ko_event(current=target, prepared=current_target, event="reject", review_path=review_path,
+                           bindings=bindings, fragments=source_fragments, objects=objects, after_bindings=after)
+            new_bindings = deepcopy(review_bindings_view(self))
+            new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
+
+            self._commit_prepared_store(
+                objects=(snapshot_id, history),
+                bindings=new_bindings,
+                expected_revision=revision,
+                snapshot_id=snapshot_id,
+                ledger_fn=lambda: append_event(
+                    self._ledger_path,
+                    event_type="second_review_reject",
+                    object_id=object_id,
+                    object_version=str(target.get("object_version") or ""),
+                    actor=reviewer["username"],
+                    details={
+                        "snapshot_id": snapshot_id,
+                        "comment": comment.strip(),
+                        "canonical_object_hash": canonical_hash,
+                        "first_approver_ids": list(approvers),
+                        "second_reviewer_id": actor_id,
+                        **({"review_interaction": deepcopy(interaction_evidence)}
+                           if interaction_evidence is not None else {}),
                     },
                 ),
             )
