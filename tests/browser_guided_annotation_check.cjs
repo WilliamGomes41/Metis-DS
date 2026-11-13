@@ -6,6 +6,7 @@ const assert=require('node:assert/strict');
  const base=process.env.METIS_BROWSER_BASE,output=process.env.METIS_BROWSER_OUTPUT;
  const m=await(await fetch(base+'/browser-manifest')).json();
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
+ require('./browser_annotation_tasks.cjs').useAdvancedForm(browser);
  try {
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   const page=await context.newPage(),errors=[];
@@ -41,9 +42,9 @@ const assert=require('node:assert/strict');
   assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
   assert.equal(await page.locator('#annotation-type').isVisible(),false);await primaryCount();
   // Run the same server checks before claiming completion, without a circular draft gate.
-  await step(3);await page.locator('#annotation-check').getByText(/controlepunt/).waitFor();
-  assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
-  assert.match(await page.locator('#annotation-task-3 dd[data-open]').first().innerText(),/Beantwoorden/);
+  // #1060: unidentified parts and unlinked evidence are no open points for the worker.
+  await step(3);await page.locator('#annotation-ready:enabled').waitFor();
+  assert.equal(await page.locator('#annotation-task-3 dd[data-open]').count(),0);
   let view=await read();assert.equal(view.entries[0].status,'draft');
   assert.equal(await page.locator('#annotation-check').innerText().then(t=>t.includes('nog niet gereed')),false);
   await step(2);

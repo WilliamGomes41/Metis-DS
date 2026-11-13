@@ -107,11 +107,12 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
     view = annotation.prepare(console, actor_id=actor, snapshot_id=sid, expected_revision=console.objects_revision(sid))
     core = anchor(view, 'Bij diabetes')
     introduction = {**anchor(view, 'De volgende mechanismen', role='list_introduction'), 'required_for_meaning': True}
-    # The worker marked statement, belonging text and the evidence choice. No sentence part is filled in.
+    # The worker marked the statement and the text that belongs to it. No sentence part is filled in and
+    # no evidence choice is made: with nothing linked, that decision is the reviewer's.
     fields = {key: {'span': None, 'missing_reason': 'uncertain'} for key in FIELDS}
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core, introduction], status='ready')
-    request['selection'].update(object_type='explanation', evidence_not_applicable=True,
+    request['selection'].update(object_type='explanation', evidence_not_applicable=False,
                                 field_evidence=fields, required_links=[])
     annotation.save(console, actor_id=actor, **request)
 
@@ -129,9 +130,41 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
     assert {'subject_missing', 'predicate_missing', 'supported_object_missing'} <= set(admission['signals'])
     assert [entry['text'] for entry in obj['metadata']['source_bound_context']['entries']] == [introduction['quote']]
 
+    # Slice 3: the reviewer reads the signals under the existing completeness question.
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': 'lijst', 'password': 'human-list-secret'})
+        card = client.get('/review', params={'document': sid, 'object': obj['object_id']}).text
+    question = card[card.index('Is dit compleet?'):card.index('Staat dit op de juiste plek?')]
+    assert 'De uitspraak leunt mogelijk op andere tekst. Controleer of de gekoppelde tekst volstaat.' in question
+    assert 'Niet vastgesteld over wie of wat de uitspraak gaat.' in question
+    assert 'Toelichting · voorgesteld type' in card
+    assert card.count('<fieldset class="ko-question">') == 3 and card.count('data-ko-signals') == 1
+
+    # Approval without linked evidence is refused until the reviewer decides it is not applicable.
+    import pytest
+    from src.operations_console_v1 import ConsoleError
+    from tests.ko_review_fixture_support import affirmative_assessment
+    with pytest.raises(ConsoleError) as refused:
+        console.review_object(actor_id=actor, snapshot_id=sid, object_id=obj['object_id'], decision='approve',
+                              confirmed_object_type='explanation', assessment=affirmative_assessment())
+    assert refused.value.code == 'knowledge_evidence_required'
     approve(console, sid, obj['object_id'], actor)
     from src.review.knowledge_object_state_v1 import derive_ko_state
     state = derive_ko_state(candidate(console, sid), review_path='richtlijn',
                             bindings=console.object_review_bindings(sid),
                             fragments=console.review_source_fragments(sid))
     assert state['state'] == 'Goedgekeurd', state
+
+
+def test_every_recorded_signal_reaches_the_reviewer_even_without_its_own_sentence():
+    from src.review.ko_review_page_v1 import _completeness_signals
+
+    def card(*codes):
+        return _completeness_signals({'metadata': {'admission': {'gate_result': 'allowed', 'signals': list(codes)}}})
+    assert card() == ''
+    assert 'Een onderdeel dat bij dit type uitspraak hoort is niet vastgesteld.' in card('type_contract_incomplete')
+    assert 'leunt mogelijk op andere tekst' in card('type_contract_incomplete', 'supported_object_missing')
+    for code in sorted(HUMAN_SIGNAL_CODES):
+        assert card(code).startswith('<span data-ko-signals>Let op: '), code

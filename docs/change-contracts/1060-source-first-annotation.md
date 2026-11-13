@@ -110,3 +110,90 @@ Adversarial proof matrix: zie hieronder.
 
 Vóór merge van elke slice die toelating raakt: een aparte adversarial review
 volgens `docs/agents/continuous-development.md`.
+
+## Slice 2 uitgevoerd: de kaart met drie regels
+
+De standaardkaart toont Uitspraak, Hoort erbij en Onderbouwing. De medewerker
+selecteert tekst in de bron en kiest waar die voor is; Metis leidt type en
+onderdelen op de achtergrond af met de bestaande voorstelquery. Dezelfde save,
+controle en afrondregels worden gebruikt; er is geen nieuwe route of opslag.
+
+- **Opslag van de drie keuzes in het bestaande contract:** de uitspraak als
+  kernbereik; “hoort erbij” als contextbereik met de bestaande rol `context`,
+  vastgelegd als essentieel; onderbouwing als bereik met functie `supported_by`,
+  of de bestaande vlag `evidence_not_applicable`.
+- **Label:** de medewerker ziet “Staat niet in de bron”; de opgeslagen vlag en
+  de formulering op de reviewkaart zijn ongewijzigd.
+- **Eén vraag bij uitval:** kan Metis het type niet bepalen, dan vraagt de kaart
+  alleen het type.
+- **Signalen** staan in de regel waar ze over gaan: “leunt mogelijk op andere
+  tekst” bij Hoort erbij, “afgebroken zin” bij Uitspraak. Signalen voor de
+  reviewer komen in slice 3.
+- **Het stappenformulier** blijft bereikbaar via “Uitgebreid formulier openen”
+  en wordt gebruikt voor bronstukken zonder uitspraak en voor zeldzame
+  controlepunten. De keuze wordt per browser onthouden.
+
+Open voor slice 5 (besluit nodig): het weghalen van gekoppelde tekst loopt nog
+via de bestaande verplichting om opnieuw aan te wijzen of een reden te geven.
+Die regel is vastgelegd in kernel en database en is hier niet gewijzigd.
+
+## Slice 3 uitgevoerd: signalen op de reviewkaart
+
+De reviewer leest de signalen onder de bestaande vraag ‘Is dit compleet?’, in de
+toelichtingsregel die die vraag al had. Bij een nog niet bevestigd type staat
+‘voorgesteld type’. Geen nieuwe sectie, vraag, knop of gate; de signalen komen
+uit het toelatingsrecord van precies de getoonde objectversie
+(`ko_review_page_v1._completeness_signals`). Goedkeuren, afwijzen en de drie
+vragen werken ongewijzigd. Hiermee vervalt de reden om uitrol tot na slice 3
+uit te stellen; de praktijkproef blijft voorwaarde.
+
+## Bijsturing William, 12 november 2026: selecteren is de uitspraak, + en − per regel
+
+- Een selectie in de bron ís de uitspraak; zij verschijnt direct in de regel en
+  wordt vastgelegd zodra de medewerker verder gaat. Een nieuwe selectie vervangt
+  haar tot dat moment.
+- Elke regel heeft een + om tekst toe te voegen en per tekst een − om haar weg
+  te halen. De + werkt in beide volgordes: eerst + en dan selecteren, of eerst
+  selecteren en dan +. De regel Uitspraak heeft een + voor een volgend stuk.
+- ‘Hoort erbij’ wordt opgeslagen zonder essentialiteitsclaim
+  (`required_for_meaning: false`), zodat − een gewone verwijdering is en geen
+  verplichting tot herstel of reden oproept. Dit vervangt de eerdere keuze in
+  slice 2 om gekoppelde tekst als essentieel vast te leggen.
+- ‘Klopt dit?’ en de keuzelijst met annotaties boven de kaart zijn vervallen;
+  een gemarkeerde passage in de bron opent haar eigen annotatie.
+- Een selectie terwijl Metis de uitspraak leest wacht en wordt daarna verwerkt.
+- Eén weg vooruit: ‘Opslaan en naar volgend kennisobject’ rondt af en maakt de
+  kaart leeg; ‘Opslaan en bronselectie beëindigen’ rondt af en opent de
+  bestaande documentcontrole, waar afsluiten en opbouwen starten. De mogelijkheid
+  om vanuit de kaart een nieuwe annotatie te beginnen zonder af te ronden is
+  vervallen; een eerder object open je via zijn gemarkeerde passage in de bron.
+  De + staat naast de regeltitel, de − naast elke tekst, in één kolom.
+- Het uitklapblok ‘Bewaren, document en meer acties’ is uit de kaart. Opslaan
+  gebeurt automatisch, de documentcontrole zit achter ‘bronselectie beëindigen’,
+  en de − bij het laatste stuk van de uitspraak neemt de annotatie zelf terug,
+  zodat geen leeg concept het afsluiten blokkeert. Een al opgebouwd object wordt
+  niet teruggenomen; daar vervangt − alleen de tekst.
+- Het stappenformulier opent alleen nog vanzelf, voor het ene object dat het
+  nodig heeft (brontekst die geen uitspraak is; richting en sterkte van een
+  aanbeveling die Metis niet kon bepalen), en verdwijnt bij het volgende object.
+
+## Besluit William, 12 november 2026: de onderbouwingskeuze vervalt bij de medewerker
+
+GO projectlead: “Pak 1 op.” De medewerker koppelt onderbouwing als die in de
+bron staat en kiest verder niets. Dit wijzigt één afrondregel in
+`human_annotation_v1._validate`: een annotatie zonder gekoppelde onderbouwing
+mag gereed worden gemeld. Geweigerd blijft alleen de tegenstrijdigheid:
+onderbouwing gekoppeld én ‘niet van toepassing’.
+
+De beslissing verdwijnt niet, zij ligt op één plek. De reviewtransitie weigert
+goedkeuring zonder onderbouwing (`knowledge_evidence_required`) totdat de
+reviewer expliciet kiest dat die niet van toepassing is; die regel en de
+reviewkaart zijn ongewijzigd. Dit vervangt de eerdere regel in dit contract
+dat ‘de onderbouwingskeuze’ bij de medewerker blijft blokkeren.
+
+- Geen schemawijziging; bestaande annotaties met een eerdere keuze blijven
+  geldig en tonen die keuze, met − om haar weg te halen.
+- Wat het kost: de reviewer ziet niet meer of de medewerker bewust niets vond
+  of het vergat.
+- Bewijs: de ketenproef rondt af zonder keuze, wordt bij review eerst geweigerd
+  en pas goedgekeurd na de keuze van de reviewer.

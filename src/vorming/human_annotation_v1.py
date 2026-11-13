@@ -216,7 +216,10 @@ def _validate(selection, blocks):
         if (kind is None and disposition is None) or not any(a['role']=='core' for a in result):
             fail('annotation_core_required')
         evidence = any(a['role']=='evidence' for a in result)
-        if disposition is None and evidence == selection.get('evidence_not_applicable',False):
+        # #1060: the worker links evidence when the source has it. Whether a claim
+        # without linked evidence needs none is the reviewer's decision, which the
+        # review transition already demands. Only the contradiction stays refused.
+        if disposition is None and evidence and selection.get('evidence_not_applicable',False):
             fail('annotation_evidence_required')
         if disposition is not None and (disposition['role'] not in {'metadata','structure'} or not disposition['reason']
                 or any(a['role']!='core' for a in result)):
