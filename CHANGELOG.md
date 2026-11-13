@@ -8,6 +8,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 - Issue #972: next-passage navigation with unprepared review cards captures current authorized objects, bindings and source without loading historical formation/processing archives. Queue qualification, selected-passage checks and complete explicit document assessment keep their existing owners. No GET preparation or production data conversion.
 
 ### Added
+- ‘Metis uitgelegd’ volgt de huidige werkwijze en zet het kennisobject centraal: wat het is, waaruit het bestaat en waarom alles erom draait. De begrippen zijn aangescherpt en minder technisch (#1066).
 - Eén bronselectie kan type en brongebonden betekenis voorstellen; de gebruiker controleert/corrigeert het concept vóór afronden (#1055).
 - Bij vierogenreview kan reviewer 2 een kennisobject afwijzen met een toelichting; dat is een eindbesluit zoals bij reviewer 1, de goedkeuring van reviewer 1 telt dan niet meer, en de reviewkaart toont wie afwees en waarom (#1064, deel 2).
 - Een reviewer past een kennisobject uit annotatie aan via ‘Aanpassen in de kaart’ en bouwt het met ‘Kennisobject opnieuw bouwen’ opnieuw; de reviewkaart toont de bouwstatus en ‘opnieuw gebouwd na correctie van versie …’. De losse herstellinks op de reviewkaart zijn voor deze objecten vervallen (#1064).
