@@ -197,3 +197,65 @@ dat ‘de onderbouwingskeuze’ bij de medewerker blijft blokkeren.
   of het vergat.
 - Bewijs: de ketenproef rondt af zonder keuze, wordt bij review eerst geweigerd
   en pas goedgekeurd na de keuze van de reviewer.
+
+## Slice 4: Metis wijst voor wat erbij hoort (besluit William, 13 november 2026)
+
+GO projectlead: “Ja leg het vast en ga daarna over tot implementatie.” Dit
+vervangt de voorwaarde dat eerst de voorstelkwaliteit gemeten wordt (besluit 6):
+het voorstel komt uit vaste regels, niet uit een taalmodel, dus er zijn geen
+modelcalls te meten. De meting gebeurt in de praktijk: elk voorstel wordt
+toegevoegd of expliciet afgewezen, en beide worden bewaard.
+
+Waarom: na de extractie is de opmaak van de bron grotendeels weg; een
+inleidende zin boven een opsomming is voor een mens moeilijk te herkennen.
+
+Grenzen van William:
+
+1. **Selecteren blijft de uitspraak, zonder dubbelwerk.** Metis verandert de
+   uitspraak nooit. Een voorstel staat alleen in de regel ‘Hoort erbij’ en
+   vraagt één handeling. Zonder voorstel is de kaart ongewijzigd.
+2. **Het voorstel is gemarkeerd in de bron**, met een eigen markering, zodat
+   direct te zien is dat het letterlijke brontekst is.
+3. **Nooit parafraseren.** Een voorstel is een exacte bronpositie (blok, begin,
+   einde); de getoonde tekst komt uit de bron zelf.
+4. **Negeren is geen ‘niets doen’.** Het voorstel krijgt `+` (toevoegen) of `−`
+   (afwijzen). Zolang een voorstel open staat, kan de annotatie niet gereed
+   worden gemeld; de kaart wijst naar het voorstel.
+
+Regel (route A, `human_annotation_context_proposal_v1`): voor de eerste
+uitspraaktekst zoekt Metis terug naar het dichtstbijzijnde voorgaande bronblok
+in dezelfde sectie dat eindigt op een dubbele punt, over hooguit tien
+tussenliggende blokken. Voorgesteld wordt de laatste zin van dat blok, tot en
+met de dubbele punt. Geen voorstel als die tekst al gekoppeld of afgewezen is,
+of als er een andere sectie tussen ligt. Koppen worden niet voorgesteld: bijna
+elke uitspraak staat onder een kop, en een vraag bij elke annotatie is
+dubbelwerk.
+
+Bekende beperking: een gewone alinea direct na een opsomming krijgt de
+inleiding van die opsomming voorgesteld. De medewerker wijst die af met `−`;
+het afwijzingspercentage laat zien of de regel moet worden aangescherpt.
+
+Opslag en regels:
+
+- Toevoegen bewaart de tekst als bestaand bereik met rol `list_introduction`,
+  zonder essentialiteitsclaim, net als een handmatige koppeling.
+- Afwijzen bewaart de bronpositie in het nieuwe, optionele veld
+  `declined_context` van de annotatie (exacte bronpositie met citaatcontrole,
+  hooguit 64). Het veld ontbreekt als er niets is afgewezen; bestaande
+  annotaties en hun hashes veranderen niet. `−` bij gekoppelde tekst met rol
+  `list_introduction` geldt als afwijzen.
+- `human_annotation_v1.save` weigert de overgang naar gereed zolang er een open
+  voorstel is (`annotation_context_proposal_open`). De regel geldt alleen voor
+  een levende opslag: herstel, import, documentafsluiting en opbouw passen hem
+  niet toe, zodat bestaande gereedgemelde annotaties geldig blijven als de regel
+  later verandert.
+- `check_current` geeft de open voorstellen terug; de kaart toont ze en markeert
+  ze in de bron.
+
+Classificatie: Class B, `Rewrite risk: none`. Eén additief, optioneel
+invoerveld; geen wijziging aan kandidaatmaker, toelating, review of publicatie.
+
+Bewijs: tests voor de regel; kernproef dat gereedmelden met een open voorstel
+wordt geweigerd en na toevoegen of afwijzen slaagt, en dat een afwijzing
+bewaard blijft; browserproef van de kaart (voorstel zichtbaar, gemarkeerd in de
+bron, `+` en `−`, opslaan pas na antwoord).
