@@ -90,3 +90,26 @@ Explicit non-goals: richting en sterkte wijzigen in de tweede review (die
   blijft blokkeren, en objecten uit andere routes houden hun regels.
 - Een half voorstel van Metis telt bij bouwen als geen voorstel; de annotatie
   zelf blijft ongewijzigd bewaard.
+
+## Uitvoering (13 november 2026)
+
+- `recommendation_semantics_v1.complete_annotation_semantics`: één regel voor
+  wanneer het voorstel van Metis in een annotatie volledig is.
+- Kaartcontrole (`human_annotation_preview_v1`) en toelating
+  (`admission_gate_v1`): zonder volledig voorstel het signaal
+  `recommendation_semantics_open` (in `HUMAN_SIGNAL_CODES`), alleen voor
+  annotatie; een aanwezig voorstel wordt volledig gecontroleerd zoals voorheen.
+- Bouwen (`human_annotation_materialisation_v1`): alleen een volledig voorstel
+  gaat mee; anders geen voorstel, zodat het document niet faalt.
+- Reviewkaart: in de eerste review twee keuzes in het formulier, vooraf ingevuld
+  met het voorstel; zonder voorstel staat erbij dat Metis het niet kon
+  vaststellen. De keuze wordt in `review_assessment_v1` en in beide
+  goedkeurroutes (`ko_review_page_v1` en `review_command_v1`) gecontroleerd met
+  dezelfde regel als goedkeuren. Geen keuze in de tweede review.
+- Bewijs: `tests/test_reviewer_recommendation_semantics_1067.py` (black-box op
+  native PostgreSQL: gereed zonder richting, gebouwd, toegelaten met signaal,
+  ‘sterk’ geweigerd met de bestaande uitleg zonder wijziging, ‘afraden · zwak’
+  goedgekeurd en bevestigd). Bijgewerkt naar het besluit:
+  `tests/test_source_first_signals_1060.py` en
+  `tests/test_d3_3_human_recommendation_semantics.py`. Karakteriseringsgoldens
+  ongewijzigd.

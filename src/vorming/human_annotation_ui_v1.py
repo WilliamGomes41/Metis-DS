@@ -86,6 +86,7 @@ FINDINGS = {**ERRORS,
 
 # #1060: what Metis could not derive. A question for a human, never a blocker.
 SIGNALS = {
+    'recommendation_semantics_open':'Richting en sterkte van deze aanbeveling stelt de reviewer vast.',
     'subject_missing':'Niet vastgesteld over wie of wat de uitspraak gaat.',
     'recommendation_subject_missing':'Niet vastgesteld over wie of wat de aanbeveling gaat.',
     'predicate_missing':'Niet vastgesteld wat erover gezegd wordt.',

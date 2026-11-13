@@ -69,6 +69,8 @@ class DisplayedReviewDescriptor:
     relations: tuple[dict, ...]
     issues: tuple[str, ...]
     outcome_strength: str = ''
+    # #1067: the part of ``issues`` a reviewer's own direction/strength choice resolves.
+    semantic_issues: tuple[str, ...] = ()
     outcome_no_action: bool = False
     legacy_recommendation_strength: str = ''
 
@@ -77,9 +79,17 @@ class DisplayedReviewDescriptor:
         return not self.issues
 
 
-def _recommendation_values(focal, object_type):
+def _recommendation_values(focal, object_type, choice=None):
     if object_type != 'recommendation':
         return '', '', [], ''
+    if choice is not None:
+        # #1067: the reviewer's own choice, checked against the source exactly as approval checks it.
+        direction, strength = (str(value or '').strip() for value in choice)
+        try:
+            confirmed_recommendation_semantics_from_review(focal, direction=direction, strength_choice=strength)
+        except ValueError as error:
+            return direction, strength, [str(error)], ''
+        return direction, strength, [], ''
     if PROPOSED_FIELD not in focal and CONFIRMED_FIELD not in focal:
         from src.object_taxonomy_v1 import is_closed_recommendation_strength
         legacy = str(focal.get('confirmed_recommendation_strength')
@@ -121,7 +131,7 @@ def _outcome_values(focal, object_type):
 
 def displayed_review_descriptor(
     focal: dict[str, Any], objects: Iterable[dict[str, Any]], review_path: str,
-    *, bindings=(), fragments=None, stage=None,
+    *, bindings=(), fragments=None, stage=None, semantics_choice=None,
 ) -> DisplayedReviewDescriptor:
     """Project precisely the type, semantics and relation basis a reviewer endorses."""
     rows = list(objects)
@@ -132,7 +142,7 @@ def displayed_review_descriptor(
     known_type = (object_type in CLOSED_BOOM_TYPES if review_path == 'boom'
                   else is_closed_confirmed_type(object_type))
     issues = [] if known_type else ['review_type_required']
-    direction, strength, semantic_errors, legacy_strength = _recommendation_values(focal, object_type)
+    direction, strength, semantic_errors, legacy_strength = _recommendation_values(focal, object_type, semantics_choice)
     issues.extend(semantic_errors)
     outcome_strength, outcome_no_action, outcome_errors = _outcome_values(focal, object_type)
     issues.extend(outcome_errors)
@@ -172,6 +182,7 @@ def displayed_review_descriptor(
         direction, strength, str(focal.get('parent_object_id') or ''),
         found_under_path(focal), choices, tuple(relations), tuple(dict.fromkeys(issues)),
         outcome_strength=outcome_strength, outcome_no_action=outcome_no_action,
+        semantic_issues=tuple(dict.fromkeys(semantic_errors)),
         legacy_recommendation_strength=legacy_strength)
 
 

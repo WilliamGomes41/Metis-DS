@@ -60,19 +60,22 @@ def test_source_fidelity_still_blocks_and_keeps_its_companion_code():
         assert code not in HUMAN_SIGNAL_CODES
 
 
-def test_signal_beside_a_blocking_code_stays_blocked_with_the_signal_kept_apart():
+def test_recommendation_without_direction_is_reviewable_and_the_reviewer_chooses():
+    """#1067 (William, 13 november 2026): direction and strength are set by the reviewer, not the worker."""
     def unresolved(fields):
         fields['predicate_span'] = {'span': None, 'missing_reason': 'uncertain'}
     fragments, decision = inputs()
-    decision['proposed_object_type'] = 'recommendation'  # no direction recorded: must keep blocking
+    decision['proposed_object_type'] = 'recommendation'  # no direction recorded
     fields = decision['field_evidence']
     fields['factual_claim_span'] = {'span': None, 'missing_reason': 'uncertain'}
     fields['recommendation_evidence_span'] = {'core': True}
     unresolved(fields)
     record = admission_of(_gate([canonical(fragments, decision)], fragments)[0])
-    assert record['gate_result'] == 'blocked' and record['reason_codes']
-    assert not set(record['reason_codes']) & HUMAN_SIGNAL_CODES
-    assert 'predicate_missing' in record['signals']
+    assert record['gate_result'] == 'allowed' and record['reason_codes'] == []
+    assert {'recommendation_semantics_open', 'predicate_missing'} <= set(record['signals'])
+    # A blocking code still blocks beside the signals (fidelity is never a signal).
+    blocking, signals = split_human_signals(['recommendation_semantics_open', 'span_not_in_source'])
+    assert blocking == ['span_not_in_source'] and signals == ['recommendation_semantics_open']
 
 
 def test_non_human_candidate_keeps_every_code_blocking():
@@ -166,5 +169,7 @@ def test_every_recorded_signal_reaches_the_reviewer_even_without_its_own_sentenc
     assert card() == ''
     assert 'Een onderdeel dat bij dit type uitspraak hoort is niet vastgesteld.' in card('type_contract_incomplete')
     assert 'leunt mogelijk op andere tekst' in card('type_contract_incomplete', 'supported_object_missing')
-    for code in sorted(HUMAN_SIGNAL_CODES):
+    # #1067: an open direction/strength proposal is answered by the choice on the card, not by a line here.
+    assert card('recommendation_semantics_open') == ''
+    for code in sorted(HUMAN_SIGNAL_CODES - {'recommendation_semantics_open'}):
         assert card(code).startswith('<span data-ko-signals>Let op: '), code

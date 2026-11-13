@@ -485,9 +485,11 @@ def test_review_ui_uses_direction_strength_and_preserves_proposal_evidence(tmp_p
     html = client.get(
         f"/review?document={snapshot_id}&object={target['object_id']}"
     ).text
-    form = _compact_review_form(html)
-    assert not any(item.get('name') in {'recommendation_direction', 'recommendation_strength_level'} for item in form['inputs'])
-    assert '<p class="ko-interpretation">Aanraden · Zwak</p>' in html
+    # #1067: Metis' proposal is shown as the preselected choice; the reviewer confirms or corrects it.
+    assert 'data-ko-semantics-choice' in html
+    assert '<option value="for" selected>Aanraden</option>' in html
+    assert '<option value="weak" selected>Zwak</option>' in html
+    assert 'Metis kon dit niet vaststellen.' not in html
     assert html.count('class="ko-question"') == 3
     assert RECOMMENDATION_TEXT in html
     assert "Zwakke aanbeveling" in html

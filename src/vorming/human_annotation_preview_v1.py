@@ -74,9 +74,10 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
                     from src.vorming.semantic_passage_v1 import _recommendation_semantics_from_proposal
                     from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
                     from src.vorming.recommendation_semantics_v1 import validate_recommendation_semantics
+                    from src.vorming.recommendation_semantics_v1 import complete_annotation_semantics
                     raw = payload.get('recommendation_semantics')
-                    if raw is None:
-                        codes.append('recommendation_semantics_invalid')
+                    if not complete_annotation_semantics(raw):
+                        codes.append('recommendation_semantics_open')  # the reviewer decides (#1067)
                     else:
                         semantics, _ = _recommendation_semantics_from_proposal(raw,
                             proposed_type='recommendation', selected=[{**span, 'section_path':

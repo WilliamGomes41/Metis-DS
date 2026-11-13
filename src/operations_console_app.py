@@ -5494,7 +5494,8 @@ def create_console_app(
             return handle_compact_review(state, account, snapshot_id, object_id,
                 snapshot_revision, interaction_id, normalize_review_task(return_task), review_action,
                 dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment,
-                evidence_not_applicable=evidence_not_applicable == 'yes')
+                evidence_not_applicable=evidence_not_applicable == 'yes',
+                semantics_choice=(recommendation_direction, recommendation_strength_level))
         mapped = map_eindoordeel(eindoordeel, decision)
         if eindoordeel == "later_beoordelen" or mapped == "later":
             mapped = "later"

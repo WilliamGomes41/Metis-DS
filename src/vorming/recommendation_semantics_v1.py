@@ -293,6 +293,22 @@ def _review_strength_evidence(obj: dict[str, Any], strength: str) -> str | None:
     return None
 
 
+def complete_annotation_semantics(raw: Any) -> bool:
+    """#1067: a worker's annotation carries Metis' direction/strength proposal only when it is complete.
+
+    Anything less is no proposal: the reviewer chooses on the review card. The
+    stored annotation is never changed; this only decides what is built.
+    """
+    if not isinstance(raw, dict) or raw.get("direction") not in {"for", "against"}:
+        return False
+    if not raw.get("direction_evidence"):
+        return False
+    status = raw.get("strength_status")
+    if status == "not_stated":
+        return raw.get("strength") is None
+    return status == "explicit" and raw.get("strength") in {"strong", "weak"} and bool(raw.get("strength_evidence"))
+
+
 def confirmed_recommendation_semantics_from_review(
     obj: dict[str, Any],
     *,
