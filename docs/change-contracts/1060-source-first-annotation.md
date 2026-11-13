@@ -259,3 +259,17 @@ Bewijs: tests voor de regel; kernproef dat gereedmelden met een open voorstel
 wordt geweigerd en na toevoegen of afwijzen slaagt, en dat een afwijzing
 bewaard blijft; browserproef van de kaart (voorstel zichtbaar, gemarkeerd in de
 bron, `+` en `−`, opslaan pas na antwoord).
+
+Uitvoering slice 4 (13 november 2026):
+
+- Het voorstel verschijnt al bij een selectie die nog niet als uitspraak is
+  vastgelegd: selecteren ís de uitspraak. Toevoegen of afwijzen legt de
+  uitspraak eerst vast.
+- De opslaanknoppen blijven bruikbaar als alleen een voorstel open staat; een
+  klik wijst dan naar het voorstel (focus op `+`, met een korte uitleg in de
+  regel). In het uitgebreide formulier leidt het controlepunt terug naar de
+  kaart.
+- Bewijs: `tests/test_context_proposal_1060.py` (regel en kern op native
+  PostgreSQL) en `tests/browser_source_first_card_check.cjs` (voorstel,
+  markering in de bron, `+`, `−`, opslaan bij een open voorstel, één kolom met
+  tekens, geen horizontale scroll op 390 px).
