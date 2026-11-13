@@ -227,7 +227,8 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   function renderSimple() {
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
-    const done=entry.status==='ready' && dirty===committed,current=checkIsCurrent(),provisional=!core.length && !!selected;
+    const built=!!state.object_bindings?.[entry.annotation_id];
+    const done=entry.status==='ready' && dirty===committed && !built,current=checkIsCurrent(),provisional=!core.length && !!selected;
     el('simple-heading').textContent=!core.length && !selected ? 'Selecteer de uitspraak in de bron' : done ? 'Klaar voor documentcontrole' : '';
     el('simple-heading').hidden=!el('simple-heading').textContent;
     const findings=current ? check.findings : [],signals=current ? check.signals || [] : [],proposals=openProposals();
@@ -441,8 +442,35 @@ import {bindRange} from '/annotations/binding.mjs';
       el('finish').disabled=busy || (hasCore() ? !complete : !provisional && !!entry.revision && !!state.object_bindings?.[entry.annotation_id]);
       renderSimple();
     }
+    // #1064: an object that is already built has one way forward, in either form:
+    // rebuild it when something changed, otherwise go back to its review.
+    const built=state.object_bindings?.[entry.annotation_id];
+    el('rebuild').hidden=!built;
+    if(built) {
+      const complete=confirmedReady || checkIsCurrent() && !check.findings.some(f=>f.code!=='annotation_context_proposal_open');
+      el('ready').hidden=true;el('finish').hidden=true;el('new').hidden=true;
+      el('rebuild').textContent=changedSinceBuild() ? 'Kennisobject opnieuw bouwen' : 'Terug naar review';
+      el('rebuild').disabled=finalizing || checking || deriving || rebuilding || changedSinceBuild() && (!hasCore() || !complete);
+    }
     el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Selecteer de woorden in de bron.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
   }
+  let rebuilding=false;
+  const changedSinceBuild = () => !!state.object_bindings?.[entry.annotation_id]?.pending || dirty!==committed || entry.status!=='ready';
+  el('rebuild').addEventListener('click',async()=>{
+    const built=state.object_bindings?.[entry.annotation_id];
+    if(!built || rebuilding) return;
+    const review='/review?'+new URLSearchParams({document:state.snapshot_id,object:built.object_id});
+    if(!changedSinceBuild()) {window.location.href=review;return;}
+    if(!await saveCard()) return;
+    rebuilding=true;updateBindingControls();status('Kennisobject wordt opnieuw gebouwd…');
+    try {
+      const response=await fetch('/annotations/rebuild',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({document:state.snapshot_id,annotation:entry.annotation_id,command_id:crypto.randomUUID(),expected_generation:state.generation})});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.message || 'Opnieuw bouwen is niet gestart. Je aanpassing is bewaard.');
+      window.location.href=data.review_url;
+    } catch(error) {status(error.message);rebuilding=false;updateBindingControls();}
+  });
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -550,7 +578,9 @@ import {bindRange} from '/annotations/binding.mjs';
     renderSummary();updateBindingControls();
   }
   const status = text => { el('status').textContent = text; };
-  const loadedStatus = () => entry.revision ? entry.status==='ready' ? 'Klaar voor documentcontrole en opgeslagen.' : 'Concept opgeslagen.' : 'Nieuwe annotatie. Nog niets opgeslagen.';
+  // A built object is not in the document check any more: its card speaks of the object, not the phase.
+  const loadedStatus = () => state.object_bindings?.[entry.annotation_id] ? (state.object_bindings[entry.annotation_id].pending ? 'Aanpassing opgeslagen, nog niet opnieuw gebouwd.' : 'Opgebouwd kennisobject.') :
+    entry.revision ? entry.status==='ready' ? 'Klaar voor documentcontrole en opgeslagen.' : 'Concept opgeslagen.' : 'Nieuwe annotatie. Nog niets opgeslagen.';
   function load(id) {
     const saved = state.entries.find(e => e.annotation_id === id);
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
@@ -593,7 +623,7 @@ import {bindRange} from '/annotations/binding.mjs';
     renderFields();
     renderSourceHighlights();
     const binding = state.object_bindings?.[entry.annotation_id];
-    el('current-object').hidden = !binding;
+    el('current-object').hidden = !binding || simple();
     if (binding) {
       el('current-version').textContent = 'Huidige objectversie ' + binding.object_version;
       el('current-text').textContent = binding.text;
@@ -705,7 +735,7 @@ import {bindRange} from '/annotations/binding.mjs';
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
           committed = version; retryRequest = null;setEntryUrl(entry.annotation_id);entries();
           el('retry').hidden = true;
-          status(data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderSummary();updateBindingControls();
+          status(state.object_bindings?.[entry.annotation_id] ? 'Aanpassing opgeslagen.' : data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderSummary();updateBindingControls();
         } catch (error) {
           failed = !error.validation; el('retry').hidden = false;
           status('Opslaan mislukt. ' + error.message); throw error;

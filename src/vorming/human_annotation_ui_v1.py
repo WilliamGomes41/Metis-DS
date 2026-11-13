@@ -396,7 +396,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <p id="annotation-conflict" hidden><a id="annotation-conflict-link" target="_blank" rel="noopener">Bestaande annotatie openen in een nieuw venster</a></p>
 <section id="annotation-save-conflict" hidden><h3>Je werk en de opgeslagen versie verschillen</h3><p>Je aanwijzingen blijven hier staan. Vergelijk ze met de opgeslagen versie voordat je kiest wat je behoudt.</p><details><summary>Mijn huidige werk</summary><pre id="annotation-local-work"></pre></details><a id="annotation-server-work" target="_blank" rel="noopener">Bekijk opgeslagen versie in een nieuw venster</a></section>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button>
-<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-suggest" disabled>Betekenis voorstellen</button><button class="btn-secondary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button><button class="btn-secondary" type="button" id="annotation-finish" hidden>Opslaan en bronselectie beëindigen</button></div>
+<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-suggest" disabled>Betekenis voorstellen</button><button class="btn-secondary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button><button class="btn-secondary" type="button" id="annotation-finish" hidden>Opslaan en bronselectie beëindigen</button><button class="btn-primary" type="button" id="annotation-rebuild" hidden>Kennisobject opnieuw bouwen</button></div>
 <details id="annotation-more"><summary>Bewaren, document en meer acties</summary><p>Concepten worden automatisch bewaard. Alleen ‘opgeslagen’ bevestigt serveropslag.</p><div class="actions"><button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Hele annotatie terugnemen</button><button class="btn-secondary" type="button" id="annotation-simple-back" hidden>Terug naar de eenvoudige kaart</button></div></details>
 <section id="annotation-confirm" hidden aria-labelledby="annotation-confirm-title"><h3 id="annotation-confirm-title" tabindex="-1">Wijziging bevestigen</h3><p id="annotation-confirm-message"></p><button type="button" class="btn-secondary" id="annotation-confirm-cancel">Behouden</button><button type="button" class="btn-secondary" id="annotation-confirm-accept">Wijziging uitvoeren</button></section>
 </fieldset></aside></div>
@@ -499,6 +499,33 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         if attempt and attempt['state'] == 'running':
             dispatcher.notify(document, attempt)
         return RedirectResponse('/annotations/build?'+urlencode({'document':document,'attempt':receipt['attempt_id']}), status_code=303)
+
+    @app.post('/annotations/rebuild')
+    async def rebuild(request: Request):
+        # #1064: the card's 'Kennisobject opnieuw bouwen'. The existing build, then back to Review.
+        actor = require(request)
+        from src.vorming import human_annotation_build_v1 as build
+        try:
+            body = await request.json()
+            document = str(body.get('document') or '')
+            result = await asyncio.to_thread(build.rebuild, console, actor_id=actor['account_id'], snapshot_id=document,
+                annotation_id=str(body.get('annotation') or ''), command_id=str(body.get('command_id') or ''),
+                expected_generation=body.get('expected_generation'))
+        except ConsoleError as error:
+            if error.code in {'not_authenticated', 'researcher_role_required', 'reviewer_not_named_on_snapshot'}:
+                raise
+            return JSONResponse({'error':error.code,'message':ERRORS.get(error.code,
+                'Opnieuw bouwen is niet gestart. Je aanpassing is bewaard.')}, status_code=409, headers={'Cache-Control':'no-store'})
+        except (ValueError, AttributeError):
+            return JSONResponse({'error':'annotation_command_invalid','message':'Opnieuw bouwen is niet gestart. Je aanpassing is bewaard.'},
+                                status_code=400, headers={'Cache-Control':'no-store'})
+        if result['started']:
+            from src.vorming.worker_handover_v1 import native_attempt
+            attempt = native_attempt(console, document, result['attempt_id'])
+            if attempt and attempt['state'] == 'running':
+                dispatcher.notify(document, attempt)
+        return JSONResponse({'review_url':'/review?'+urlencode({'document':document,'object':result['object_id']})},
+                            headers={'Cache-Control':'no-store'})
 
     def build_status(actor, document, attempt_id):
         envelope = console._envelope(document)
