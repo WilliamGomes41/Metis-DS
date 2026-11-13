@@ -103,6 +103,12 @@
       ]
     ],
     [
+      "/annotations/rebuild",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/source",
       [
         "POST"
