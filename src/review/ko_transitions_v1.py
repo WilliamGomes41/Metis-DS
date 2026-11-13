@@ -59,7 +59,9 @@ TRANSITIONS = {
     for state in _MUTABLE for event in EVENTS
     if (event != 'approve_second' or state == TWEEDE_REVIEW)
     and (event != 'approve' or state in {'Kandidaat', 'Bewijs open', 'In review', 'Samengesteld'})
-    and (event not in {'reject', 'later'} or state not in {GOEDGEKEURD, AFGEWEZEN, TWEEDE_REVIEW})
+    and (event != 'later' or state not in {GOEDGEKEURD, AFGEWEZEN, TWEEDE_REVIEW})
+    # #1064: the independent second reviewer may reject; the first-review command still cannot.
+    and (event != 'reject' or state not in {GOEDGEKEURD, AFGEWEZEN})
 }
 
 

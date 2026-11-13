@@ -24,10 +24,13 @@ def expected_targets(state, event):
         return {'Goedgekeurd', 'Tweede review'} if state in {'Bewijs open', 'Samengesteld', 'In review'} else set()
     if event == 'approve_second':
         return {'Goedgekeurd', 'Tweede review'} if state == 'Tweede review' else set()
-    if event in {'reject', 'later'}:
+    if event == 'reject':
+        # #1064 (William, 13 november 2026): the independent second reviewer may reject too.
+        return set() if state in {'Goedgekeurd', 'Afgewezen'} else {'Afgewezen'}
+    if event == 'later':
         if state in {'Goedgekeurd', 'Tweede review', 'Afgewezen'}:
             return set()
-        return {'Afgewezen'} if event == 'reject' else OPEN
+        return OPEN
     if event == 'supersede_merge':
         return {'Vervangen'}
     return OPEN

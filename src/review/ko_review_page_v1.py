@@ -203,6 +203,21 @@ def _continuation_proposal(obj, snapshot_id, revision, task):
         '<a href="' + escape(owner, quote=True) + '">Bronaanvulling herstellen in Vorming</a></aside>')
 
 
+def _rejection_notice(console, obj):
+    """#1064: who rejected this exact version, at which review, and why. Read from the review ledger."""
+    from src.review.review_ledger import read_events
+    version = str(obj.get('object_version') or '')
+    event = next((row for row in reversed(read_events(console._ledger_path))
+                  if row.get('object_id') == obj.get('object_id') and str(row.get('object_version') or '') == version
+                  and str(row.get('event_type') or '').endswith('_review_reject')), None)
+    if event is None:
+        return '<p class="ko-notice" role="status" data-ko-rejected>Deze versie is afgewezen.</p>'
+    stage = 'in de tweede review ' if event['event_type'] == 'second_review_reject' else ''
+    comment = str((event.get('details') or {}).get('comment') or '').strip()
+    return ('<p class="ko-notice" role="status" data-ko-rejected>Afgewezen ' + escape(stage) + 'door '
+            + escape(str(event.get('actor') or 'een reviewer')) + (': ' + escape(comment) if comment else '.') + '</p>')
+
+
 def render_review_page(console, account, inputs, obj, *, task='', draft=None, error='', conflict=False,
                        origin_revision='', overview_url=''):
     from src.operations_console_app import _object_type_label, _source_bound_fields_html, new_review_interaction_id
@@ -279,6 +294,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         if conflict:
             reopen = '/review?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': task})
             notice += '<p><a href="' + escape(reopen, quote=True) + '">Passage opnieuw beoordelen</a></p>'
+    elif (obj.get('governance') or {}).get('validation_status') == 'rejected':
+        notice = _rejection_notice(console, obj)
     elif rebuilding:
         notice = ('<p class="ko-notice" role="status" data-ko-rebuilding="' + rebuilding + '">'
                   + ('De nieuwe versie wordt opgebouwd. Deze pagina ververst vanzelf.' if rebuilding == 'building' else
@@ -331,7 +348,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         return review_page_shell(account, body, title='Kennisobject')
     state = derive_ko_state(obj, review_path=path, bindings=inputs.bindings, fragments=inputs.fragments)['state']
     heading = 'Onafhankelijke tweede review' if second else 'Review'
-    rejection = ('' if second else
+    # #1064: in the second review only the reviewer who may decide sees 'Afwijzen'.
+    rejection = '' if second and not (route and route.get('actionable')) else (
         '<details class="ko-reject"><summary>Afwijzen</summary><label>Toelichting bij afwijzing<textarea name="comment">'
         + escape(str(draft.get('comment') or '')) + '</textarea></label>'
         '<button class="ko-text-button" type="submit" name="review_action" value="reject" formnovalidate>Afwijzen met toelichting</button></details>')
@@ -440,8 +458,6 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
             raise ConsoleError(str(exc)) from exc
         if action not in {'approve', 'reject', 'later'}:
             raise ConsoleError('invalid_review_decision')
-        if second and action == 'reject':
-            raise ConsoleError('invalid_review_decision')
         if action == 'approve' and not assessment.all_yes:
             raise ConsoleError('review_assessment_requires_three_yes')
         if action == 'reject' and not comment.strip():
@@ -466,7 +482,13 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
                 reviewer_account_id=account['account_id'], snapshot_id=snapshot_id,
                 review_stage='second_review' if second else 'first_review', focal=obj,
                 objects=inputs.objects, review_path=path, assessment=assessment)
-            if second:
+            if second and action == 'reject':
+                # #1064: the second reviewer's rejection is final, like the first reviewer's.
+                console.reject_second_review(actor_id=account['account_id'], snapshot_id=snapshot_id,
+                    object_id=object_id, comment=comment,
+                    expected_revision=resolve_review_revision(console, snapshot_id, revision),
+                    interaction_evidence=evidence)
+            elif second:
                 expected = resolve_review_revision(console, snapshot_id, revision)
                 console.approve_second_review(actor_id=account['account_id'], snapshot_id=snapshot_id,
                     object_id=object_id, expected_revision=expected, interaction_evidence=evidence,

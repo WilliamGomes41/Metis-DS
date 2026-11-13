@@ -102,7 +102,7 @@ def test_rejection_receipt_shows_the_saved_explanation(tmp_path, production_cons
     assert comment not in bon.text
 
 
-def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(system, production_app):
+def test_second_review_keeps_exact_tuple_and_refuses_a_rejection_without_reason(system, production_app):
     from src.integrity_kernel import compute_canonical_object_hash
     console, _, accounts, sid, obj = system
     participation(console, accounts, sid, 'archive', accounts['reviewer']['account_id'])
@@ -120,11 +120,12 @@ def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(syste
     assert 'Onafhankelijke tweede review' in page.text
     assert 'action="/review/second-review"' in page.text
     assert compact_submission(page)['return_task'] == 'second_review'
-    assert 'value="reject"' not in page.text
+    # #1064: the second reviewer can reject, with a reason; without one nothing is stored.
+    assert 'value="reject"' in page.text
     data = compact_submission(page)
     before = physical_state(console, sid)
-    rejected = client.post('/review/second-review', data={**data, 'review_action': 'reject',
-        'comment': 'Geen afwijzing als correctie opslaan.'}, follow_redirects=False)
+    rejected = client.post('/review/second-review', data={**data, 'review_action': 'reject', 'comment': ''},
+                           follow_redirects=False)
     assert rejected.status_code == 400
     assert physical_state(console, sid) == before
     saved = client.post('/review/second-review', data=data, follow_redirects=False)

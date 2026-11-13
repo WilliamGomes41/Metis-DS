@@ -9,6 +9,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ### Added
 - Eén bronselectie kan type en brongebonden betekenis voorstellen; de gebruiker controleert/corrigeert het concept vóór afronden (#1055).
+- Bij vierogenreview kan reviewer 2 een kennisobject afwijzen met een toelichting; dat is een eindbesluit zoals bij reviewer 1, de goedkeuring van reviewer 1 telt dan niet meer, en de reviewkaart toont wie afwees en waarom (#1064, deel 2).
 - Een reviewer past een kennisobject uit annotatie aan via ‘Aanpassen in de kaart’ en bouwt het met ‘Kennisobject opnieuw bouwen’ opnieuw; de reviewkaart toont de bouwstatus en ‘opnieuw gebouwd na correctie van versie …’. De losse herstellinks op de reviewkaart zijn voor deze objecten vervallen (#1064).
 - Brontekst die geen uitspraak is (kop, navigatie, documentgegevens) wordt vastgelegd in de documentcontrole onder ‘Nog niet verantwoord bronmateriaal’, per stuk tekst; de link daarvoor is uit de annotatiekaart verwijderd (#1060).
 - Metis stelt in de annotatiekaart de inleidende zin van een opsomming voor bij ‘Hoort erbij’, als letterlijke brontekst die ook in de bron gemarkeerd is. De medewerker voegt het voorstel toe met + of wijst het af met −; zolang een voorstel open staat, kan de annotatie niet gereed worden gemeld. Een afwijzing wordt bewaard in het optionele veld `declined_context` (#1060, slice 4).

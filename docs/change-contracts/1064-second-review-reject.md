@@ -7,7 +7,8 @@ Touches lifecycle invariants: yes
 Rewrite risk: none
 
 Part of MET-76. Besluit William, 13 november 2026: “Afwijzen moet ook bij reviewer 2
-kunnen.” Status: **specificatie ter akkoord; nog geen code.**
+kunnen.” Specificatie goedgekeurd door William (“Akkoord, bouw deel 2”); uitgevoerd
+zoals hieronder beschreven.
 
 Waarom Class A: `docs/agents/lifecycle-vsa.md` §2 noemt een ontbrekende
 verplichte tweede review als reden dat een WorkingRevision niet klaar is voor
@@ -108,3 +109,43 @@ leveren precies één winnaar.
 review afronden.” De bestaande regel dwingt dit al af per objectversie: de
 tweede goedkeurder moet een ander zijn dan de eerste goedkeurder van díe
 versie. Er is geen wijziging nodig; een proef hiervoor hoort bij dit deel.
+
+## Uitvoering (13 november 2026)
+
+- `OperationsConsole.reject_second_review`: dezelfde controles als
+  `approve_second_review` via de gedeelde `_second_review_scope` (rol, benoemde
+  reviewer, interactiebewijs, exacte revisie, inhoudsreview, beleid,
+  vierogenplicht); daarna eerste goedkeuring aanwezig, onafhankelijkheid,
+  tweede-reviewtaak actief en origineel open. Eén transactie: objectversie
+  `validation_status: rejected` en `second_review.status: rejected` (alleen
+  governance, canonieke inhoud en hash ongewijzigd), bindingen van dit object
+  ongeldig (historie blijft), logboek `second_review_reject` met toelichting,
+  eerste goedkeurder(s) en tweede reviewer.
+- `ko_transitions_v1`: `reject` is toegestaan vanuit Tweede review; de
+  eerste-reviewopdracht blijft dat weigeren (`second_review_command_required`).
+- Reviewkaart: in de tweede review ‘Afwijzen’ voor wie die review mag doen;
+  `handle_compact_review` stuurt het naar de nieuwe opdracht. Bij een
+  afgewezen versie toont de kaart wie afwees, in welke review en waarom
+  (`data-ko-rejected`, uit het reviewlogboek).
+
+**Bevinding (bestaand gedrag, niet gewijzigd).** Context die alleen bij een
+afgewezen object hoort, wordt een open bronpassage (`uncertain_source_role`) en
+houdt publicatie tegen tot iemand in Vorming het brongebruik bepaalt. Dat geldt
+precies zo na een afwijzing door reviewer 1; een proef legt vast dat beide gelijk
+zijn. Het hangt samen met besluit 2 van #1060 (documentdekking).
+
+**Bewijs.** `tests/test_second_review_reject_1064.py` op native PostgreSQL:
+black-box (vierogendocument, reviewer 1 keurt goed, reviewer 2 wijst af,
+publicatiegereed, herstart, publicatie, product-API levert het goedgekeurde
+object en niet het afgewezen); weigeringen zonder wijziging (eigen eerste
+goedkeuring, lege toelichting, verouderde revisie, niet-benoemde reviewer);
+goedkeuren na afwijzen op dezelfde revisie geweigerd; correctie plus opnieuw
+bouwen geeft een nieuwe versie in de eerste review, en de corrector kan daarvan
+niet ook de tweede review doen; de reviewkaart voor beide reviewers. De
+onafhankelijke transitie-oracle en de reviewpaginatest zijn bijgewerkt naar de
+nieuwe regel; van de karakteriseringsgoldens verandert alleen
+`second_actionable`, met precies het afwijsblok.
+
+Niet bewezen: een echte gelijktijdige race tussen goedkeuren en afwijzen in twee
+processen. Wel bewezen dat het tweede besluit op dezelfde revisie wordt
+geweigerd (bestaande versiecontrole onder de snapshotvergrendeling).
