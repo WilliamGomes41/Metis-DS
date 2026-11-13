@@ -197,3 +197,103 @@ dat ‘de onderbouwingskeuze’ bij de medewerker blijft blokkeren.
   of het vergat.
 - Bewijs: de ketenproef rondt af zonder keuze, wordt bij review eerst geweigerd
   en pas goedgekeurd na de keuze van de reviewer.
+
+## Slice 4: Metis wijst voor wat erbij hoort (besluit William, 13 november 2026)
+
+GO projectlead: “Ja leg het vast en ga daarna over tot implementatie.” Dit
+vervangt de voorwaarde dat eerst de voorstelkwaliteit gemeten wordt (besluit 6):
+het voorstel komt uit vaste regels, niet uit een taalmodel, dus er zijn geen
+modelcalls te meten. De meting gebeurt in de praktijk: elk voorstel wordt
+toegevoegd of expliciet afgewezen, en beide worden bewaard.
+
+Waarom: na de extractie is de opmaak van de bron grotendeels weg; een
+inleidende zin boven een opsomming is voor een mens moeilijk te herkennen.
+
+Grenzen van William:
+
+1. **Selecteren blijft de uitspraak, zonder dubbelwerk.** Metis verandert de
+   uitspraak nooit. Een voorstel staat alleen in de regel ‘Hoort erbij’ en
+   vraagt één handeling. Zonder voorstel is de kaart ongewijzigd.
+2. **Het voorstel is gemarkeerd in de bron**, met een eigen markering, zodat
+   direct te zien is dat het letterlijke brontekst is.
+3. **Nooit parafraseren.** Een voorstel is een exacte bronpositie (blok, begin,
+   einde); de getoonde tekst komt uit de bron zelf.
+4. **Negeren is geen ‘niets doen’.** Het voorstel krijgt `+` (toevoegen) of `−`
+   (afwijzen). Zolang een voorstel open staat, kan de annotatie niet gereed
+   worden gemeld; de kaart wijst naar het voorstel.
+
+Regel (route A, `human_annotation_context_proposal_v1`): voor de eerste
+uitspraaktekst zoekt Metis terug naar het dichtstbijzijnde voorgaande bronblok
+in dezelfde sectie dat eindigt op een dubbele punt, over hooguit tien
+tussenliggende blokken. Voorgesteld wordt de laatste zin van dat blok, tot en
+met de dubbele punt. Geen voorstel als die tekst al gekoppeld of afgewezen is,
+of als er een andere sectie tussen ligt. Koppen worden niet voorgesteld: bijna
+elke uitspraak staat onder een kop, en een vraag bij elke annotatie is
+dubbelwerk.
+
+Bekende beperking: een gewone alinea direct na een opsomming krijgt de
+inleiding van die opsomming voorgesteld. De medewerker wijst die af met `−`;
+het afwijzingspercentage laat zien of de regel moet worden aangescherpt.
+
+Opslag en regels:
+
+- Toevoegen bewaart de tekst als bestaand bereik met rol `list_introduction`,
+  zonder essentialiteitsclaim, net als een handmatige koppeling.
+- Afwijzen bewaart de bronpositie in het nieuwe, optionele veld
+  `declined_context` van de annotatie (exacte bronpositie met citaatcontrole,
+  hooguit 64). Het veld ontbreekt als er niets is afgewezen; bestaande
+  annotaties en hun hashes veranderen niet. `−` bij gekoppelde tekst met rol
+  `list_introduction` geldt als afwijzen.
+- `human_annotation_v1.save` weigert de overgang naar gereed zolang er een open
+  voorstel is (`annotation_context_proposal_open`). De regel geldt alleen voor
+  een levende opslag: herstel, import, documentafsluiting en opbouw passen hem
+  niet toe, zodat bestaande gereedgemelde annotaties geldig blijven als de regel
+  later verandert.
+- `check_current` geeft de open voorstellen terug; de kaart toont ze en markeert
+  ze in de bron.
+
+Classificatie: Class B, `Rewrite risk: none`. Eén additief, optioneel
+invoerveld; geen wijziging aan kandidaatmaker, toelating, review of publicatie.
+
+Bewijs: tests voor de regel; kernproef dat gereedmelden met een open voorstel
+wordt geweigerd en na toevoegen of afwijzen slaagt, en dat een afwijzing
+bewaard blijft; browserproef van de kaart (voorstel zichtbaar, gemarkeerd in de
+bron, `+` en `−`, opslaan pas na antwoord).
+
+Uitvoering slice 4 (13 november 2026):
+
+- Het voorstel verschijnt al bij een selectie die nog niet als uitspraak is
+  vastgelegd: selecteren ís de uitspraak. Toevoegen of afwijzen legt de
+  uitspraak eerst vast.
+- De opslaanknoppen blijven bruikbaar als alleen een voorstel open staat; een
+  klik wijst dan naar het voorstel (focus op `+`, met een korte uitleg in de
+  regel). In het uitgebreide formulier leidt het controlepunt terug naar de
+  kaart.
+- Bewijs: `tests/test_context_proposal_1060.py` (regel en kern op native
+  PostgreSQL) en `tests/browser_source_first_card_check.cjs` (voorstel,
+  markering in de bron, `+`, `−`, opslaan bij een open voorstel, één kolom met
+  tekens, geen horizontale scroll op 390 px).
+
+## Besluit William, 13 november 2026: ‘geen uitspraak’ uit de kaart, naar de documentcontrole
+
+GO projectlead: “Haal hem uit de kaart, neem het mee vóór de PR.” De link ‘Dit is
+geen uitspraak, maar een kop of documentgegevens’ stond onder elke nieuwe
+selectie in de kaart. De kaart is voor uitspraken; brontekst die geen uitspraak
+is, komt de medewerker tegen in de documentcontrole onder ‘Nog niet verantwoord
+bronmateriaal’. Daar staat nu per stuk tekst de keuze wat het is (kop of
+documentstructuur, navigatie, documentgegevens, kop- of voettekst) met
+‘Vastleggen’, en een link om het toch als uitspraak aan te wijzen.
+
+- Nieuwe formulierroute `POST /annotations/source-role`; zij bouwt één
+  bestaande opslagopdracht (bronstuk met `disposition`, status gereed) voor het
+  exacte bereik en gebruikt dezelfde kernregels, versiecontrole en
+  command receipts. Een verouderde pagina wordt geweigerd.
+- Het stappenformulier met dezelfde keuze blijft bestaan tot slice 5.
+- Het label ‘Documentstructuur’ heet nu ‘Kop of documentstructuur’.
+- Bewijs: routetest in `tests/test_context_proposal_1060.py` (opslaan, ongeldige
+  keuze, herhaalde opdracht, verouderde pagina) en de browserproef van de kaart
+  (keuze in de documentcontrole, geen link meer in de kaart, 390 px).
+
+Ook toegevoegd aan de browserproef: bij een open voorstel voegt de medewerker
+zelf meerdere passages toe aan ‘Hoort erbij’ en haalt er één weg; het voorstel
+blijft open tot het beantwoord is.

@@ -9,6 +9,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ### Added
 - Eén bronselectie kan type en brongebonden betekenis voorstellen; de gebruiker controleert/corrigeert het concept vóór afronden (#1055).
+- Een reviewer past een kennisobject uit annotatie aan via ‘Aanpassen in de kaart’ en bouwt het met ‘Kennisobject opnieuw bouwen’ opnieuw; de reviewkaart toont de bouwstatus en ‘opnieuw gebouwd na correctie van versie …’. De losse herstellinks op de reviewkaart zijn voor deze objecten vervallen (#1064).
+- Brontekst die geen uitspraak is (kop, navigatie, documentgegevens) wordt vastgelegd in de documentcontrole onder ‘Nog niet verantwoord bronmateriaal’, per stuk tekst; de link daarvoor is uit de annotatiekaart verwijderd (#1060).
+- Metis stelt in de annotatiekaart de inleidende zin van een opsomming voor bij ‘Hoort erbij’, als letterlijke brontekst die ook in de bron gemarkeerd is. De medewerker voegt het voorstel toe met + of wijst het af met −; zolang een voorstel open staat, kan de annotatie niet gereed worden gemeld. Een afwijzing wordt bewaard in het optionele veld `declined_context` (#1060, slice 4).
 - Een annotatie zonder gekoppelde onderbouwing mag worden afgerond; of onderbouwing nodig is beslist de reviewer, zoals de reviewtransitie al eist. Alleen gekoppelde onderbouwing samen met ‘niet van toepassing’ blijft geweigerd (#1060).
 - De reviewkaart toont onder ‘Is dit compleet?’ wat Metis niet kon vaststellen, en ‘voorgesteld type’ bij een nog niet bevestigd type (#1060, slice 3).
 - De annotatiekaart toont drie regels: uitspraak, hoort erbij en onderbouwing. Metis leidt type en onderdelen op de achtergrond af; het stappenformulier blijft bereikbaar als uitgebreid formulier (#1060, slice 2).

@@ -103,7 +103,19 @@
       ]
     ],
     [
+      "/annotations/rebuild",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/source",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/annotations/source-role",
       [
         "POST"
       ]

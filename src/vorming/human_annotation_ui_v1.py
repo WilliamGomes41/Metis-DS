@@ -26,7 +26,7 @@ FIELD_LABELS={'subject_span':'Over wie of wat gaat de uitspraak?','predicate_spa
     'actor_span':'Wie voert de handeling uit?','target_group_span':'Voor welke doelgroep?',
     'scope_span':'In welke situatie geldt dit?','condition_span':'Welke voorwaarde hoort erbij?'}
 SOURCE_LABELS={'document_metadata':'Documentgegevens','page_furniture':'Kop- of voettekst',
-    'navigation':'Navigatie','document_structure':'Documentstructuur',
+    'navigation':'Navigatie','document_structure':'Kop of documentstructuur',
     'unformed_meaning':'Nog niet tot een uitspraak gevormd','uncertain_source_role':'Bronfunctie nog onzeker'}
 ERRORS = {
     'annotation_core_duplicate':'Deze kernbereiken horen al bij een andere annotatie. Verwijder het dubbele kernbereik of wijs andere kernbereiken aan om dit concept te bewaren. De oorspronkelijke annotatie blijft bewaard.',
@@ -58,6 +58,8 @@ ERRORS = {
     'recommendation_semantics_invalid':'Controleer de richting en sterkte bij deze aanbeveling en wijs het bijbehorende bronbewijs aan.',
     'annotation_required_relationship_missing':'Een essentieel verband ontbreekt. Wijs de bijbehorende tekst opnieuw aan of leg expliciet vast waarom de verplichting vervalt.',
     'annotation_relationship_withdrawal_required':'Licht toe waarom dit essentiële verband niet langer nodig is.',
+    'annotation_context_proposal_open':'Metis stelt tekst voor die bij deze uitspraak hoort. Voeg het voorstel in de kaart toe met + of wijs het af met −.',
+    'annotation_declined_context_invalid':'Een afgewezen voorstel past niet bij deze bron. Open de opgeslagen annotatie opnieuw.',
 }
 FINDINGS = {**ERRORS,
     'annotation_source_empty':'Er is geen leesbare brontekst beschikbaar. Controleer het vastgelegde origineel voordat je verdergaat.',
@@ -299,9 +301,20 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     body += ' <a href="'+esc(back+'&annotation='+entry['annotation_id'])+'">Annotatie bekijken</a></li>'
                 body += '</ul></section>'
             if inspection['unaccounted_ranges']:
-                body += '<section aria-labelledby="annotation-gaps"><h2 id="annotation-gaps">Nog niet verantwoord bronmateriaal</h2><ul>'
-                for gap in inspection['unaccounted_ranges']:
-                    body += '<li><q>'+esc(gap['quote'])+'</q> <a href="'+esc(back+'#'+gap['block_id'])+'">Dit bronblok aanwijzen</a></li>'
+                # Text that is no statement is accounted for here, where it shows up; the card is for statements.
+                body += ('<section aria-labelledby="annotation-gaps"><h2 id="annotation-gaps">Nog niet verantwoord bronmateriaal</h2>'
+                         '<p>Is dit geen uitspraak, kies dan wat het is. Is het wel een uitspraak, wijs haar dan aan in de bron.</p><ul>')
+                options = '<option value="">Kies wat het is</option>'+''.join('<option value="'+esc(role+':'+reason)+'">'+esc(SOURCE_LABELS[reason])+'</option>'
+                    for role in ('structure','metadata') for reason in SOURCE_ROLES[role])
+                for index, gap in enumerate(inspection['unaccounted_ranges']):
+                    hidden = {'document':document,'command_id':str(uuid4()),'expected_generation':str(state['generation']),
+                              'expected_objects_revision':state['objects_revision'],'block_id':gap['block_id'],
+                              'start':str(gap['start']),'end':str(gap['end'])}
+                    body += ('<li class="annotation-gap"><q>'+esc(gap['quote'])+'</q><form method="post" action="/annotations/source-role">'+
+                        ''.join('<input type="hidden" name="'+key+'" value="'+esc(value)+'">' for key,value in hidden.items())+
+                        '<label for="annotation-gap-'+str(index)+'">Geen uitspraak</label> <select id="annotation-gap-'+str(index)+'" name="reason" required>'+options+'</select> '
+                        '<button class="btn-secondary" type="submit">Vastleggen</button></form>'
+                        '<a href="'+esc(back+'#'+gap['block_id'])+'">Toch een uitspraak: aanwijzen in de bron</a></li>')
                 body += '</ul></section>'
             current = state['current_build']
             if current:
@@ -321,7 +334,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 else:
                     body += '<p>Afsluiten is pas mogelijk als alle annotaties en de bronafhandeling gereed zijn.'+(' De opgeslagen bouwopdracht blijft hierboven bereikbaar.' if current else '')+'</p>'
             body += '<p><a class="btn-secondary" href="'+escape(back,quote=True)+'">Verder aanwijzen</a></p>'
-            return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
+            return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section><style>.annotation-gap{margin-block:1rem}.annotation-gap form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}.annotation-gap label{margin:0;font-weight:600}.annotation-gap select{width:auto;flex:0 1 16rem;font-size:1rem;min-height:2.75rem;max-width:100%}.annotation-gap .btn-secondary{min-height:2.75rem}</style>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
         blocks = source_document_html(state['blocks'])
         pages = list(dict.fromkeys(loc['page'] for block in state['blocks']
             for loc in block.get('locations') or [] if loc.get('page')))
@@ -383,7 +396,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <p id="annotation-conflict" hidden><a id="annotation-conflict-link" target="_blank" rel="noopener">Bestaande annotatie openen in een nieuw venster</a></p>
 <section id="annotation-save-conflict" hidden><h3>Je werk en de opgeslagen versie verschillen</h3><p>Je aanwijzingen blijven hier staan. Vergelijk ze met de opgeslagen versie voordat je kiest wat je behoudt.</p><details><summary>Mijn huidige werk</summary><pre id="annotation-local-work"></pre></details><a id="annotation-server-work" target="_blank" rel="noopener">Bekijk opgeslagen versie in een nieuw venster</a></section>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button>
-<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-suggest" disabled>Betekenis voorstellen</button><button class="btn-secondary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button><button class="btn-secondary" type="button" id="annotation-finish" hidden>Opslaan en bronselectie beëindigen</button></div>
+<div class="annotation-task-actions"><button class="btn-secondary" type="button" id="annotation-back" hidden>Vorige stap</button><button class="btn-primary" type="button" id="annotation-suggest" disabled>Betekenis voorstellen</button><button class="btn-secondary" type="button" id="annotation-add" disabled>Gebruik als kernuitspraak</button><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Annotatie klaar voor documentcontrole</button><button class="btn-primary" type="button" id="annotation-new" hidden>Volgende annotatie</button><button class="btn-secondary" type="button" id="annotation-finish" hidden>Opslaan en bronselectie beëindigen</button><button class="btn-primary" type="button" id="annotation-rebuild" hidden>Kennisobject opnieuw bouwen</button></div>
 <details id="annotation-more"><summary>Bewaren, document en meer acties</summary><p>Concepten worden automatisch bewaard. Alleen ‘opgeslagen’ bevestigt serveropslag.</p><div class="actions"><button class="btn-secondary" type="button" id="annotation-pause">Opslaan en later doorgaan</button><button class="btn-secondary" type="button" id="annotation-overview">Documentoverzicht controleren</button><button class="btn-secondary" type="button" id="annotation-withdraw">Hele annotatie terugnemen</button><button class="btn-secondary" type="button" id="annotation-simple-back" hidden>Terug naar de eenvoudige kaart</button></div></details>
 <section id="annotation-confirm" hidden aria-labelledby="annotation-confirm-title"><h3 id="annotation-confirm-title" tabindex="-1">Wijziging bevestigen</h3><p id="annotation-confirm-message"></p><button type="button" class="btn-secondary" id="annotation-confirm-cancel">Behouden</button><button type="button" class="btn-secondary" id="annotation-confirm-accept">Wijziging uitvoeren</button></section>
 </fieldset></aside></div>
@@ -398,12 +411,12 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 .annotation-page-label,.annotation-page-number{font-size:.84rem;color:var(--muted)}.annotation-page-label{margin:0 0 1.75rem}.annotation-page-number{text-align:right;margin:1rem 0 0}
 .annotation-document-heading{color:var(--paars);line-height:1.35;margin:2rem 0 .65rem}.annotation-page>.annotation-document-heading:first-of-type{margin-top:0}
 .annotation-paragraph,.annotation-list-item{font-size:1rem;line-height:1.75;margin:.25rem 0 1.15rem;overflow-wrap:anywhere}.annotation-list-item{padding-left:1.25rem;text-indent:-1rem;margin-bottom:.45rem}
-.annotation-source-text{border-radius:2px;cursor:text;scroll-margin-top:5rem}.annotation-source-text:focus-visible{outline:2px solid var(--paars);outline-offset:3px}.annotation-source-text mark{color:inherit;background:var(--water-soft);border-radius:2px}.annotation-source-text mark[data-current]{background:color-mix(in srgb,var(--paars) 25%,var(--wit))}.annotation-source-text mark[data-annotation]{cursor:pointer}
+.annotation-source-text{border-radius:2px;cursor:text;scroll-margin-top:5rem}.annotation-source-text:focus-visible{outline:2px solid var(--paars);outline-offset:3px}.annotation-source-text mark{color:inherit;background:var(--water-soft);border-radius:2px}.annotation-source-text mark[data-current]{background:color-mix(in srgb,var(--paars) 25%,var(--wit))}.annotation-source-text mark[data-annotation]{cursor:pointer}.annotation-source-text mark[data-proposal]{background:none;outline:2px dashed var(--paars);outline-offset:1px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .annotation-toc{padding:1rem 1.5rem;border-bottom:1px solid var(--line)}.annotation-toc>summary{font-weight:700;color:var(--paars);cursor:pointer}.annotation-toc .annotation-page{padding-inline:.75rem}.annotation-toc-row{line-height:1.6;margin:.35rem 0;overflow-wrap:anywhere}
 .annotation-workplace aside{align-self:start;position:sticky;top:1rem;max-height:90vh;overflow:auto;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;padding:1.25rem}.annotation-workplace aside h2{color:var(--paars)}.annotation-workplace label{display:block;margin-top:1rem}.annotation-workplace select{max-width:100%}.annotation-workplace .btn-secondary{min-height:2.75rem;white-space:normal}.annotation-workplace li{overflow-wrap:anywhere;margin-block:1rem}.annotation-workplace .actions{display:flex;flex-wrap:wrap;gap:.75rem}.annotation-workplace [hidden]{display:none!important}.annotation-workplace ::selection{background:var(--water-soft)}#annotation-controls{scroll-margin-top:6rem}.annotation-mobile-nav{display:none}
 @media(max-width:800px){.annotation-mobile-nav{display:flex;flex-wrap:wrap;gap:.75rem;margin-block:1rem;background:var(--wit);padding:.75rem;border:1px solid var(--line);border-radius:12px}.annotation-workplace{grid-template-columns:1fr}.annotation-document{max-height:65vh}.annotation-page{padding:1.25rem}.annotation-workplace aside{position:static;max-height:none}}
 .annotation-steps ol{display:flex;gap:.25rem;list-style:none;padding:0;margin:0 0 1rem}.annotation-steps li{flex:1;margin:0}.annotation-steps button{width:100%;min-height:3.5rem;padding:.5rem;border:0;border-bottom:2px solid var(--line);background:transparent;color:var(--muted);text-align:left;font:inherit;font-size:.85rem;line-height:1.35;cursor:pointer}.annotation-steps button[aria-current]{border-color:var(--paars);color:var(--paars);font-weight:700}
-#annotation-controls h2{font-size:1.3rem;margin:0 0 1rem}#annotation-controls h3{font-size:1.1rem;line-height:1.4;margin:1.5rem 0 .5rem}#annotation-controls p{line-height:1.5;overflow-wrap:anywhere}#annotation-status{margin:.75rem 0;color:var(--muted);font-size:.9rem;min-height:1.5em}#annotation-core-summary{font-weight:600}#annotation-controls details{margin-block:1rem}#annotation-controls summary{cursor:pointer;min-height:2.75rem;display:list-item;align-content:center}#annotation-fields dt{font-weight:600;margin-top:1.25rem}#annotation-fields dd{margin:.35rem 0 1rem}#annotation-fields dd p{margin:.35rem 0}.annotation-field-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-field-actions select{font-size:1rem}#annotation-target{font-weight:600}#annotation-selection{max-height:10rem;overflow:auto;background:var(--water-soft);padding:.5rem}#annotation-selection:empty{display:none}.annotation-selection-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-task-actions{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.5rem;background:var(--wit);padding-block:1rem;border-top:1px solid var(--line);z-index:2}.annotation-task-actions .btn-primary{flex:1;min-height:2.75rem;white-space:normal}.annotation-task-actions .btn-secondary{flex:0 1 auto}#annotation-check li{margin-block:.5rem}#annotation-review-summary dd,#annotation-empty-fields dd{margin:.25rem 0 1rem;overflow-wrap:anywhere}#annotation-review-summary dt,#annotation-empty-fields dt{font-weight:600}.annotation-row-action{display:inline-block;padding:0 .25rem;border:0;background:none;color:var(--paars);font:inherit;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}.annotation-row-action:focus-visible{outline:2px solid var(--paars);outline-offset:2px}.annotation-open{margin:.35rem 0 .5rem!important;font-weight:600}#annotation-simple-rows dt{font-weight:600;margin-top:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;min-height:2.25rem}#annotation-simple-rows dd{margin:.35rem 0 0;overflow-wrap:anywhere}#annotation-simple-rows dd p{margin:.35rem 0}.annotation-hint{color:var(--muted)}.annotation-line{display:flex;gap:.75rem;align-items:flex-start;justify-content:space-between;margin:.35rem 0}.annotation-line p{margin:0!important;min-width:0}.annotation-sign{flex:none;display:inline-grid;place-items:center;width:2.25rem;height:2.25rem;padding:0;border:1px solid var(--paars);border-radius:8px;background:var(--wit);color:var(--paars);font:inherit;font-weight:700;font-size:1.15rem;line-height:1;cursor:pointer}.annotation-sign[aria-pressed=true]{background:var(--paars);color:var(--wit)}.annotation-sign:focus-visible{outline:2px solid var(--paars);outline-offset:2px}@media(pointer:coarse){.annotation-sign{width:2.75rem;height:2.75rem}}#annotation-simple-rows dd>.btn-secondary{margin-top:.35rem}#annotation-finish{flex:1 1 100%}#annotation-simple-notes{padding-left:1.1rem;margin:.5rem 0}#annotation-simple-notes:empty,#annotation-simple-status:empty{display:none}#annotation-simple-type{margin-top:1.25rem}.annotation-signal,.annotation-signals{margin:.35rem 0 .5rem!important;color:var(--muted);font-size:.9rem}.annotation-signals{padding-left:1.1rem}@media(pointer:coarse){.annotation-row-action{min-height:2.75rem}}#annotation-controls dd[data-open]{padding:.75rem;background:var(--water-soft);border-radius:8px}#annotation-local-work{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}#annotation-controls button{touch-action:manipulation}#annotation-controls button:focus-visible,#annotation-controls summary:focus-visible{outline:2px solid var(--paars);outline-offset:3px}#annotation-controls button:active{opacity:.8}
+#annotation-controls h2{font-size:1.3rem;margin:0 0 1rem}#annotation-controls h3{font-size:1.1rem;line-height:1.4;margin:1.5rem 0 .5rem}#annotation-controls p{line-height:1.5;overflow-wrap:anywhere}#annotation-status{margin:.75rem 0;color:var(--muted);font-size:.9rem;min-height:1.5em}#annotation-core-summary{font-weight:600}#annotation-controls details{margin-block:1rem}#annotation-controls summary{cursor:pointer;min-height:2.75rem;display:list-item;align-content:center}#annotation-fields dt{font-weight:600;margin-top:1.25rem}#annotation-fields dd{margin:.35rem 0 1rem}#annotation-fields dd p{margin:.35rem 0}.annotation-field-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-field-actions select{font-size:1rem}#annotation-target{font-weight:600}#annotation-selection{max-height:10rem;overflow:auto;background:var(--water-soft);padding:.5rem}#annotation-selection:empty{display:none}.annotation-selection-actions{display:flex;gap:.5rem;flex-wrap:wrap}.annotation-task-actions{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.5rem;background:var(--wit);padding-block:1rem;border-top:1px solid var(--line);z-index:2}.annotation-task-actions .btn-primary{flex:1;min-height:2.75rem;white-space:normal}.annotation-task-actions .btn-secondary{flex:0 1 auto}#annotation-check li{margin-block:.5rem}#annotation-review-summary dd,#annotation-empty-fields dd{margin:.25rem 0 1rem;overflow-wrap:anywhere}#annotation-review-summary dt,#annotation-empty-fields dt{font-weight:600}.annotation-row-action{display:inline-block;padding:0 .25rem;border:0;background:none;color:var(--paars);font:inherit;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}.annotation-row-action:focus-visible{outline:2px solid var(--paars);outline-offset:2px}.annotation-open{margin:.35rem 0 .5rem!important;font-weight:600}#annotation-simple-rows dt{font-weight:600;margin-top:1.25rem;display:flex;align-items:center;justify-content:space-between;gap:.75rem;min-height:2.25rem}#annotation-simple-rows dd{margin:.35rem 0 0;overflow-wrap:anywhere}#annotation-simple-rows dd p{margin:.35rem 0}.annotation-hint{color:var(--muted)}.annotation-line.annotation-proposal{padding:.5rem;margin-inline:calc(-.5rem - 1px);border:1px dashed var(--paars);border-radius:8px}.annotation-proposal-label{display:block;color:var(--muted);font-size:.9rem;margin-bottom:.15rem}.annotation-signs{flex:none;display:flex;gap:.5rem}.annotation-line{display:flex;gap:.75rem;align-items:flex-start;justify-content:space-between;margin:.35rem 0}.annotation-line p{margin:0!important;min-width:0}.annotation-sign{flex:none;display:inline-grid;place-items:center;width:2.25rem;height:2.25rem;padding:0;border:1px solid var(--paars);border-radius:8px;background:var(--wit);color:var(--paars);font:inherit;font-weight:700;font-size:1.15rem;line-height:1;cursor:pointer}.annotation-sign[aria-pressed=true]{background:var(--paars);color:var(--wit)}.annotation-sign:focus-visible{outline:2px solid var(--paars);outline-offset:2px}@media(pointer:coarse){.annotation-sign{width:2.75rem;height:2.75rem}}#annotation-simple-rows dd>.btn-secondary{margin-top:.35rem}#annotation-finish{flex:1 1 100%}#annotation-simple-notes{padding-left:1.1rem;margin:.5rem 0}#annotation-simple-notes:empty,#annotation-simple-status:empty{display:none}#annotation-simple-type{margin-top:1.25rem}.annotation-signal,.annotation-signals{margin:.35rem 0 .5rem!important;color:var(--muted);font-size:.9rem}.annotation-signals{padding-left:1.1rem}@media(pointer:coarse){.annotation-row-action{min-height:2.75rem}}#annotation-controls dd[data-open]{padding:.75rem;background:var(--water-soft);border-radius:8px}#annotation-local-work{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}#annotation-controls button{touch-action:manipulation}#annotation-controls button:focus-visible,#annotation-controls summary:focus-visible{outline:2px solid var(--paars);outline-offset:3px}#annotation-controls button:active{opacity:.8}
 @media(max-width:800px){.annotation-task-actions{padding-bottom:max(1rem,env(safe-area-inset-bottom))}.annotation-steps button{font-size:.8rem}#annotation-controls select{font-size:1rem}.annotation-document{max-height:60dvh}}
 </style>'''
         return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>'+css,title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
@@ -417,6 +430,46 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     def binding_script(request: Request):
         require(request)
         return Response(Path(__file__).with_name('human_annotation_binding.mjs').read_text(),media_type='text/javascript',headers={'Cache-Control':'no-store'})
+
+    @app.post('/annotations/source-role')
+    async def source_role(request: Request):
+        # One exact unaccounted range from the document check becomes source text that is no
+        # statement, through the existing save. The kernel keeps every rule and the revision check.
+        actor = require(request)
+        form = await request.form()
+        document = str(form.get('document') or '')
+        overview_url = '/annotations?'+urlencode({'document':document,'overview':'true'})
+        try:
+            role, _, reason = str(form.get('reason') or '').partition(':')
+            start, end, generation = (int(str(form.get(key) or '')) for key in ('start','end','expected_generation'))
+            command_id = str(form.get('command_id') or '')
+            view = await asyncio.to_thread(domain.overview, console, actor_id=actor['account_id'], snapshot_id=document)
+            block = next((b for b in view['blocks'] if b['block_id']==str(form.get('block_id') or '')), None)
+            if block is None or not 0<=start<end<=len(block['text']) or not command_id:
+                raise ConsoleError('annotation_command_invalid')
+            from uuid import NAMESPACE_URL, uuid5
+            selection = {'status':'ready','object_type':None,'evidence_not_applicable':False,'required_links':[],
+                'disposition':{'role':role,'reason':reason},
+                'ranges':[{'block_id':block['block_id'],'start':start,'end':end,'quote':block['text'][start:end],
+                           'role':'core','required_for_meaning':False,'evidence_function':None}]}
+            await asyncio.to_thread(domain.save, console, actor_id=actor['account_id'], snapshot_id=document,
+                command_id=command_id, annotation_id=str(uuid5(NAMESPACE_URL, 'metis-source-role:'+document+':'+command_id)),
+                expected_revision=0, expected_generation=generation, extraction_hash=view['extraction_hash'],
+                normalization=view['normalization'], selection=selection,
+                expected_objects_revision=str(form.get('expected_objects_revision') or '') or None)
+        except ConsoleError as exc:
+            if exc.code in {'not_authenticated', 'researcher_role_required', 'reviewer_not_named_on_snapshot'}:
+                raise
+            error = exc
+        except ValueError:  # a malformed number in the form
+            error = ConsoleError('annotation_command_invalid')
+        else:
+            return RedirectResponse(overview_url+'#annotation-gaps', status_code=303)
+        body = '<h1>Niet vastgelegd</h1><p role="alert">'+esc(ERRORS.get(error.code,
+            'Vastleggen is niet gelukt. Je opgeslagen annotaties blijven bewaard. Controleer het documentoverzicht.'))+'</p>'
+        body += '<p><a href="'+esc(overview_url)+'">Documentoverzicht opnieuw controleren</a></p>'
+        return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>', title='Document controleren'),
+                            status_code=409, headers={'Cache-Control':'no-store'})
 
     @app.post('/annotations/finalize')
     async def finalize_document(request: Request):
@@ -446,6 +499,33 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         if attempt and attempt['state'] == 'running':
             dispatcher.notify(document, attempt)
         return RedirectResponse('/annotations/build?'+urlencode({'document':document,'attempt':receipt['attempt_id']}), status_code=303)
+
+    @app.post('/annotations/rebuild')
+    async def rebuild(request: Request):
+        # #1064: the card's 'Kennisobject opnieuw bouwen'. The existing build, then back to Review.
+        actor = require(request)
+        from src.vorming import human_annotation_build_v1 as build
+        try:
+            body = await request.json()
+            document = str(body.get('document') or '')
+            result = await asyncio.to_thread(build.rebuild, console, actor_id=actor['account_id'], snapshot_id=document,
+                annotation_id=str(body.get('annotation') or ''), command_id=str(body.get('command_id') or ''),
+                expected_generation=body.get('expected_generation'))
+        except ConsoleError as error:
+            if error.code in {'not_authenticated', 'researcher_role_required', 'reviewer_not_named_on_snapshot'}:
+                raise
+            return JSONResponse({'error':error.code,'message':ERRORS.get(error.code,
+                'Opnieuw bouwen is niet gestart. Je aanpassing is bewaard.')}, status_code=409, headers={'Cache-Control':'no-store'})
+        except (ValueError, AttributeError):
+            return JSONResponse({'error':'annotation_command_invalid','message':'Opnieuw bouwen is niet gestart. Je aanpassing is bewaard.'},
+                                status_code=400, headers={'Cache-Control':'no-store'})
+        if result['started']:
+            from src.vorming.worker_handover_v1 import native_attempt
+            attempt = native_attempt(console, document, result['attempt_id'])
+            if attempt and attempt['state'] == 'running':
+                dispatcher.notify(document, attempt)
+        return JSONResponse({'review_url':'/review?'+urlencode({'document':document,'object':result['object_id']})},
+                            headers={'Cache-Control':'no-store'})
 
     def build_status(actor, document, attempt_id):
         envelope = console._envelope(document)

@@ -22,6 +22,10 @@ import {bindRange} from '/annotations/binding.mjs';
   const storedForm = () => {try {return localStorage.getItem(formKey)==='uitgebreid';} catch(_) {return false;}};
   // The step form also opens by itself for the one object that needs it; that never outlives the object.
   let advanced=storedForm(), replacingCore=false, deriving=false;
+  // #1060 slice 4: a proposal is answered with + or −, never by ignoring it.
+  // 'asked' only says the worker tried to save while one was open.
+  let asked=false;
+  const openProposals = () => checkIsCurrent() ? check.proposals || [] : [];
   const simple = () => !advanced && !entry?.disposition;
   function setAdvanced(value) {
     advanced=value;
@@ -179,7 +183,26 @@ import {bindRange} from '/annotations/binding.mjs';
   function removeRange(anchor) {
     const index=entry.ranges.indexOf(anchor);if(index<0) return;
     if(anchor.required_for_meaning) entry.required_links.push({relationship_id:linkId(anchor),role:anchor.role,evidence_function:anchor.evidence_function,required_for_meaning:true,withdrawal_reason:null});
-    entry.ranges.splice(index,1);clearDependentFields(anchor);change();render();runCheck();
+    entry.ranges.splice(index,1);clearDependentFields(anchor);
+    // '−' means: this does not belong. For a list introduction that is the answer to Metis' proposal.
+    if(anchor.role==='list_introduction') decline(anchor);
+    change();render();runCheck();
+  }
+  function decline(span) {
+    const same=row=>['block_id','start','end'].every(key=>row[key]===span[key]);
+    entry.declined_context=(entry.declined_context || []).filter(row=>!same(row));
+    entry.declined_context.push({block_id:span.block_id,start:span.start,end:span.end,quote:span.quote});
+  }
+  async function answerProposal(proposal,add) {
+    if(finalizing || deriving) return;
+    asked=false;
+    // The selection is the statement; answering the proposal commits it first.
+    if(!hasCore() && selected) {await useAs('core');if(!hasCore()) return;}
+    if(add) {
+      try {entry=bindRange(entry,proposal,{role:'list_introduction',essential:false,repairingLink:null,evidenceFunction:null},fieldContract).entry;}
+      catch(error) {status(error.message);return;}
+    } else decline(proposal);
+    change();render();runCheck();
   }
   // Removing a piece changes the statement: what Metis derived from it no longer holds.
   // Removing the last piece removes the object itself, so no empty draft is left to block the document.
@@ -204,10 +227,11 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   function renderSimple() {
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
-    const done=entry.status==='ready' && dirty===committed,current=checkIsCurrent(),provisional=!core.length && !!selected;
+    const built=!!state.object_bindings?.[entry.annotation_id];
+    const done=entry.status==='ready' && dirty===committed && !built,current=checkIsCurrent(),provisional=!core.length && !!selected;
     el('simple-heading').textContent=!core.length && !selected ? 'Selecteer de uitspraak in de bron' : done ? 'Klaar voor documentcontrole' : '';
     el('simple-heading').hidden=!el('simple-heading').textContent;
-    const findings=current ? check.findings : [],signals=current ? check.signals || [] : [];
+    const findings=current ? check.findings : [],signals=current ? check.signals || [] : [],proposals=openProposals();
     const rows=el('simple-rows');rows.replaceChildren();
     const hint=(dd,value)=>{const p=document.createElement('p');p.textContent=value;p.className='annotation-hint';dd.append(p);};
     const sign=(parent,glyph,label,run,pressed=null)=>{const button=document.createElement('button');button.type='button';button.className='annotation-sign';button.textContent=glyph;button.setAttribute('aria-label',label);button.title=label;if(pressed!==null) button.setAttribute('aria-pressed',String(pressed));button.addEventListener('click',run);parent.append(button);return button;};
@@ -218,14 +242,21 @@ import {bindRange} from '/annotations/binding.mjs';
       for(const a of core) line(dd,a.quote,'Weghalen uit de uitspraak: '+a.quote,()=>removeStatement(a));
       if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
-      if(provisional) {const none=document.createElement('button');none.type='button';none.className='annotation-row-action';none.id='annotation-simple-none';none.textContent='Dit is geen uitspraak, maar een kop of documentgegevens';
-        none.addEventListener('click',()=>{el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));showTask(1,true);});dd.append(none);}
     },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
     if(core.length || provisional) {
       row('belongs','Hoort erbij',dd=>{
         for(const a of belongs) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
+        for(const proposal of proposals) {
+          const div=document.createElement('div'),text=document.createElement('p'),label=document.createElement('span'),quote=document.createElement('span'),signs=document.createElement('span');
+          div.className='annotation-line annotation-proposal';label.className='annotation-proposal-label';label.textContent='Voorstel van Metis';
+          quote.textContent=proposal.quote;text.append(label,quote);signs.className='annotation-signs';
+          sign(signs,'+','Toevoegen aan Hoort erbij: '+proposal.quote,()=>{answerProposal(proposal,true).catch(()=>{});}).dataset.proposal='add';
+          sign(signs,'−','Afwijzen, hoort er niet bij: '+proposal.quote,()=>{answerProposal(proposal,false).catch(()=>{});}).dataset.proposal='decline';
+          div.append(text,signs);dd.append(div);
+        }
+        if(asked && proposals.length) hint(dd,'Beantwoord eerst het voorstel: + voegt de tekst toe, − wijst het af.');
         if(armed==='context') hint(dd,'Selecteer de tekst in de bron.');
-        else if(!belongs.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
+        else if(!belongs.length && !proposals.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
       },{label:'Tekst toevoegen aan Hoort erbij',run:()=>arm('context'),pressed:armed==='context'});
       row('evidence','Onderbouwing',dd=>{
         for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
@@ -237,7 +268,7 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     el('simple-type').hidden=!core.length || !!entry.object_type || deriving;
     if(!el('simple-type').hidden) el('simple-type-select').value='';
-    const own=finding=>finding.code==='annotation_core_required' && !entry.object_type;
+    const own=finding=>finding.code==='annotation_core_required' && !entry.object_type || finding.code==='annotation_context_proposal_open';
     const lost=!selected && el('selection').textContent.startsWith('Wijs één bereik') ? el('selection').textContent : '';
     el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : lost ||
       (core.length && selected && !armed ? 'Klik op + bij de regel waar de geselecteerde tekst bij hoort.' : !core.length ? '' :
@@ -248,7 +279,8 @@ import {bindRange} from '/annotations/binding.mjs';
       const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
       button.id='annotation-simple-recheck';button.textContent='Opnieuw controleren';button.addEventListener('click',()=>{runCheck();});li.append(button);notes.append(li);
     }
-    for(const finding of findings.filter(f=>!own(f))) {
+    // Before the statement is committed, the open points are about committing it, which saving does.
+    for(const finding of core.length ? findings.filter(f=>!own(f)) : []) {
       const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
       button.textContent=finding.message+' Aanvullen';button.addEventListener('click',()=>repairFinding(finding));li.append(button);notes.append(li);
     }
@@ -287,7 +319,9 @@ import {bindRange} from '/annotations/binding.mjs';
     })().catch(()=>{});
   }
   function simpleSelection() {
-    if(!hasCore() || !armed) {renderSimple();return;}
+    // A selection alone is already the statement: check it so Metis can propose what belongs to it.
+    if(!hasCore()) {renderSimple();if(!armed) runCheck();return;}
+    if(!armed) {renderSimple();return;}
     const kind=armed;armed=null;useAs(kind).catch(()=>{});
   }
   for(const option of el('type').options) if(option.value && option.value!=='source_disposition') el('simple-type-select').add(new Option(option.textContent,option.value));
@@ -303,6 +337,7 @@ import {bindRange} from '/annotations/binding.mjs';
   el('simple-back').addEventListener('click',()=>{setAdvanced(false);if(hasCore()) runCheck();});
   function repairFinding(finding) {
     const code=finding.code,field=finding.field,semantic=semanticCode(code);
+    if(code==='annotation_context_proposal_open') {setAdvanced(false);asked=true;renderSimple();return;}
     // Open only the part that answers this point; unknown codes keep the full form.
     const part=field ? {field} : semantic ? {semantics:true} : code==='annotation_evidence_required' ? {evidence:true} : null;
     const next=code==='annotation_pending_range' && entry.pending_range?.role==='core' || coreCode(code) ? 1 : 2;
@@ -333,7 +368,7 @@ import {bindRange} from '/annotations/binding.mjs';
           if(check && !checkIsCurrent()) {check=null;status('Het opgeslagen werk is gewijzigd. Heropen de annotatie om de actuele versie te controleren.');}
         } catch(error) {status('Controle niet gelukt. '+error.message);checkAgain=false;}
       } while(checkAgain);
-    })().finally(()=>{checkRun=null;checking=false;renderSummary();updateBindingControls();});
+    })().finally(()=>{checkRun=null;checking=false;renderSummary();updateBindingControls();renderSourceHighlights();});
     return checkRun;
   }
   for(let n=1;n<=3;n++) el('step-'+n).addEventListener('click',()=>{showTask(n,true);if(n===3) runCheck();});
@@ -397,7 +432,8 @@ import {bindRange} from '/annotations/binding.mjs';
     el('more').hidden=simple();el('simple-back').hidden=!storedForm();
     if(simple()) {
       for(const id of ['selection-tools','linked','back','add','suggest']) el(id).hidden=true;
-      const complete=confirmedReady || checkIsCurrent() && !check.findings.length;
+      // An open proposal keeps the buttons usable: saving then points at the proposal to answer.
+      const complete=confirmedReady || checkIsCurrent() && !check.findings.some(f=>f.code!=='annotation_context_proposal_open');
       // A selected statement alone is a complete object: saving commits it first.
       // A saved object that lost its statement must get one back before leaving.
       const provisional=!hasCore() && !!selected,busy=finalizing || checking || deriving;
@@ -406,8 +442,35 @@ import {bindRange} from '/annotations/binding.mjs';
       el('finish').disabled=busy || (hasCore() ? !complete : !provisional && !!entry.revision && !!state.object_bindings?.[entry.annotation_id]);
       renderSimple();
     }
+    // #1064: an object that is already built has one way forward, in either form:
+    // rebuild it when something changed, otherwise go back to its review.
+    const built=state.object_bindings?.[entry.annotation_id];
+    el('rebuild').hidden=!built;
+    if(built) {
+      const complete=confirmedReady || checkIsCurrent() && !check.findings.some(f=>f.code!=='annotation_context_proposal_open');
+      el('ready').hidden=true;el('finish').hidden=true;el('new').hidden=true;
+      el('rebuild').textContent=changedSinceBuild() ? 'Kennisobject opnieuw bouwen' : 'Terug naar review';
+      el('rebuild').disabled=finalizing || checking || deriving || rebuilding || changedSinceBuild() && (!hasCore() || !complete);
+    }
     el('target').textContent=target?.kind==='field' ? (only ? '' : fieldContract.labels[target.field]+' ')+'Selecteer de woorden in de bron.' : target?.kind==='semantics' ? 'Wijs het bronbewijs voor '+(target.field==='direction'?'de richting':'de sterkte')+' aan.' : task===1 ? 'Wijs de kernuitspraak aan in de bron.' : target ? 'Wijs '+labels[role].toLowerCase()+' aan in de bron.' : 'Kies een betekenisvraag of voeg context of onderbouwing toe.';
   }
+  let rebuilding=false;
+  const changedSinceBuild = () => !!state.object_bindings?.[entry.annotation_id]?.pending || dirty!==committed || entry.status!=='ready';
+  el('rebuild').addEventListener('click',async()=>{
+    const built=state.object_bindings?.[entry.annotation_id];
+    if(!built || rebuilding) return;
+    const review='/review?'+new URLSearchParams({document:state.snapshot_id,object:built.object_id});
+    if(!changedSinceBuild()) {window.location.href=review;return;}
+    if(!await saveCard()) return;
+    rebuilding=true;updateBindingControls();status('Kennisobject wordt opnieuw gebouwd…');
+    try {
+      const response=await fetch('/annotations/rebuild',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({document:state.snapshot_id,annotation:entry.annotation_id,command_id:crypto.randomUUID(),expected_generation:state.generation})});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.message || 'Opnieuw bouwen is niet gestart. Je aanpassing is bewaard.');
+      window.location.href=data.review_url;
+    } catch(error) {status(error.message);rebuilding=false;updateBindingControls();}
+  });
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -415,6 +478,11 @@ import {bindRange} from '/annotations/binding.mjs';
         if (!ranges.has(anchor.block_id)) ranges.set(anchor.block_id,[]);
         ranges.get(anchor.block_id).push({...anchor,current:saved.annotation_id === entry.annotation_id,owner:saved.annotation_id});
       }
+    }
+    // A proposal is marked apart: exact source text that is not linked yet.
+    for (const proposal of entry ? openProposals() : []) {
+      if (!ranges.has(proposal.block_id)) ranges.set(proposal.block_id,[]);
+      ranges.get(proposal.block_id).push({...proposal,proposal:true});
     }
     for (const block of state.blocks) {
       const node = sourceElements.get(block.block_id);
@@ -433,7 +501,8 @@ import {bindRange} from '/annotations/binding.mjs';
         const covering=anchors.filter(a => a.start<=from && a.end>=to);
         if (covering.length) {
           const mark=document.createElement('mark');
-          if (covering.some(a => a.current)) mark.dataset.current='true';
+          if (covering.some(a => a.proposal)) {mark.dataset.proposal='true';mark.title='Voorstel van Metis';}
+          else if (covering.some(a => a.current)) mark.dataset.current='true';
           else if (simple()) {mark.dataset.annotation=covering[0].owner;mark.title='Deze annotatie openen';}
           mark.textContent=value;content.append(mark);
         } else content.append(document.createTextNode(value));
@@ -509,14 +578,16 @@ import {bindRange} from '/annotations/binding.mjs';
     renderSummary();updateBindingControls();
   }
   const status = text => { el('status').textContent = text; };
-  const loadedStatus = () => entry.revision ? entry.status==='ready' ? 'Klaar voor documentcontrole en opgeslagen.' : 'Concept opgeslagen.' : 'Nieuwe annotatie. Nog niets opgeslagen.';
+  // A built object is not in the document check any more: its card speaks of the object, not the phase.
+  const loadedStatus = () => state.object_bindings?.[entry.annotation_id] ? (state.object_bindings[entry.annotation_id].pending ? 'Aanpassing opgeslagen, nog niet opnieuw gebouwd.' : 'Opgebouwd kennisobject.') :
+    entry.revision ? entry.status==='ready' ? 'Klaar voor documentcontrole en opgeslagen.' : 'Concept opgeslagen.' : 'Nieuwe annotatie. Nog niets opgeslagen.';
   function load(id) {
     const saved = state.entries.find(e => e.annotation_id === id);
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;advanced=storedForm();
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;advanced=storedForm();asked=false;
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
@@ -552,7 +623,7 @@ import {bindRange} from '/annotations/binding.mjs';
     renderFields();
     renderSourceHighlights();
     const binding = state.object_bindings?.[entry.annotation_id];
-    el('current-object').hidden = !binding;
+    el('current-object').hidden = !binding || simple();
     if (binding) {
       el('current-version').textContent = 'Huidige objectversie ' + binding.object_version;
       el('current-text').textContent = binding.text;
@@ -619,6 +690,7 @@ import {bindRange} from '/annotations/binding.mjs';
       expected_objects_revision:state.objects_revision,
       selection:{status:entry.status,object_type:entry.object_type,ranges,pending_range:entry.pending_range ? reference(entry.pending_range) : null,evidence_not_applicable:entry.evidence_not_applicable,
         required_links:clone(entry.required_links),
+        ...(entry.declined_context?.length && !entry.disposition ? {declined_context:entry.declined_context.map(row=>({block_id:row.block_id,start:row.start,end:row.end,quote:row.quote ?? literal(row)}))} : {}),
         ...(entry.disposition ? {disposition:clone(entry.disposition)} : {
         field_evidence:Object.fromEntries(Object.entries(entry.field_evidence).map(([f,e]) => [f,e.span ? {...clone(e),quote:literal(e.span)} : clone(e)])),
         recommendation_semantics: entry.recommendation_semantics ? {...clone(entry.recommendation_semantics),
@@ -663,7 +735,7 @@ import {bindRange} from '/annotations/binding.mjs';
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
           committed = version; retryRequest = null;setEntryUrl(entry.annotation_id);entries();
           el('retry').hidden = true;
-          status(data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderSummary();updateBindingControls();
+          status(state.object_bindings?.[entry.annotation_id] ? 'Aanpassing opgeslagen.' : data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderSummary();updateBindingControls();
         } catch (error) {
           failed = !error.validation; el('retry').hidden = false;
           status('Opslaan mislukt. ' + error.message); throw error;
@@ -904,7 +976,12 @@ import {bindRange} from '/annotations/binding.mjs';
   // In the card, saving first commits a statement that was only selected.
   async function saveCard() {
     if(simple() && !hasCore() && selected) await useAs('core');
-    return hasCore() && await finishCurrent();
+    const saved=hasCore() && await finishCurrent();
+    if(!saved && simple() && openProposals().length) {
+      asked=true;renderSimple();
+      document.querySelector('#annotation-simple-rows [data-proposal=add]')?.focus();
+    }
+    return saved;
   }
   el('ready').addEventListener('click',async()=>{
     const saved=await saveCard();

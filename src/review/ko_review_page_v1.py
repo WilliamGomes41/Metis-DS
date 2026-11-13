@@ -179,9 +179,8 @@ def _context_evidence(obj, objects, snapshot_id, revision, shown):
             else:
                 rows.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
         rows.append('</section>')
-    rows.append('<p><a href="' + escape(owner, quote=True) + '">'
-                + ('Oorspronkelijke annotatie en bronbereiken bekijken' if annotation else
-                   'Broncontext vastleggen of aanpassen in Vorming') + '</a></p>')
+    if not annotation:  # #1064: an annotation object has one entry, 'Aanpassen in de kaart'
+        rows.append('<p><a href="' + escape(owner, quote=True) + '">Broncontext vastleggen of aanpassen in Vorming</a></p>')
     unseen = any(str(link.get('text') or '') not in shown for link in context['links'])
     return ''.join(rows), bool(unseen or context['issues'])
 
@@ -231,8 +230,16 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
         fragments=inputs.fragments, stage='second_review' if second else None)
     published = console.snapshot_is_published(sid)
+    # #1064: a saved correction is rebuilt from the card; until then this version cannot be approved.
+    rebuilding = None
+    if annotation and not published:
+        from src.vorming.human_annotation_build_v1 import correction_state
+        rebuilding = correction_state(console, sid, obj['object_id'])
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
-                       and descriptor.can_confirm and not conflict)
+                       and descriptor.can_confirm and not conflict and not rebuilding)
+    lineage = (obj.get('metadata') or {}).get('revision_lineage') or {}
+    history = (' <span aria-hidden="true">·</span> <span data-ko-rebuilt>opnieuw gebouwd na correctie van versie '
+               + escape(str(lineage['previous_object_version'])) + '</span>') if annotation and lineage.get('previous_object_version') else ''
     repair = '/source-selection?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': 'repair',
                                               'review_revision': inputs.revision})
     if annotation:
@@ -243,7 +250,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         placement = '<span data-current-parent="' + escape(descriptor.parent_id, quote=True) + '">Actuele kop: <strong>' + escape(heading_visible_text(parent)) + '</strong></span>'
     else:
         placement = 'Geen bovenliggende kop vastgelegd.' if not descriptor.parent_id else 'De actuele kop kon niet worden bevestigd.'
-    place = placement + ' <span aria-hidden="true">·</span> <a href="' + escape(repair, quote=True) + '">Andere plek kiezen</a>'
+    place = placement if annotation else placement + ' <span aria-hidden="true">·</span> <a href="' + escape(repair, quote=True) + '">Andere plek kiezen</a>'
     fields = {'snapshot_id': sid, 'object_id': obj['object_id'], 'snapshot_revision': inputs.revision,
               'interaction_id': new_review_interaction_id(), 'return_task': task,
               'review_ui': 'compact-v1'}
@@ -272,6 +279,11 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         if conflict:
             reopen = '/review?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': task})
             notice += '<p><a href="' + escape(reopen, quote=True) + '">Passage opnieuw beoordelen</a></p>'
+    elif rebuilding:
+        notice = ('<p class="ko-notice" role="status" data-ko-rebuilding="' + rebuilding + '">'
+                  + ('De nieuwe versie wordt opgebouwd. Deze pagina ververst vanzelf.' if rebuilding == 'building' else
+                     'Deze versie is aangepast. Bouw het kennisobject opnieuw in de kaart om de nieuwe versie te beoordelen.')
+                  + '</p>' + ('<script>setTimeout(()=>location.reload(),4000)</script>' if rebuilding == 'building' else ''))
     elif not can_approve:
         message = ('De passage kan nu niet worden goedgekeurd. Bekijk de bron of kies een gerichte correctie.'
                    if inputs.source_available else 'De oorspronkelijke bron kon niet worden bevestigd. Goedkeuren is geblokkeerd.')
@@ -298,7 +310,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         review = '/review?' + urlencode({'document': sid, 'object': obj['object_id']})
         body = ('<div data-ko-object-view><header class="ko-page-heading"><h1>Kennisobject</h1>'
             + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task='inventory')
-            + '<p class="ko-progress">Huidige versie ' + escape(descriptor.object_version)
+            + '<p class="ko-progress">Huidige versie ' + escape(descriptor.object_version) + history
             + ' <span aria-hidden="true">·</span> <strong data-ko-state>'
             + escape(state or 'Broncontext') + '</strong></p></header>'
             + '<div class="ko-review-layout">' + _source_panel(console, inputs, obj, task='inventory')
@@ -312,7 +324,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + context_html + _additional_relations(descriptor) + _source_bound_fields_html(obj)
             + '</details></section></div><div class="ko-result-actions">'
             + '<a href="' + escape(inventory, quote=True) + '">Alle passages en beoordelingen bekijken</a>'
-            + ('<a href="' + escape(repair, quote=True) + '">Bronselectie corrigeren</a>'
+            + ('<a href="' + escape(repair, quote=True) + '">Aanpassen in de kaart</a>'
                if not published and annotation else '')
             + ('<a href="' + escape(review, quote=True) + '">Dit kennisobject beoordelen</a>'
                if not published and route and route.get('actionable') else '') + '</div></div>')
@@ -326,8 +338,9 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     body = ('<header class="ko-page-heading"><h1>' + heading + '</h1>'
             + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task=task or canonical_task, overview_url=overview_url)
             + '<p class="ko-progress">Te beoordelen passage <span aria-hidden="true">·</span> '
-            + ('Versie ' + escape(descriptor.object_version) + ' <span aria-hidden="true">·</span> ' if annotation else '')
-            + '<strong data-ko-state>' + escape(state or 'Broncontext') + '</strong>'
+            + ('Versie ' + escape(descriptor.object_version) + history + ' <span aria-hidden="true">·</span> ' if annotation else '')
+            + '<strong data-ko-state>' + escape({'saved': 'Correctie opgeslagen, nog niet opnieuw gebouwd',
+                                                'building': 'Nieuwe versie wordt opgebouwd'}.get(rebuilding) or state or 'Broncontext') + '</strong>'
             + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '')
             + (' <span data-required-second-review>Er is een onafhankelijke tweede beoordeling nodig.</span>' if required_second and not second else '') + '</p></header>'
             + notice + '<div class="ko-review-layout" data-document-assessment="'
@@ -351,12 +364,12 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + _question('applicable', 'Is dit toepasbaar?', draft.get('applicable'))
             + _question('complete', 'Is dit compleet?', draft.get('complete'), subline=_completeness_signals(obj))
             + _question('placed_correctly', 'Staat dit op de juiste plek?', draft.get('placed_correctly'), subline=place)
-            + '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">'
-            + ('Bronselectie corrigeren' if annotation else 'Open de gerichte correctie') + '</a>.</p>'
-            '<div class="ko-actions"><button class="ko-primary" type="submit" name="review_action" value="approve"'
+            + ('' if annotation else '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">'
+               'Open de gerichte correctie</a>.</p>')
+            + '<div class="ko-actions"><button class="ko-primary" type="submit" name="review_action" value="approve"'
             + ('' if can_approve else ' disabled') + '>Goedkeuren en opslaan</button>'
             '<a href="' + escape(repair, quote=True) + '">'
-            + ('Bronselectie corrigeren' if annotation else 'Correctie nodig') + '</a>'
+            + ('Aanpassen in de kaart' if annotation else 'Correctie nodig') + '</a>'
             '<button class="ko-text-button" type="submit" name="review_action" value="later" formnovalidate>Later beoordelen</button></div>'
             + rejection + '</form></section></div>'
             + _assessment_script())

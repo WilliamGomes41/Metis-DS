@@ -111,6 +111,46 @@ def overview(console, *, actor_id, snapshot_id):
                 and (not active or active['state'] != 'running')}
 
 
+def correction_state(console, snapshot_id, object_id):
+    """Read-only: is this built object waiting for a rebuild of a saved correction?
+
+    ``None`` when the current object matches its annotation; ``'saved'`` when a
+    correction is stored but no build runs; ``'building'`` while a build runs.
+    Display only: approval of a pending object is refused by the database guard.
+    """
+    with console.workflow_document_store._connect() as con:
+        con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+        if con.execute("SELECT to_regprocedure('workflow.annotation_pending_objects(text)') AS name").fetchone()['name'] is None:
+            return None
+        if not con.execute('SELECT 1 FROM workflow.annotation_pending_objects(%s) WHERE object_id=%s',
+                           (snapshot_id, object_id)).fetchone():
+            return None
+        active = con.execute("SELECT a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
+            "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
+            "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
+    return 'building' if active and active['state'] == 'running' else 'saved'
+
+
+def rebuild(console, *, actor_id, snapshot_id, annotation_id, command_id, expected_generation):
+    """Start the existing build for a corrected, already built object.
+
+    The worker's card is the precondition: the overview this reads must be at
+    the generation the card saved. Everything else is the existing finalize.
+    """
+    view = overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
+    binding = view['object_bindings'].get(annotation_id)
+    if binding is None or type(expected_generation) is not int:
+        annotations.fail('annotation_command_invalid')
+    if view['generation'] != expected_generation:
+        annotations.fail('annotation_overview_stale')
+    if view['current_build'] and view['current_build']['state'] == 'running':
+        return {'object_id': binding['object_id'], 'attempt_id': view['current_build']['attempt_id'], 'started': False}
+    receipt = finalize(console, actor_id=actor_id, snapshot_id=snapshot_id, command_id=command_id,
+                       overview_hash=view['overview_hash'], expected_generation=view['generation'],
+                       expected_revision=view['objects_revision'])
+    return {'object_id': binding['object_id'], 'attempt_id': receipt['attempt_id'], 'started': True}
+
+
 def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
              expected_generation, expected_revision):
     if (not isinstance(command_id, str) or not 1 <= len(command_id) <= 128
