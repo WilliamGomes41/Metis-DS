@@ -79,12 +79,30 @@ class DisplayedReviewDescriptor:
         return not self.issues
 
 
+def reviewer_semantics_choice(focal, choice):
+    """#1067: the reviewer's direction/strength pair for this object, if the card offered one.
+
+    ``None`` when nothing applies (not from annotation, or nothing chosen); ``()`` for half a choice,
+    which is never completed silently with the proposal.
+    """
+    if choice is None or not (focal.get('metadata') or {}).get('human_annotation'):
+        return None
+    pair = tuple(str(value or '').strip() for value in choice)
+    if not any(pair):
+        return None
+    return pair if all(pair) else ()
+
+
 def _recommendation_values(focal, object_type, choice=None):
     if object_type != 'recommendation':
         return '', '', [], ''
+    # #1067: the review card offers the choice only for knowledge objects from annotation.
+    choice = reviewer_semantics_choice(focal, choice)
+    if choice == ():
+        return '', '', ['recommendation_semantics_required'], ''
     if choice is not None:
-        # #1067: the reviewer's own choice, checked against the source exactly as approval checks it.
-        direction, strength = (str(value or '').strip() for value in choice)
+        # The reviewer's own choice, checked against the source exactly as approval checks it.
+        direction, strength = choice
         try:
             confirmed_recommendation_semantics_from_review(focal, direction=direction, strength_choice=strength)
         except ValueError as error:

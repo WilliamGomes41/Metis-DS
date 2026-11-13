@@ -106,6 +106,12 @@ Explicit non-goals: richting en sterkte wijzigen in de tweede review (die
   vaststellen. De keuze wordt in `review_assessment_v1` en in beide
   goedkeurroutes (`ko_review_page_v1` en `review_command_v1`) gecontroleerd met
   dezelfde regel als goedkeuren. Geen keuze in de tweede review.
+- De keuze staat alleen op de reviewkaart van kennisobjecten uit annotatie;
+  andere objecten houden hun correctieroute en hun blokkade zonder voorstel.
+- Een keuze telt alleen als paar (`review_assessment_v1.reviewer_semantics_choice`).
+  Beide keuzes zijn verplicht in het formulier; een halve keuze wordt op de
+  reviewkaart geweigerd met ‘Kies richting en sterkte van deze aanbeveling
+  voordat je goedkeurt.’ en nooit stil aangevuld met het voorstel.
 - Bewijs: `tests/test_reviewer_recommendation_semantics_1067.py` (black-box op
   native PostgreSQL: gereed zonder richting, gebouwd, toegelaten met signaal,
   ‘sterk’ geweigerd met de bestaande uitleg zonder wijziging, ‘afraden · zwak’

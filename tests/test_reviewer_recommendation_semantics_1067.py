@@ -74,6 +74,7 @@ def test_recommendation_without_direction_and_strength_reaches_review_and_the_re
         client.post('/login', data={'username': 'richting', 'password': 'human-semantics-secret'})
         page = client.get('/review', params={'document': sid, 'object': obj['object_id']}).text
         assert 'data-ko-semantics-choice' in page and 'Metis kon dit niet vaststellen.' in page
+        assert '<select name="recommendation_direction" required>' in page
         assert re.search(r'<button class="ko-primary" type="submit" name="review_action" value="approve">', page)
         assert 'Richting en sterkte van deze aanbeveling' not in page  # no extra signal line on the card
         form = page[page.index('<form method="post" action="/review"'):]
@@ -81,8 +82,14 @@ def test_recommendation_without_direction_and_strength_reaches_review_and_the_re
         data = dict(re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)"', form))
         data.update(applicable='yes', complete='yes', placed_correctly='yes', evidence_not_applicable='yes',
                     review_action='approve')
-        # A choice the source does not carry is refused, and nothing changes.
+        # Half a choice is never completed silently, and nothing changes.
         before = candidate(console, sid)
+        half = client.post('/review', data={**data, 'recommendation_direction': 'against',
+                           'recommendation_strength_level': ''}, follow_redirects=False)
+        assert half.status_code == 400
+        assert 'Kies richting en sterkte van deze aanbeveling voordat je goedkeurt.' in half.text
+        assert candidate(console, sid) == before
+        # A choice the source does not carry is refused, and nothing changes.
         refused = client.post('/review', data={**data, 'recommendation_direction': 'against',
                               'recommendation_strength_level': 'strong'}, follow_redirects=False)
         assert refused.status_code == 400

@@ -252,8 +252,9 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         from src.vorming.human_annotation_build_v1 import correction_state
         rebuilding = correction_state(console, sid, obj['object_id'])
     # #1067: what the reviewer's own direction/strength choice resolves does not disable approval.
+    # Only for knowledge objects from annotation; other routes keep their correction route.
     confirmable = descriptor.can_confirm or (
-        descriptor.object_type == 'recommendation' and not descriptor.legacy_recommendation_strength
+        annotation and descriptor.object_type == 'recommendation' and not descriptor.legacy_recommendation_strength
         and not second and set(descriptor.issues) <= set(descriptor.semantic_issues))
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
                        and confirmable and not conflict and not rebuilding)
@@ -278,7 +279,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         fields['review_stage'] = 'second_review'
     hidden = ''.join(f'<input type="hidden" name="{key}" value="{escape(str(value), quote=True)}">' for key, value in fields.items())
     semantics = ''
-    choose_semantics = (descriptor.object_type == 'recommendation' and not descriptor.legacy_recommendation_strength
+    choose_semantics = (annotation and descriptor.object_type == 'recommendation' and not descriptor.legacy_recommendation_strength
                         and not reading and not second and not published)
     if choose_semantics:
         # #1067: Metis proposes, the reviewer confirms or corrects in the existing line.
@@ -289,9 +290,9 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
                 '<option value="' + value + '"' + (' selected' if value == picked else '') + '>' + label + '</option>'
                 for value, label in choices)
         semantics = ('<p class="ko-interpretation ko-semantics-choice" data-ko-semantics-choice>'
-            '<label>Richting <select name="recommendation_direction" >'
+            '<label>Richting <select name="recommendation_direction" required>'
             + options((('for', 'Aanraden'), ('against', 'Afraden')), picked_direction) + '</select></label> '
-            '<label>Sterkte <select name="recommendation_strength_level" >'
+            '<label>Sterkte <select name="recommendation_strength_level" required>'
             + options((('strong', 'Sterk'), ('weak', 'Zwak'), ('not_stated', 'Niet vermeld')), picked_strength)
             + '</select></label>'
             + ('' if descriptor.direction else ' <span class="ko-semantics-note">Metis kon dit niet vaststellen.</span>')
@@ -449,6 +450,7 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
         'review_assessment_answer_invalid': 'Kies bij iedere vraag Ja of Aanpassen.',
         'review_assessment_requires_three_yes': 'Voor goedkeuren moeten de drie antwoorden Ja zijn. Kies anders Correctie nodig.',
         'review_assessment_unresolved_proposal': 'De getoonde interpretatie kan nog niet volledig worden bevestigd. Kies Correctie nodig.',
+        'recommendation_semantics_required': 'Kies richting en sterkte van deze aanbeveling voordat je goedkeurt.',
     }
     code = SNAPSHOT_OBJECT_WRITE_CONFLICT if conflict else getattr(error, 'code', str(error))
     message = messages.get(code) or ERROR_COPY.get(code) or 'Deze beoordeling is niet opgeslagen. Controleer de passage en probeer opnieuw.'
@@ -467,14 +469,12 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
     from src.review.review_interaction_v1 import build_review_interaction_evidence, REVIEW_INTERACTION_PREFIX
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     from src.review.ko_receipt_ui_v1 import receipt_location
-    # #1067: an empty choice means the reviewer kept Metis' proposal (or the page offered none).
-    if semantics_choice is not None and not any(str(value or '').strip() for value in semantics_choice):
-        semantics_choice = None
+    # #1067: the descriptor decides whether the choice applies; the second review confirms the first's version.
     if second:
-        semantics_choice = None  # the second review confirms the first review's version
+        semantics_choice = None
     draft = {**values, 'comment': comment, 'evidence_not_applicable': evidence_not_applicable,
              **(dict(zip(('recommendation_direction', 'recommendation_strength_level'), semantics_choice))
-                if semantics_choice else {})}
+                if semantics_choice and any(semantics_choice) else {})}
     try:
         if not revision.strip():
             raise ConsoleError('snapshot_revision_required')
@@ -536,7 +536,7 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
             console.review_object(actor_id=account['account_id'], snapshot_id=snapshot_id,
                 object_id=object_id, decision=action, comment=comment,
                 **({'recommendation_direction': semantics_choice[0], 'recommendation_strength_level': semantics_choice[1]}
-                   if semantics_choice and action == 'approve' else {}),
+                   if semantics_choice and any(semantics_choice) and action == 'approve' else {}),
                 suitability='ja' if action == 'approve' else 'geen_kenniseenheid',
                 eindoordeel='goedkeuren' if action == 'approve' else 'afwijzen',
                 expected_revision=revision, _compact_result=True, _interaction_id=interaction_id,
