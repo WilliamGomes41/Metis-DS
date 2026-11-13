@@ -19,19 +19,16 @@ import {bindRange} from '/annotations/binding.mjs';
   // source. The step form remains as the advanced form until it is retired.
   // The choice of form is a per-browser convenience; the page works without storage.
   const formKey='metis-annotation-form';
-  const storedForm = () => {try {return localStorage.getItem(formKey)==='uitgebreid';} catch(_) {return false;}};
+  // #1067: the step form is retired; a browser that remembered it gets the card.
+  try {localStorage.removeItem(formKey);} catch(_) { /* nothing remembered */ }
+  const storedForm = () => false;
   // The step form also opens by itself for the one object that needs it; that never outlives the object.
   let advanced=storedForm(), replacingCore=false, deriving=false;
   // #1060 slice 4: a proposal is answered with + or −, never by ignoring it.
   // 'asked' only says the worker tried to save while one was open.
   let asked=false;
   const openProposals = () => checkIsCurrent() ? check.proposals || [] : [];
-  const simple = () => !advanced && !entry?.disposition;
-  function setAdvanced(value) {
-    advanced=value;
-    try {if(value) localStorage.setItem(formKey,'uitgebreid');else localStorage.removeItem(formKey);} catch(_) { /* stays for this page only */ }
-    showTask(task);
-  }
+  const simple = () => true;
   // Signals a worker can act on, shown in the row they are about.
   const leaning=new Set(['supported_object_missing','condition_target_missing','exception_target_missing','annotation_relation_target_missing','no_independent_claim']);
   const broken=new Set(['incomplete_sentence','recommendation_core_incomplete']);
@@ -216,7 +213,7 @@ import {bindRange} from '/annotations/binding.mjs';
   async function discardObject() {
     armed=null;queued=null;
     try {
-      await flush();
+      // Withdraw what is stored as it now is; a refused edit (such as a duplicate) is not sent first.
       if(entry.revision) {entry.status='withdrawn';dirty+=1;await flush();}
       load('');entries();status('Weggehaald. Selecteer de volgende uitspraak.');
     } catch(_) { /* The save status says what failed; the work stays visible. */ }
@@ -237,6 +234,14 @@ import {bindRange} from '/annotations/binding.mjs';
     const sign=(parent,glyph,label,run,pressed=null)=>{const button=document.createElement('button');button.type='button';button.className='annotation-sign';button.textContent=glyph;button.setAttribute('aria-label',label);button.title=label;if(pressed!==null) button.setAttribute('aria-pressed',String(pressed));button.addEventListener('click',run);parent.append(button);return button;};
     const line=(dd,value,label,remove)=>{const div=document.createElement('div'),p=document.createElement('p');div.className='annotation-line';p.textContent=value;div.append(p);sign(div,'−',label,remove);dd.append(div);};
     const row=(key,label,build,add=null)=>{const dt=document.createElement('dt'),dd=document.createElement('dd'),name=document.createElement('span');name.textContent=label;dt.append(name);dt.dataset.row=key;dd.dataset.row=key;if(add) sign(dt,'+',add.label,add.run,add.pressed);build(dd);rows.append(dt,dd);};
+    // #1067: source text that is no statement (recorded in the document check) shows what it is, nothing to fill in.
+    if(entry.disposition) {
+      const reasons=Object.values(fieldContract.source_roles).flat();
+      const kind=reasons.find(r=>r.value===entry.disposition.reason)?.label || 'Geen uitspraak';
+      row('core','Geen uitspraak: '+kind.toLowerCase(),dd=>{for(const a of core) line(dd,a.quote,'Weghalen: '+a.quote,()=>{discardObject().catch(()=>{});});});
+      el('simple-type').hidden=true;el('simple-status').textContent='';el('simple-notes').replaceChildren();
+      return;
+    }
     if(core.length || provisional) row('core','Uitspraak',dd=>{
       if(provisional) line(dd,selected.quote,'Selectie weghalen',()=>removeStatement());
       for(const a of core) line(dd,a.quote,'Weghalen uit de uitspraak: '+a.quote,()=>removeStatement(a));
@@ -281,8 +286,7 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     // Before the statement is committed, the open points are about committing it, which saving does.
     for(const finding of core.length ? findings.filter(f=>!own(f)) : []) {
-      const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.className='btn-secondary';
-      button.textContent=finding.message+' Aanvullen';button.addEventListener('click',()=>repairFinding(finding));li.append(button);notes.append(li);
+      const li=document.createElement('li');li.textContent=finding.message;notes.append(li);
     }
   }
   async function derive() {
@@ -334,19 +338,13 @@ import {bindRange} from '/annotations/binding.mjs';
     if(!mark || !simple() || !window.getSelection().isCollapsed) return;
     switchEntry(mark.dataset.annotation).catch(()=>{});
   });
-  el('simple-back').addEventListener('click',()=>{setAdvanced(false);if(hasCore()) runCheck();});
+  // #1067: every point is answered in the card itself; nothing opens another form.
   function repairFinding(finding) {
-    const code=finding.code,field=finding.field,semantic=semanticCode(code);
-    if(code==='annotation_context_proposal_open') {setAdvanced(false);asked=true;renderSimple();return;}
-    // Open only the part that answers this point; unknown codes keep the full form.
-    const part=field ? {field} : semantic ? {semantics:true} : code==='annotation_evidence_required' ? {evidence:true} : null;
-    const next=code==='annotation_pending_range' && entry.pending_range?.role==='core' || coreCode(code) ? 1 : 2;
-    if(simple()) advanced=true;
-    showTask(next,true,next===2 ? part : null);
-    if(next===1 && hasCore() && !entry.object_type) el('type').focus();
-    if(field) {el('field').value=field;chooseTarget({kind:'field',field});}
-    if(semantic) {el('recommendation').open=true;el('direction').focus();}
-    if(code==='annotation_evidence_required') {el('context-tools').open=true;chooseTarget({kind:'range',role:'evidence'});}
+    const code=finding.code;
+    if(code==='annotation_context_proposal_open') {asked=true;renderSimple();return;}
+    if(code==='annotation_core_required' && hasCore() && !entry.object_type) {el('simple-type-select').focus();return;}
+    if(code==='annotation_required_relationship_missing') {el('required-links').scrollIntoView({block:'nearest'});return;}
+    status(finding.message);
   }
   // One check at a time. An edit made while a check is running invalidates that
   // answer, so the same run checks again instead of leaving the card unchecked.
@@ -587,7 +585,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.required_links ||= [];repairingLink=null;
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;advanced=storedForm();asked=false;
+    check=null;target=null;confirmation=null;el('confirm').hidden=true;openPoints=[];replacingCore=false;deriving=false;armed=null;queued=null;asked=false;
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     clearChoice();el('binding-note').textContent='';
@@ -638,10 +636,8 @@ import {bindRange} from '/annotations/binding.mjs';
       const p=document.createElement('p');p.textContent='Essentieel verband ontbreekt: '+labels[link.role];
       const repair=document.createElement('button');repair.type='button';repair.className='btn-secondary';repair.textContent='Dit verband opnieuw aanwijzen';
       repair.addEventListener('click',() => {
-        advanced=true;showTask(2,true);target={kind:'range',role:link.role};repairingLink=link.relationship_id;el('role').value=link.role;el('essential').checked=true;
-        el('function').value=link.evidence_function || 'supported_by';
-        if(selected) captureSelection(selected);
-        renderFields();status(selected ? 'Voeg de aangewezen tekst toe aan dit essentiële verband.' : 'Wijs de brontekst voor dit essentiële verband aan.');
+        repairingLink=link.relationship_id;el('function').value=link.evidence_function || 'supported_by';
+        status('Selecteer in de bron de tekst voor dit verband.');arm(link.role==='evidence' ? 'evidence' : 'context');
       });
       const label=document.createElement('label');label.textContent='Waarom is dit verband niet langer noodzakelijk?';
       const reason=document.createElement('input');reason.type='text';reason.maxLength=1000;label.append(reason);
@@ -692,7 +688,8 @@ import {bindRange} from '/annotations/binding.mjs';
         required_links:clone(entry.required_links),
         ...(entry.declined_context?.length && !entry.disposition ? {declined_context:entry.declined_context.map(row=>({block_id:row.block_id,start:row.start,end:row.end,quote:row.quote ?? literal(row)}))} : {}),
         ...(entry.disposition ? {disposition:clone(entry.disposition)} : {
-        field_evidence:Object.fromEntries(Object.entries(entry.field_evidence).map(([f,e]) => [f,e.span ? {...clone(e),quote:literal(e.span)} : clone(e)])),
+        field_evidence:Object.fromEntries(Object.entries(entry.field_evidence).map(([f,e]) =>
+          [f,f==='type_evidence_spans' || f===fieldContract.type_core_fields[entry.object_type] ? {core:true} : e.span ? {...clone(e),quote:literal(e.span)} : clone(e)])),
         recommendation_semantics: entry.recommendation_semantics ? {...clone(entry.recommendation_semantics),
           direction_evidence:entry.recommendation_semantics.direction_evidence ? {span:entry.recommendation_semantics.direction_evidence,quote:literal(entry.recommendation_semantics.direction_evidence)} : null,
           strength_evidence:entry.recommendation_semantics.strength_evidence ? {span:entry.recommendation_semantics.strength_evidence,quote:literal(entry.recommendation_semantics.strength_evidence)} : null} : null})}};
@@ -720,8 +717,11 @@ import {bindRange} from '/annotations/binding.mjs';
               el('save-conflict').hidden=false;el('local-work').textContent=body.selection.ranges.map(a=>labels[a.role]+': '+a.quote).join('\n\n');
               el('server-work').href='/annotations?'+new URLSearchParams({document:state.snapshot_id,annotation:entry.annotation_id});
             }
-            if (response.status === 422) { retryRequest = null; }
-            const error = new Error(data.message || 'Opslaan mislukt.'); error.validation = response.status === 422; throw error;
+            // A duplicate statement is an answer about the input, like a validation error: change the
+            // selection (or remove it with −) instead of retrying the same request.
+            const answer = response.status === 422 || data.error === 'annotation_core_duplicate';
+            if (answer) { retryRequest = null; }
+            const error = new Error(data.message || 'Opslaan mislukt.'); error.validation = answer; throw error;
           }
           entry.revision = data.revision; state.generation = data.generation;
           if (data.objects_revision) state.objects_revision = data.objects_revision;

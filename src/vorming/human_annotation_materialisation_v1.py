@@ -5,7 +5,7 @@ from copy import deepcopy
 from src.vorming.document_spec_v1 import document_spec
 from src.vorming.human_annotation_preview_v1 import inspect_document
 from src.vorming.human_annotation_contract_v1 import MODE
-from src.vorming.recommendation_semantics_v1 import complete_annotation_semantics
+from src.vorming.human_annotation_preview_v1 import usable_annotation_semantics
 from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates, resolve_source_selection
 from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_HUMAN, _reconstructed_blocks, _coverage_remainders
 
@@ -34,8 +34,9 @@ def build_objects(seal, entries, *, fragments):
             'annotation_ranges': deepcopy(payload['ranges']),
             'evidence_not_applicable': payload['evidence_not_applicable'],
             'required_links': deepcopy(payload.get('required_links') or []),
+            # #1067: only a proposal that binds to the source is built; otherwise the reviewer chooses.
             'recommendation_semantics': deepcopy(payload.get('recommendation_semantics'))
-                if complete_annotation_semantics(payload.get('recommendation_semantics')) else None,
+                if usable_annotation_semantics(payload, fragments=fragments) is not None else None,
             'human_annotation': {key: entry[key] for key in ('annotation_id', 'revision', 'payload_hash')}})
         for anchor in payload['ranges']:
             if anchor['role'] == 'core':
