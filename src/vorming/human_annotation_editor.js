@@ -241,8 +241,6 @@ import {bindRange} from '/annotations/binding.mjs';
       for(const a of core) line(dd,a.quote,'Weghalen uit de uitspraak: '+a.quote,()=>removeStatement(a));
       if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
-      if(provisional) {const none=document.createElement('button');none.type='button';none.className='annotation-row-action';none.id='annotation-simple-none';none.textContent='Dit is geen uitspraak, maar een kop of documentgegevens';
-        none.addEventListener('click',()=>{el('type').value='source_disposition';el('type').dispatchEvent(new Event('change'));showTask(1,true);});dd.append(none);}
     },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
     if(core.length || provisional) {
       row('belongs','Hoort erbij',dd=>{

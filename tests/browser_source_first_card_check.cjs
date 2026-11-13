@@ -104,6 +104,13 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.proposal),'add');
  assert.equal((await current()).status,'draft');
  await page.screenshot({path:output+'/card-proposal-open.png',fullPage:true});
+ // The worker adds text alongside Metis: '+' on the row adds any number of passages, '−' removes one.
+ // Neither answers the proposal.
+ for(const text of [support,item]) {await plus('belongs').click();await tasks.selectText(page,block(text),text);
+  await row('belongs').locator('.annotation-line:not(.annotation-proposal)').getByText(text,{exact:true}).waitFor();}
+ await minus('belongs',item).click();
+ await page.waitForFunction(item=>![...document.querySelectorAll('#annotation-simple-rows dd[data-row=belongs] .annotation-line:not(.annotation-proposal) p')].some(p=>p.textContent===item),item);
+ await row('belongs').locator('.annotation-proposal').getByText(intro,{exact:true}).waitFor();
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.setViewportSize({width:1440,height:1000});
@@ -113,7 +120,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-ready').click();
  await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
  entry=(await read()).entries.find(e=>e.ranges.some(a=>a.quote===alone));
- assert.equal(entry.status,'ready');assert.deepEqual(entry.ranges.map(a=>a.role),['core']);
+ assert.equal(entry.status,'ready');assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote]),[['core',alone],['context',support]]);
  assert.deepEqual(entry.declined_context.map(r=>r.quote),[intro]);
  // Metis unavailable: the only question is the type. Evidence is added with '+' and removed with '−'.
  await tasks.selectText(page,block(failing),failing.slice(0,13));
@@ -160,12 +167,22 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // Ending source selection saves and opens the document check, where the next phase starts.
  await page.locator('#annotation-finish:enabled').click();
  await page.waitForURL(u=>u.searchParams.get('overview')==='true');
+ // Text that is no statement is accounted for in the document check, where it shows up, not in the card.
+ const gap=page.locator('.annotation-gap').filter({has:page.locator('q',{hasText:/^Smetten$/})});
+ await gap.locator('select').selectOption('structure:document_structure');
+ await Promise.all([page.waitForURL(u=>u.searchParams.get('overview')==='true' && u.hash==='#annotation-gaps'),gap.getByRole('button',{name:'Vastleggen'}).click()]);
+ assert.equal(await page.locator('.annotation-gap q',{hasText:/^Smetten$/}).count(),0);
+ assert((await read()).entries.some(e=>e.status==='ready' && e.disposition?.reason==='document_structure' && e.ranges[0].quote==='Smetten'));
+ await page.screenshot({path:output+'/document-check-gaps.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.setViewportSize({width:1440,height:1000});
+ // The card no longer offers that route: a selection is the statement.
  await page.getByRole('link',{name:'Verder aanwijzen'}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
- // Source text that is no statement opens the step form for that one object only.
- await tasks.selectText(page,page.locator('[data-source-block]').filter({hasText:'Smetten'}).first(),'Smetten');
- await page.locator('#annotation-simple-none').click();
- await page.locator('#annotation-source-reason').waitFor();
- assert.equal(await page.locator('#annotation-steps').isVisible(),true);
+ await tasks.selectText(page,block(support),support);
+ await row('core').getByText(support,{exact:true}).waitFor();
+ assert.equal(await page.locator('#annotation-simple').getByText(/geen uitspraak/i).count(),0);
+ assert.equal(await page.locator('#annotation-steps').isVisible(),false);
  assert.equal(await page.evaluate(()=>localStorage.getItem('metis-annotation-form')),null);
  assert.deepEqual(errors,[]);
  fs.writeFileSync(output+'/source-first-card-result.json',JSON.stringify({threeRows:true,derivedInBackground:true,typeQuestionOnlyOnFailure:true,errors}));

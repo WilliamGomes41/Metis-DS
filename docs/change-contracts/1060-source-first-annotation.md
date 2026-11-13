@@ -273,3 +273,27 @@ Uitvoering slice 4 (13 november 2026):
   PostgreSQL) en `tests/browser_source_first_card_check.cjs` (voorstel,
   markering in de bron, `+`, `−`, opslaan bij een open voorstel, één kolom met
   tekens, geen horizontale scroll op 390 px).
+
+## Besluit William, 13 november 2026: ‘geen uitspraak’ uit de kaart, naar de documentcontrole
+
+GO projectlead: “Haal hem uit de kaart, neem het mee vóór de PR.” De link ‘Dit is
+geen uitspraak, maar een kop of documentgegevens’ stond onder elke nieuwe
+selectie in de kaart. De kaart is voor uitspraken; brontekst die geen uitspraak
+is, komt de medewerker tegen in de documentcontrole onder ‘Nog niet verantwoord
+bronmateriaal’. Daar staat nu per stuk tekst de keuze wat het is (kop of
+documentstructuur, navigatie, documentgegevens, kop- of voettekst) met
+‘Vastleggen’, en een link om het toch als uitspraak aan te wijzen.
+
+- Nieuwe formulierroute `POST /annotations/source-role`; zij bouwt één
+  bestaande opslagopdracht (bronstuk met `disposition`, status gereed) voor het
+  exacte bereik en gebruikt dezelfde kernregels, versiecontrole en
+  command receipts. Een verouderde pagina wordt geweigerd.
+- Het stappenformulier met dezelfde keuze blijft bestaan tot slice 5.
+- Het label ‘Documentstructuur’ heet nu ‘Kop of documentstructuur’.
+- Bewijs: routetest in `tests/test_context_proposal_1060.py` (opslaan, ongeldige
+  keuze, herhaalde opdracht, verouderde pagina) en de browserproef van de kaart
+  (keuze in de documentcontrole, geen link meer in de kaart, 390 px).
+
+Ook toegevoegd aan de browserproef: bij een open voorstel voegt de medewerker
+zelf meerdere passages toe aan ‘Hoort erbij’ en haalt er één weg; het voorstel
+blijft open tot het beantwoord is.

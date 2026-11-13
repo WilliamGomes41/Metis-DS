@@ -152,3 +152,34 @@ def test_a_selection_not_yet_committed_already_gets_its_proposal(smetten):
     annotation.save(env['console'], actor_id=env['actor'], **request)
     [proposal] = check(request['annotation_id'])['proposals']
     assert proposal['quote'] == intro['quote']
+
+
+def test_text_that_is_no_statement_is_accounted_for_from_the_document_check(smetten):
+    """The card no longer offers this route; the document check lists the text and saves the choice."""
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    annotation, _, _, intro, env = smetten
+    with TestClient(application_for(env['console'])) as client:
+        client.post('/login', data={'username': 'voorstel', 'password': 'human-proposal-secret'})
+        page = client.get('/annotations', params={'document': env['sid'], 'overview': 'true'}).text
+        assert 'Nog niet verantwoord bronmateriaal' in page and 'Kop of documentstructuur' in page
+        view = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'])
+        form = {'document': env['sid'], 'command_id': 'gap-1', 'expected_generation': str(view['generation']),
+                'expected_objects_revision': view['objects_revision'], 'block_id': intro['block_id'],
+                'start': str(intro['start']), 'end': str(intro['end'])}
+        refused = client.post('/annotations/source-role', data={**form, 'reason': 'structure:unknown'}, follow_redirects=False)
+        assert refused.status_code == 409 and 'Kies een bronfunctie' in refused.text
+        saved = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-2', 'reason': 'structure:document_structure'},
+                            follow_redirects=False)
+        assert saved.status_code == 303 and saved.headers['location'].endswith('#annotation-gaps')
+        # Repeating the same command is the same receipt, not a second annotation.
+        again = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-2', 'reason': 'structure:document_structure'},
+                            follow_redirects=False)
+        assert again.status_code == 303
+        stale = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-3', 'reason': 'metadata:document_metadata'},
+                            follow_redirects=False)
+        assert stale.status_code == 409
+    entries = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'])['entries']
+    [entry] = [e for e in entries if e.get('disposition')]
+    assert entry['status'] == 'ready' and entry['disposition'] == {'role': 'structure', 'reason': 'document_structure'}
+    assert [a['quote'] for a in entry['ranges']] == [intro['quote']]
