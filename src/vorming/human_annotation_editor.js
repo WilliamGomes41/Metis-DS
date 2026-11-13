@@ -364,7 +364,7 @@ import {bindRange} from '/annotations/binding.mjs';
           if(entry.annotation_id===id && dirty===version) check=data;
           else checkAgain=true;
           if(check && !checkIsCurrent()) {check=null;status('Het opgeslagen werk is gewijzigd. Heropen de annotatie om de actuele versie te controleren.');}
-        } catch(error) {status('Controle niet gelukt. '+error.message);checkAgain=false;}
+        } catch(error) {status((failed ? 'Opslaan mislukt. ' : 'Controle niet gelukt. ')+error.message);checkAgain=false;}
       } while(checkAgain);
     })().finally(()=>{checkRun=null;checking=false;renderSummary();updateBindingControls();renderSourceHighlights();});
     return checkRun;
@@ -705,7 +705,9 @@ import {bindRange} from '/annotations/binding.mjs';
         const body = retryRequest || requestForCurrent(); retryRequest = body; retryVersion = version;
         status('Opslaan…');
         try {
-          const response = await fetch('/annotations/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+          // A lost connection is said in the worker's language; the browser's own text is not.
+          const response = await fetch('/annotations/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+            .catch(() => {throw new Error('Geen verbinding met de server. Je werk staat nog hier; probeer opnieuw.');});
           const data = await response.json();
           if (el('conflict')) el('conflict').hidden = true;
           if (!response.ok) {

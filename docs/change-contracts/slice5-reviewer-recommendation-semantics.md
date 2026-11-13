@@ -113,3 +113,26 @@ Explicit non-goals: richting en sterkte wijzigen in de tweede review (die
   `tests/test_source_first_signals_1060.py` en
   `tests/test_d3_3_human_recommendation_semantics.py`. Karakteriseringsgoldens
   ongewijzigd.
+
+## Deel B — stappenformulier uit de kaart (Class B)
+
+Besluit William, 13 november 2026: het formulier mag de medewerker niet meer
+zien; de kaart is de enige weg.
+
+- `human_annotation_editor.js`: de kaart opent altijd; een bewaarde keuze voor
+  het uitgebreide formulier wordt bij laden verwijderd. Open punten worden in de
+  kaart hersteld (voorstel → vraag bij ‘Hoort erbij’, type → typekeuze,
+  verplichte koppeling → de regel in de bron) of als melding getoond. Het
+  typebewijs is altijd de uitspraak zelf. Een dubbele uitspraak is een
+  validatieantwoord; − trekt het concept direct in. Een netwerkfout geeft
+  “Geen verbinding met de server. Je werk staat nog hier; probeer opnieuw.”
+- `human_annotation_ui_v1`: Nederlandse uitleg voor de codes die de kaart nu
+  zelf toont, en één vaste melding voor een onbekende code.
+- De verborgen opmaak van het stappenformulier dient nog als toestandsdrager
+  van de kaart (type, rol, velden). Ze is onbereikbaar; opruimen is een aparte
+  refactor zonder gedragswijziging.
+- Bewijs: alle 21 browserproeven via de kaart (`tests/test_browser_knowledge_context.py`);
+  herschreven: bouw-, bronselectie-, binding-, voorstel- en veerkrachtproef.
+  `browser_human_annotation_check.cjs` en de hulpfuncties voor het
+  stappenformulier zijn vervallen: wat ze bewezen en nog bestaat zit in de
+  veerkracht-, selectie- en bouwproef.

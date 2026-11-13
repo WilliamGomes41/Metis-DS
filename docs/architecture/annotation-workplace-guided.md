@@ -416,7 +416,7 @@ foutkans of bewijs van foutloosheid. Technische tests meten geen juiste interpre
 - Relevante bestaande bewijzen: [input/herstel/concurrency](../../tests/test_human_annotation_input_v2_postgres.py),
   [preview](../../tests/test_human_annotation_preview.py),
   [volledige menselijke keten](../../tests/test_human_annotation_review_postgres.py),
-  [browserbediening](../../tests/browser_human_annotation_check.cjs).
+  [browserbediening](../../tests/browser_guided_annotation_check.cjs).
 
 Nog inhoudelijk te toetsen: begrijpelijkheid van de typekeuze, wanneer een
 zelfstandige voorwaarde wenselijk is, uitleg van essentialiteit en de gewenste
