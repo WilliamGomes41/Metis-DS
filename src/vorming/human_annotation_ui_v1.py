@@ -58,6 +58,8 @@ ERRORS = {
     'recommendation_semantics_invalid':'Controleer de richting en sterkte bij deze aanbeveling en wijs het bijbehorende bronbewijs aan.',
     'annotation_required_relationship_missing':'Een essentieel verband ontbreekt. Wijs de bijbehorende tekst opnieuw aan of leg expliciet vast waarom de verplichting vervalt.',
     'annotation_relationship_withdrawal_required':'Licht toe waarom dit essentiële verband niet langer nodig is.',
+    'annotation_context_proposal_open':'Metis stelt tekst voor die bij deze uitspraak hoort. Voeg het voorstel in de kaart toe met + of wijs het af met −.',
+    'annotation_declined_context_invalid':'Een afgewezen voorstel past niet bij deze bron. Open de opgeslagen annotatie opnieuw.',
 }
 FINDINGS = {**ERRORS,
     'annotation_source_empty':'Er is geen leesbare brontekst beschikbaar. Controleer het vastgelegde origineel voordat je verdergaat.',

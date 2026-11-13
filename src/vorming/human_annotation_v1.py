@@ -156,7 +156,7 @@ def _read_set(console, snapshot_id):
 
 
 def _validate(selection, blocks):
-    if not isinstance(selection, dict) or set(selection) - {'status','object_type','ranges','evidence_not_applicable','pending_range','field_evidence','recommendation_semantics','selection_version','disposition','required_links'}:
+    if not isinstance(selection, dict) or set(selection) - {'status','object_type','ranges','evidence_not_applicable','pending_range','field_evidence','recommendation_semantics','selection_version','disposition','required_links','declined_context'}:
         fail('annotation_selection_invalid')
     status, kind = selection.get('status'), selection.get('object_type')
     disposition=selection.get('disposition')
@@ -296,6 +296,22 @@ def _validate(selection, blocks):
                     raw[field]=_field_span(witness['span'],witness['quote'],blocks)
         payload['selection_version']='human-annotation-input-v2'
         payload['recommendation_semantics']=raw
+    if 'declined_context' in selection:
+        # #1060 slice 4: source text the worker said does not belong. Exact positions only.
+        raw=selection['declined_context']
+        if not isinstance(raw,list) or len(raw)>64 or disposition is not None:
+            fail('annotation_declined_context_invalid')
+        declined=[]
+        for row in raw:
+            if not isinstance(row,dict) or set(row)!={'block_id','start','end','quote'}:
+                fail('annotation_declined_context_invalid')
+            anchor=_validate({'status':'draft','ranges':[{**row,'role':'context'}]},blocks)['ranges'][0]
+            key={k:anchor[k] for k in ('block_id','start','end','quote_sha256')}
+            if key in declined:
+                fail('annotation_declined_context_invalid')
+            declined.append(key)
+        if declined:
+            payload.update(declined_context=declined,selection_version='human-annotation-input-v2')
     if 'selection_version' in selection and selection['selection_version']!=payload.get('selection_version'):
         fail('annotation_client_contract_stale')
     return payload
@@ -372,7 +388,12 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
     row, fragments = _read_set(console, snapshot_id)
     if extraction_hash != row['extraction_hash'] or normalization != NORMALIZATION:
         fail('annotation_representation_stale')
-    payload = _validate(selection, {b['block_id']:b for b in semantic_source_blocks(fragments)})
+    source_blocks = semantic_source_blocks(fragments)
+    payload = _validate(selection, {b['block_id']:b for b in source_blocks})
+    # #1060 slice 4: a proposal is answered by adding or declining it, never by
+    # ignoring it. Only a live save applies this; recovery and build do not.
+    if payload['status']=='ready' and payload.get('disposition') is None and open_proposals(source_blocks, payload):
+        fail('annotation_context_proposal_open')
     _relationship_history(None,payload,annotation_id)
     core = [{k:a[k] for k in ('block_id','start','end')} for a in payload['ranges'] if a['role']=='core']
     if core and payload.get('disposition') is None:
@@ -495,6 +516,12 @@ def validate_stored_selection(payload, *, fragments, annotation_id=None):
             fail('annotation_representation_stale')
         anchor['quote'] = block['text'][anchor['start']:anchor['end']]
         anchor.pop('quote_sha256')
+    for row in selection.get('declined_context') or []:
+        block = blocks.get(row['block_id'])
+        if block is None:
+            fail('annotation_representation_stale')
+        row['quote'] = block['text'][row['start']:row['end']]
+        row.pop('quote_sha256')
     for field in (selection.get('field_evidence') or {}).values():
         if field.get('span'):
             span=field['span'];field['quote']=blocks[span['block_id']]['text'][span['start']:span['end']]
@@ -534,7 +561,7 @@ def overview(console, *, actor_id, snapshot_id):
         if stable_hash(entry['payload']) != entry.pop('payload_hash'):
             fail('annotation_integrity_failed')
         entry.update(entry.pop('payload'))
-        for anchor in [*entry['ranges'], *([entry['pending_range']] if entry.get('pending_range') else [])]:
+        for anchor in [*entry['ranges'], *([entry['pending_range']] if entry.get('pending_range') else []), *entry.get('declined_context', [])]:
             block = by_id.get(anchor['block_id'])
             if block is None:
                 fail('annotation_representation_stale')
@@ -553,6 +580,11 @@ def overview(console, *, actor_id, snapshot_id):
         for obj in current_revisions(history, snapshot_id=snapshot_id) if (obj.get('metadata') or {}).get('human_annotation')}
     return {**summary,'title':envelope['title'],'blocks':blocks,
             'objects_revision':console.workflow_document_store.revision_for_rows(history), 'object_bindings': objects}
+
+
+def open_proposals(blocks, payload):
+    from src.vorming.human_annotation_context_proposal_v1 import proposals
+    return proposals(blocks, payload['ranges'], payload.get('declined_context') or [])
 
 
 def _capture_heads(console, snapshot_id):
@@ -585,9 +617,12 @@ def check_current(console, *, actor_id, snapshot_id, annotation_id):
     from src.vorming.human_annotation_preview_v1 import inspect_annotation
     signals = []
     codes = inspect_annotation(entry, fragments=fragments, require_ready=False, signals=signals)
+    proposals = open_proposals(semantic_source_blocks(fragments), entry['payload']) if entry['payload'].get('disposition') is None else []
+    if proposals:
+        codes.append('annotation_context_proposal_open')
     return {'annotation_id': annotation_id, 'revision': entry['revision'],
             'basis': {'snapshot_id': snapshot_id, 'working_revision_id': row['working_revision_id'],
                       'extraction_hash': row['extraction_hash'], 'normalization': row['normalization'],
                       'generation': capture['generation'],
                       'objects_revision': console.workflow_document_store.revision_for_rows(history)},
-            'codes': codes, 'signals': signals}
+            'codes': codes, 'signals': signals, 'proposals': proposals}
