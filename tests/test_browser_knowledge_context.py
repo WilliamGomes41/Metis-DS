@@ -71,7 +71,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
             subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root/'tests'/script)],
                            env=env, cwd=root, check=True, timeout=90)
             expected_screenshots = {'browser_annotation_suggestions_check.cjs':4,
-                                    'browser_source_first_card_check.cjs':3,
+                                    'browser_source_first_card_check.cjs':4,
                                     'browser_annotation_source_selection_check.cjs':4,
                                     'browser_human_annotation_check.cjs':5,
                                     'browser_annotation_binding_check.cjs':2,

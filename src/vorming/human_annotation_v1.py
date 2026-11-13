@@ -584,7 +584,12 @@ def overview(console, *, actor_id, snapshot_id):
 
 def open_proposals(blocks, payload):
     from src.vorming.human_annotation_context_proposal_v1 import proposals
-    return proposals(blocks, payload['ranges'], payload.get('declined_context') or [])
+    ranges = list(payload['ranges'])
+    # Selecting is the statement: a selection not yet committed already gets its proposal.
+    pending = payload.get('pending_range')
+    if pending and pending['role'] == 'core' and not any(a['role'] == 'core' for a in ranges):
+        ranges.append(pending)
+    return proposals(blocks, ranges, payload.get('declined_context') or [])
 
 
 def _capture_heads(console, snapshot_id):

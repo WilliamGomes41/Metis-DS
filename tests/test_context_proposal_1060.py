@@ -2,6 +2,7 @@
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: kwaliteit
+# release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
 import pytest
@@ -140,3 +141,14 @@ def test_a_changed_quote_for_a_declined_position_is_refused(smetten):
     with pytest.raises(ConsoleError) as refused:
         save(declined=[{k: intro[k] for k in ('block_id', 'start', 'end')} | {'quote': 'Iets anders'}], status='draft')
     assert refused.value.code == 'annotation_anchor_mismatch'
+
+
+def test_a_selection_not_yet_committed_already_gets_its_proposal(smetten):
+    annotation, _, check, intro, env = smetten
+    from tests.test_human_annotation_postgres import anchor, command
+    view = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'])
+    request = command(view)
+    request['selection']['pending_range'] = anchor(view, 'Bij diabetes')
+    annotation.save(env['console'], actor_id=env['actor'], **request)
+    [proposal] = check(request['annotation_id'])['proposals']
+    assert proposal['quote'] == intro['quote']
