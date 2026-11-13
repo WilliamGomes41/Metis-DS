@@ -109,6 +109,12 @@
       ]
     ],
     [
+      "/annotations/source-role",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/suggest",
       [
         "POST"
