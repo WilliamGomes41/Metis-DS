@@ -4,6 +4,31 @@ import {bindRange} from '/annotations/binding.mjs';
   'use strict';
   const state = JSON.parse(document.getElementById('annotation-data').textContent);
   const el = id => document.getElementById('annotation-' + id);
+  // #1067: what to select in each card row, and what '−' does there.
+  const HELP={
+    core:['Selecteer één bewering of advies, letterlijk: meestal één zin, soms een zin met een opsomming.',
+      'Twee adviezen? Maak twee kaarten.','Met − haal je de selectie weg.'],
+    type:['Het soort zegt wat voor uitspraak dit is, bijvoorbeeld een aanbeveling of een definitie. Metis stelt het voor; de reviewer controleert het.'],
+    belongs:['Selecteer tekst die nodig is om de uitspraak te begrijpen of toe te passen. Bijvoorbeeld:',
+      ['de inleidende zin van een opsomming;','voor wie of wanneer het geldt (‘Bij volwassenen in de thuiszorg’);','een begrip dat in de uitspraak wordt gebruikt.'],
+      'Niet: waarom het klopt. Dat hoort bij Onderbouwing.','Met − haal je tekst weg, of wijs je een voorstel van Metis af.'],
+    evidence:['Selecteer tekst die laat zien waarom de uitspraak klopt. Bijvoorbeeld:',
+      ['een beschrijving van onderzoek;','de mate van bewijs;','een verwijzing of een afweging van de werkgroep.'],
+      'Niet: voorwaarden of doelgroep. Die horen bij Hoort erbij.','Geen onderbouwing in de bron? Laat de regel leeg; de reviewer beoordeelt dat.'],
+  };
+  const helpOpen=new Set();
+  let saving=false;
+  const kindMemory={};
+  const kindBox=document.createElement('div'),kindSelect=document.createElement('select');
+  {
+    const label=document.createElement('label');
+    kindBox.id='annotation-simple-type';kindBox.className='annotation-type-row';
+    kindSelect.id='annotation-simple-type-select';label.htmlFor=kindSelect.id;label.className='sr-only';label.textContent='Soort uitspraak';
+    kindSelect.add(new Option('Kies het soort',''));
+    for(const option of document.getElementById('annotation-type').options) if(option.value && option.value!=='source_disposition') kindSelect.add(new Option(option.textContent,option.value));
+    kindSelect.addEventListener('change',()=>{setSimpleType(kindSelect.value);});
+    kindBox.append(label,kindSelect);
+  }
   const labels = {core:'Kernuitspraak',population:'Doelgroep',context:'Context',condition:'Voorwaarde',exception:'Uitzondering',explanation:'Toelichting',evidence:'Onderbouwing',
     actor:'Uitvoerder',scope:'Toepassingssituatie',timing:'Tijdstip of periode',list_introduction:'Inleiding bij een lijst',row_header:'Rijkop',column_header:'Kolomkop'};
   let entry, selected = null, dirty = 0, committed = 0, timer, running = null, retryRequest = null, retryVersion = 0, failed = false;
@@ -233,13 +258,30 @@ import {bindRange} from '/annotations/binding.mjs';
     const hint=(dd,value)=>{const p=document.createElement('p');p.textContent=value;p.className='annotation-hint';dd.append(p);};
     const sign=(parent,glyph,label,run,pressed=null)=>{const button=document.createElement('button');button.type='button';button.className='annotation-sign';button.textContent=glyph;button.setAttribute('aria-label',label);button.title=label;if(pressed!==null) button.setAttribute('aria-pressed',String(pressed));button.addEventListener('click',run);parent.append(button);return button;};
     const line=(dd,value,label,remove)=>{const div=document.createElement('div'),p=document.createElement('p');div.className='annotation-line';p.textContent=value;div.append(p);sign(div,'−',label,remove);dd.append(div);};
-    const row=(key,label,build,add=null)=>{const dt=document.createElement('dt'),dd=document.createElement('dd'),name=document.createElement('span');name.textContent=label;dt.append(name);dt.dataset.row=key;dd.dataset.row=key;if(add) sign(dt,'+',add.label,add.run,add.pressed);build(dd);rows.append(dt,dd);};
+    // #1067: a '?' opens what to select in this row, under the row itself; it stays open while you work.
+    const explain=(name,dd,key,label)=>{
+      const button=document.createElement('button'),box=document.createElement('div');
+      button.type='button';button.className='annotation-help-toggle';button.textContent='?';
+      button.setAttribute('aria-label','Uitleg bij '+label);button.setAttribute('aria-controls','annotation-help-'+key);
+      button.setAttribute('aria-expanded',String(helpOpen.has(key)));
+      box.id='annotation-help-'+key;box.className='annotation-help';box.hidden=!helpOpen.has(key);
+      for(const part of HELP[key]) {
+        if(Array.isArray(part)) {const ul=document.createElement('ul');for(const item of part) {const li=document.createElement('li');li.textContent=item;ul.append(li);}box.append(ul);}
+        else {const p=document.createElement('p');p.textContent=part;box.append(p);}
+      }
+      button.addEventListener('click',()=>{
+        const open=!helpOpen.has(key);if(open) helpOpen.add(key);else helpOpen.delete(key);
+        button.setAttribute('aria-expanded',String(open));box.hidden=!open;
+      });
+      name.append(button);dd.append(box);
+    };
+    const row=(key,label,build,add=null)=>{const dt=document.createElement('dt'),dd=document.createElement('dd'),name=document.createElement('span'),text=document.createElement('span');text.textContent=label;name.className='annotation-row-name';name.append(text);dt.append(name);dt.dataset.row=key;dd.dataset.row=key;if(HELP[key]) explain(name,dd,key,label);if(add) sign(dt,'+',add.label,add.run,add.pressed);build(dd);rows.append(dt,dd);};
     // #1067: source text that is no statement (recorded in the document check) shows what it is, nothing to fill in.
     if(entry.disposition) {
       const reasons=Object.values(fieldContract.source_roles).flat();
       const kind=reasons.find(r=>r.value===entry.disposition.reason)?.label || 'Geen uitspraak';
       row('core','Geen uitspraak: '+kind.toLowerCase(),dd=>{for(const a of core) line(dd,a.quote,'Weghalen: '+a.quote,()=>{discardObject().catch(()=>{});});});
-      el('simple-type').hidden=true;el('simple-status').textContent='';el('simple-notes').replaceChildren();
+      el('simple-status').textContent='';el('simple-notes').replaceChildren();
       return;
     }
     if(core.length || provisional) row('core','Uitspraak',dd=>{
@@ -248,6 +290,14 @@ import {bindRange} from '/annotations/binding.mjs';
       if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
     },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
+    // #1067: the kind of statement is a row like the others: Metis proposes it, anyone working in the card corrects it.
+    if(core.length && !deriving) row('type','Soort',dd=>{
+      // The same control is reused on every render, so a choice in progress keeps its focus.
+      if(document.activeElement!==kindSelect) kindSelect.value=entry.object_type || '';
+      kindSelect.disabled=saving;
+      dd.append(kindBox);
+      hint(dd,entry.object_type ? 'Klopt het soort niet? Kies het juiste soort.' : 'Metis kon het soort niet bepalen. Kies het soort.');
+    });
     if(core.length || provisional) {
       row('belongs','Hoort erbij',dd=>{
         for(const a of belongs) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
@@ -271,8 +321,6 @@ import {bindRange} from '/annotations/binding.mjs';
         if(!evidence.length && !entry.evidence_not_applicable && armed!=='evidence') hint(dd,'Niets gekoppeld. Staat de onderbouwing in de bron? Voeg haar toe met +.');
       },{label:'Tekst toevoegen aan Onderbouwing',run:()=>arm('evidence'),pressed:armed==='evidence'});
     }
-    el('simple-type').hidden=!core.length || !!entry.object_type || deriving;
-    if(!el('simple-type').hidden) el('simple-type-select').value='';
     const own=finding=>finding.code==='annotation_core_required' && !entry.object_type || finding.code==='annotation_context_proposal_open';
     const lost=!selected && el('selection').textContent.startsWith('Wijs één bereik') ? el('selection').textContent : '';
     el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : lost ||
@@ -328,11 +376,20 @@ import {bindRange} from '/annotations/binding.mjs';
     if(!armed) {renderSimple();return;}
     const kind=armed;armed=null;useAs(kind).catch(()=>{});
   }
-  for(const option of el('type').options) if(option.value && option.value!=='source_disposition') el('simple-type-select').add(new Option(option.textContent,option.value));
-  el('simple-type-select').addEventListener('change',()=>{
-    const value=el('simple-type-select').value;if(!value) return;
-    el('type').value=value;el('type').dispatchEvent(new Event('change'));runCheck();
-  });
+  // A changed kind keeps the selections; meaning parts of the old kind are cleared and stay open for the reviewer.
+  function setSimpleType(value) {
+    if(saving || finalizing || deriving) {kindSelect.value=entry.object_type || '';return;}
+    if(!value || value===entry.object_type) return;
+    // Besluit William 2026-11-14: switching back restores Metis' proposal for that kind, without asking.
+    const memory=kindMemory[entry.annotation_id] ||= {};
+    if(entry.object_type) memory[entry.object_type]={field_evidence:clone(entry.field_evidence || null),
+      recommendation_semantics:clone(entry.recommendation_semantics || null)};
+    delete entry.disposition;entry.object_type=value;el('type').value=value;
+    if(memory[value]) {
+      entry.field_evidence=clone(memory[value].field_evidence);entry.recommendation_semantics=clone(memory[value].recommendation_semantics);
+    } else resetFields();
+    change();renderFields();renderSimple();runCheck();
+  }
   document.addEventListener('click',event=>{
     const mark=event.target.closest?.('mark[data-annotation]');
     if(!mark || !simple() || !window.getSelection().isCollapsed) return;
@@ -342,7 +399,7 @@ import {bindRange} from '/annotations/binding.mjs';
   function repairFinding(finding) {
     const code=finding.code;
     if(code==='annotation_context_proposal_open') {asked=true;renderSimple();return;}
-    if(code==='annotation_core_required' && hasCore() && !entry.object_type) {el('simple-type-select').focus();return;}
+    if(code==='annotation_core_required' && hasCore() && !entry.object_type) {document.getElementById('annotation-simple-type-select')?.focus();return;}
     if(code==='annotation_required_relationship_missing') {el('required-links').scrollIntoView({block:'nearest'});return;}
     status(finding.message);
   }
@@ -977,8 +1034,12 @@ import {bindRange} from '/annotations/binding.mjs';
   const toOverview = () => { window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); };
   // In the card, saving first commits a statement that was only selected.
   async function saveCard() {
-    if(simple() && !hasCore() && selected) await useAs('core');
-    const saved=hasCore() && await finishCurrent();
+    // #1067: while 'Gereed' runs the kind cannot change; a choice made now would complete this save unseen.
+    saving=true;kindSelect.disabled=true;
+    try {
+      if(simple() && !hasCore() && selected) await useAs('core');
+      var saved=hasCore() && await finishCurrent();
+    } finally {saving=false;kindSelect.disabled=deriving;}
     if(!saved && simple() && openProposals().length) {
       asked=true;renderSimple();
       document.querySelector('#annotation-simple-rows [data-proposal=add]')?.focus();

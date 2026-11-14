@@ -14,7 +14,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await Promise.all([page.waitForURL(u=>u.pathname!='/login'),page.locator('button[type=submit]').click()]);
  await page.goto(base+'/ingest');
  const core='Het zorgplan is een overzicht van afspraken.';
- await page.locator('[name=file]').setInputFiles({name:'meaning.html',mimeType:'text/html',buffer:Buffer.from('<html><body><h1>Begrip</h1><p>'+core+'</p><p>Een zorgplan is een overzicht van afspraken.</p><p>Foutvoorbeeld voor handmatig herstel.</p><p>De huid is droog en de huid is rood.</p></body></html>')});
+ await page.locator('[name=file]').setInputFiles({name:'meaning.html',mimeType:'text/html',buffer:Buffer.from('<html><body><h1>Begrip</h1><p>'+core+'</p><p>Een zorgplan is een overzicht van afspraken.</p><p>Foutvoorbeeld voor handmatig herstel.</p><p>De huid is droog en de huid is rood.</p><p>Controleer de huid dagelijks.</p></body></html>')});
  for(const [name,value] of Object.entries({title:'Voorstel controleren',version:'1',date:'2026-11-11',family:'test'}))await page.locator(`[name=${name}]`).fill(value);
  await page.locator('[name=class_]').selectOption('richtlijn');await page.locator('[name=review_option][value=uploader_sole]').check();
  await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
@@ -32,12 +32,33 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-simple-status').filter({hasText:'Metis leest'}).waitFor();
  await page.screenshot({path:output+'/meaning-pending.png',fullPage:true});
  await reading();
- assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);
+ // #1067: Metis' kind shows in its own row and stays correctable.
+ assert.equal(await page.locator('#annotation-simple-type-select').inputValue(),'definition');
  let entry=await current();
  assert.equal(entry.object_type,'definition');assert.equal(entry.ranges[0].quote,core);
  assert.equal(entry.field_evidence.defined_term.span.start,0);assert.equal(entry.field_evidence.defined_term.span.end,12);
  assert.equal(entry.field_evidence.definiens_span.span.start,16);
  await page.screenshot({path:output+'/meaning-proposed.png',fullPage:true});
+ // #1067: the route says where the work is and what follows; '?' explains each row and stays open.
+ assert.equal(await page.locator('nav.ko-route [aria-current=step]').innerText(),'Annoteren');
+ assert.match(await page.locator('nav.ko-route .ko-route-next').innerText(),/^Hierna: /);
+ const help=page.locator('#annotation-simple-rows dt[data-row=belongs] .annotation-help-toggle');
+ await help.click();
+ await page.locator('#annotation-help-belongs').getByText('Niet: waarom het klopt. Dat hoort bij Onderbouwing.').waitFor();
+ assert.equal(await help.getAttribute('aria-expanded'),'true');
+ // A wrong kind is corrected in the card: the selections stay, the kind is stored.
+ await page.locator('#annotation-simple-type-select').selectOption('explanation');
+ for(let i=0;i<60 && (await current()).object_type!=='explanation';i++) await page.waitForTimeout(250);
+ entry=await current();
+ assert.equal(entry.object_type,'explanation');assert.equal(entry.ranges[0].quote,core);
+ assert.equal(await page.locator('#annotation-help-belongs').isVisible(),true,'the explanation stays open while working');
+ // Switching back restores Metis' proposal for that kind (besluit William 2026-11-14), without a question.
+ await page.locator('#annotation-simple-type-select').selectOption('definition');
+ for(let i=0;i<60 && (await current()).object_type!=='definition';i++) await page.waitForTimeout(250);
+ entry=await current();
+ assert.equal(entry.object_type,'definition');
+ assert.equal(entry.field_evidence.defined_term.span.start,0);assert.equal(entry.field_evidence.definiens_span.span.start,16);
+ await page.screenshot({path:output+'/meaning-kind-corrected.png',fullPage:true});
  // 2. A selection made while Metis reads waits; the answer for the old statement never overwrites it.
  await page.keyboard.press('Escape');
  await page.locator('#annotation-ready:enabled').click();
@@ -69,6 +90,21 @@ const tasks=require('./browser_annotation_tasks.cjs');
  entry=await current();
  assert.equal(entry.status,'draft');assert.equal(entry.ranges[0].quote,'Foutvoorbeeld voor handmatig herstel.');
  await page.screenshot({path:output+'/meaning-question.png',fullPage:true});
+ // 4. Besluit William 2026-11-14: switching away and back restores Metis' proposal, also direction.
+ await page.goto(base+'/annotations?'+new URLSearchParams({document:sid}));
+ await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ const advice=page.locator('[data-source-block]').filter({hasText:'Controleer de huid'});
+ await tasks.selectText(page,advice,'Controleer de huid dagelijks.');
+ await plus('belongs').click();
+ await page.locator('#annotation-simple-type-select:enabled').waitFor();
+ const kindIs=async kind=>{for(let i=0;i<60 && (await current())?.object_type!==kind;i++) await page.waitForTimeout(250);return current();};
+ entry=await kindIs('recommendation');
+ assert.equal(entry.recommendation_semantics.direction,'for');
+ await page.locator('#annotation-simple-type-select:enabled').selectOption('explanation');
+ entry=await kindIs('explanation');assert.equal(entry.recommendation_semantics,null);
+ await page.locator('#annotation-simple-type-select:enabled').selectOption('recommendation');
+ entry=await kindIs('recommendation');
+ assert.equal(entry.recommendation_semantics?.direction,'for','switching back restores the proposed direction');
  assert.deepEqual(errors,[]);
  fs.writeFileSync(output+'/suggestions-result.json',JSON.stringify({backgroundProposal:true,selectionDuringReadWaits:true,ambiguityIsASignal:true,failureAsksOnlyType:true,errors}));
  }finally{await browser.close();}

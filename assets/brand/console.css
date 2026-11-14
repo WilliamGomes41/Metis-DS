@@ -2479,6 +2479,34 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
 .account-roles { margin: 12px 0 0; padding: 0; border: 0; min-width: 0; }
 .account-roles legend { padding: 0; margin-bottom: 6px; font-weight: 700; }
 
+/* #1067: route of a knowledge object — milestones, the current one marked, and what happens next. */
+.ko-route { margin: 0.75rem 0 1.25rem; max-width: 72ch; }
+.ko-route ol { display: flex; flex-wrap: wrap; gap: 0.25rem 0; list-style: none; margin: 0; padding: 0; font-size: 0.9rem; }
+.ko-route li { display: flex; align-items: center; color: var(--muted); }
+.ko-route li + li::before {
+  content: ""; width: 0.4em; height: 0.4em; margin: 0 0.6em 0 0.5em;
+  border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor; transform: rotate(45deg); opacity: 0.6;
+}
+.ko-route li[data-route-done] { color: var(--text); }
+.ko-route li[aria-current="step"] { color: var(--paars); font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.3em; }
+.ko-route-next { margin: 0.4rem 0 0; color: var(--text); line-height: 1.5; }
+
+/* #1067: explanation per card row, opened by its own button; no hover tooltip. */
+.annotation-help-toggle {
+  flex: none; display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; margin-left: 0.4rem; padding: 0;
+  border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--paars);
+  font: inherit; font-size: 0.85rem; font-weight: 700; line-height: 1; cursor: pointer; position: relative;
+}
+.annotation-help-toggle::after { content: ""; position: absolute; inset: -0.5rem; }
+.annotation-help-toggle[aria-expanded="true"] { background: var(--paars); border-color: var(--paars); color: var(--wit); }
+.annotation-help-toggle:focus-visible { outline: 2px solid var(--paars); outline-offset: 2px; }
+.annotation-help { margin: 0.35rem 0 0.6rem; padding: 0.6rem 0.75rem; border-radius: 8px; background: var(--water-soft); color: var(--text); font-size: 0.92rem; line-height: 1.5; }
+.annotation-help p { margin: 0 0 0.35rem !important; }
+.annotation-help p:last-child { margin-bottom: 0 !important; }
+.annotation-help ul { margin: 0.2rem 0 0.4rem; padding-left: 1.1rem; }
+.annotation-row-name { display: inline-flex; align-items: center; }
+.annotation-type-row select { font-size: 1rem; min-height: 2.75rem; max-width: 100%; }
+
 /* Reveal motion for occasional and rare state changes
    (docs/change-contracts/console-reveal-motion.md). One-shot, under 250ms, transform and opacity
    only. Review cards, the annotation editor and navigation deliberately stay still. */
@@ -2507,3 +2535,4 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
   [data-session-warning]:not([hidden]) { animation-name: metis-reveal-up; animation-duration: 200ms; }
   .publication-room .banner.ok { animation-name: metis-reveal-banner; animation-duration: 240ms; }
 }
+
