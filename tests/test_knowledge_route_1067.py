@@ -67,3 +67,36 @@ def test_the_line_adds_no_control():
 def test_unknown_milestone_is_refused():
     with pytest.raises(ValueError):
         route_html('second_review', 'x', second_review=False)
+
+
+def test_document_check_route_follows_the_real_build(tmp_path, production_console):
+    """Black-box: before the build the check is current; after an unchanged successful build it is the review."""
+    from starlette.testclient import TestClient
+    from src.vorming import human_annotation_v1 as annotation
+    from tests.production_support import application_for
+    from tests.test_human_annotation_postgres import anchor, command
+    from tests.test_human_annotation_review_postgres import execute_build
+    console = production_console(root=tmp_path)
+    actor = console.create_account(username='route', password='route-secret-1067',
+                                   roles=('researcher', 'reviewer'))['account_id']
+    sid = console.receive_source(actor_id=actor, filename='route.html', content_type='text/html',
+        data=b'<html><body><p>De huid wordt dagelijks gecontroleerd.</p></body></html>',
+        ingest_kind='new', title='Route', version='1.0', date='2026-11-14', live_url='',
+        class_='richtlijn', family='test', named_reviewers=[],
+        review_choice={'contract': 'review-configuration-v2', 'option': 'uploader_sole',
+                       'four_eyes_required': False, 'reviewers': [], 'readers': []})['snapshot_id']
+    view = annotation.prepare(console, actor_id=actor, snapshot_id=sid, expected_revision=console.objects_revision(sid))
+    request = command(view, ranges=[anchor(view, 'De huid wordt dagelijks')], status='ready')
+    from src.vorming.human_annotation_v1 import TYPE_CORE_FIELDS
+    from src.vorming.source_bound_fields_v3 import FIELDS
+    fields = {key: {'span': None, 'missing_reason': 'uncertain'} for key in FIELDS}
+    fields.update(type_evidence_spans={'core': True}, **{TYPE_CORE_FIELDS['explanation']: {'core': True}})
+    request['selection'].update(object_type='explanation', field_evidence=fields, required_links=[])
+    annotation.save(console, actor_id=actor, **request)
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': 'route', 'password': 'route-secret-1067'})
+        page = lambda: client.get('/annotations', params={'document': sid, 'overview': 'true'}).text
+        assert current(page()) == 'Documentcontrole'
+        execute_build(console, actor, sid)
+        after = page()
+        assert current(after) == 'Review' and 'de reviewer beoordeelt' in following(after)

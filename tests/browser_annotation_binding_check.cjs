@@ -9,7 +9,7 @@ const assert=require('node:assert/strict');
  const m=await(await fetch(base+'/browser-manifest')).json();
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
  try{
-  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});globalThis.metisProofPage=page;
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/login');
   await page.locator('[name=username]').fill(m.username);
@@ -70,5 +70,6 @@ const assert=require('node:assert/strict');
   await page.screenshot({path:output+'/binding-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);
   fs.writeFileSync(output+'/binding-result.json',JSON.stringify({slowModuleSafe:true,contextStoredExactly:true,typeEvidenceIsTheStatement:true,pageErrors:errors}));
- }finally{await browser.close();}
+ }catch(error){await tasks.describeCard(globalThis.metisProofPage);throw error;}
+ finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

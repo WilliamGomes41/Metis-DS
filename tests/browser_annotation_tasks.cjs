@@ -18,3 +18,21 @@ async function selectText(page,source,text) {
  },text);
 }
 module.exports.selectText=selectText;
+
+// On a failed proof, write what the card showed, so a CI-only failure can be read from the log.
+async function describeCard(page) {
+  if(!page || page.isClosed()) return;
+  try {
+    const state=await page.evaluate(()=>{
+      const text=id=>document.getElementById(id)?.innerText ?? null;
+      const kind=document.getElementById('annotation-simple-type-select');
+      return {url:location.href,status:text('annotation-status'),simpleStatus:text('annotation-simple-status'),
+        notes:text('annotation-simple-notes'),rows:text('annotation-simple-rows'),
+        inputsDisabled:document.getElementById('annotation-editor-inputs')?.disabled ?? null,
+        kind:kind ? {value:kind.value,disabled:kind.disabled} : null,
+        ready:document.getElementById('annotation-ready') ? {disabled:document.getElementById('annotation-ready').disabled} : null};
+    });
+    console.error('CARD STATE '+JSON.stringify(state));
+  } catch(error) {console.error('CARD STATE unavailable: '+error.message);}
+}
+module.exports.describeCard=describeCard;

@@ -268,8 +268,14 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         from src.review.knowledge_route_v1 import annotation_route
         second_review = bool((envelope.get('review_configuration') or {}).get('four_eyes_required'))
         built = (state.get('current_build') or {}).get('state', '') if overview else ''
+        if built == 'succeeded':
+            # Built and unchanged since: every ready statement has its object and no correction waits for a rebuild.
+            bindings = state.get('object_bindings') or {}
+            unchanged = not any(binding.get('pending') for binding in bindings.values()) and all(
+                entry['annotation_id'] in bindings for entry in state['entries'] if entry['status'] == 'ready')
+            built = 'succeeded' if unchanged else ''
         intro += annotation_route(overview=overview, second_review=second_review,
-                                  finalized=built if built in {'running', 'succeeded'} and not state.get('can_finalize') else '')
+                                  finalized=built if built in {'running', 'succeeded'} else '')
         if overview:
             items = []
             for entry in state['entries']:
