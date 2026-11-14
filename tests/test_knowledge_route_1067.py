@@ -100,3 +100,18 @@ def test_document_check_route_follows_the_real_build(tmp_path, production_consol
         execute_build(console, actor, sid)
         after = page()
         assert current(after) == 'Review' and 'de reviewer beoordeelt' in following(after)
+
+
+@pytest.mark.parametrize('entries,bindings,current_build', [
+    ([{'annotation_id': 'a', 'status': 'ready'}], {'a': {'pending': False}}, True),
+    ([{'annotation_id': 'a', 'status': 'ready'}, {'annotation_id': 'b', 'status': 'withdrawn'}], {'a': {}}, True),
+    # A new statement started after the build is unfinished document work.
+    ([{'annotation_id': 'a', 'status': 'ready'}, {'annotation_id': 'b', 'status': 'draft'}], {'a': {}}, False),
+    # A correction saved but not rebuilt.
+    ([{'annotation_id': 'a', 'status': 'ready'}], {'a': {'pending': True}}, False),
+    # A ready statement without its object.
+    ([{'annotation_id': 'a', 'status': 'ready'}], {}, False),
+])
+def test_a_build_is_current_only_while_nothing_changed_since(entries, bindings, current_build):
+    from src.review.knowledge_route_v1 import build_is_current
+    assert build_is_current(entries, bindings) is current_build

@@ -42,6 +42,14 @@ def route_html(current: str, next_step: str, *, second_review: bool) -> str:
             '<ol>' + ''.join(items) + '</ol><p class="ko-route-next">' + escape(next_step) + '</p></nav>')
 
 
+def build_is_current(entries, bindings) -> bool:
+    """A successful build still describes the document: every statement is ready and built, none awaits a rebuild."""
+    if any(binding.get('pending') for binding in bindings.values()):
+        return False
+    return all(entry.get('status') == 'ready' and entry.get('annotation_id') in bindings
+               for entry in entries if entry.get('status') != 'withdrawn')
+
+
 def annotation_route(*, overview: bool, second_review: bool, finalized: str = '') -> str:
     """The annotation card and the document check. ``finalized`` is the build state after closing, if any."""
     if finalized == 'running':

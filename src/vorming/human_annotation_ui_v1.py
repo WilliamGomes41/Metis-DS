@@ -265,15 +265,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         intro = '<h1>'+('Documentoverzicht' if overview else 'Bron aanwijzen')+'</h1><h2>'+esc(state['title'])+'</h2><p data-working-revision="'+esc(state['working_revision_id'])+'">Bronversie '+version+'</p>'
         intro += '<p><a target="_blank" rel="noopener" href="/annotations/original?'+esc(urlencode({'document':document}))+'">Open het vastgelegde origineel</a></p>'
         # #1067: where the work is and what happens next, the same line as on the review card.
-        from src.review.knowledge_route_v1 import annotation_route
+        from src.review.knowledge_route_v1 import annotation_route, build_is_current
         second_review = bool((envelope.get('review_configuration') or {}).get('four_eyes_required'))
         built = (state.get('current_build') or {}).get('state', '') if overview else ''
-        if built == 'succeeded':
-            # Built and unchanged since: every ready statement has its object and no correction waits for a rebuild.
-            bindings = state.get('object_bindings') or {}
-            unchanged = not any(binding.get('pending') for binding in bindings.values()) and all(
-                entry['annotation_id'] in bindings for entry in state['entries'] if entry['status'] == 'ready')
-            built = 'succeeded' if unchanged else ''
+        if built == 'succeeded' and not build_is_current(state['entries'], state.get('object_bindings') or {}):
+            built = ''
         intro += annotation_route(overview=overview, second_review=second_review,
                                   finalized=built if built in {'running', 'succeeded'} else '')
         if overview:

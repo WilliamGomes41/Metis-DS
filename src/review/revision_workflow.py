@@ -401,7 +401,7 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
                 proposed['metadata'].pop(field, None)
         # A prior final assessment is evidence for its old tuple. Confirmed
         # classification/relations/semantics remain reviewer-owned choices.
-        _drop_confirmation_of_another_kind(proposed, raw)
+        _drop_confirmation_of_another_kind(proposed, raw, peers=by_id)
         proposed['metadata'].pop('review_passage', None)
         proposed['metadata'].pop('passage_register', None)
         bound = proposed['metadata'].get('source_bound_context')
@@ -422,20 +422,32 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
     return [deepcopy(unchanged[row['object_id']]) if row['object_id'] in unchanged else row
             for row in apply_passage_register(result)]
 
-def _drop_confirmation_of_another_kind(proposed, raw):
+def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None):
     """#1067: a kind corrected in the annotation card is not overridden by the old version's confirmation.
 
     A confirmation is about the kind it confirmed. When the corrected annotation now carries another kind,
     that confirmation, and the direction/strength that only a recommendation has, no longer apply: the new
-    version shows the corrected kind as proposed and its reviewer confirms it. The same kind keeps everything.
+    version shows the corrected kind as proposed and its reviewer confirms it. A confirmed relation whose
+    endpoint contract the corrected kind no longer meets goes too, so the correction can be approved; the
+    reviewer confirms relations again. The same kind keeps everything.
     """
     from src.review.review_cockpit_v1 import confirmable_proposed_type
+    from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
     confirmed = proposed.get('confirmed_object_type')
     corrected = confirmable_proposed_type(raw)
     if not confirmed or not corrected or corrected == confirmed:
         return
     for field in ('confirmed_object_type', 'confirmed_recommendation_semantics', 'confirmed_recommendation_strength'):
         proposed.pop(field, None)
+    peers = peers or {}
+
+    def fits(relation):
+        peer = peers.get(relation.get('target_object_id')) or {}
+        target = str(peer.get('confirmed_object_type') or peer.get('proposed_object_type') or peer.get('object_type') or '')
+        return relation_endpoint_compatible(relation.get('relation_type'), source_type=corrected, target_type=target)
+    if 'confirmed_knowledge_relations' in proposed:
+        proposed['confirmed_knowledge_relations'] = [
+            relation for relation in proposed['confirmed_knowledge_relations'] if fits(relation)]
 
 
 def _rebind_relations(result, previous, staged_version):
