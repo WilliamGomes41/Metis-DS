@@ -481,6 +481,9 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
             if (row.get('governance') or {}).get('validation_status') in RETIRED_VALIDATION_STATUSES:
                 continue
             new, remap, lapsed_ids = deepcopy(row), {}, set()
+            # Evidence rows are matched by endpoint as well: approval re-identifies a relation for the new source
+            # version, and an evidence row may still carry the identifier of the proposal it was made for.
+            by_endpoint, lapsed_endpoints = {}, set()
 
             def fits_now(relation):
                 # A target whose kind changed may no longer carry this relation: then it lapses, never re-proposed.
@@ -495,21 +498,27 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
             proposals = {}
             for relation in proposed:
                 if stale(relation):
+                    endpoint = (relation['relation_type'], relation['target_object_id'], str(relation['target_object_version']))
                     if not fits_now(relation):
                         lapsed_ids.add(relation['relation_id'])
+                        lapsed_endpoints.add(endpoint)
                         continue
                     fresh = repropose(relation)
                     remap[relation['relation_id']] = fresh['relation_id']
+                    by_endpoint[endpoint] = fresh
                     relation = fresh
                 proposals[relation['relation_id']] = relation
             # A lapsed confirmation is offered again as a proposal for the new target version, if it still fits.
             lapsed = [relation for relation in confirmed if stale(relation)]
             for relation in lapsed:
+                endpoint = (relation['relation_type'], relation['target_object_id'], str(relation['target_object_version']))
                 if not fits_now(relation):
                     lapsed_ids.add(relation['relation_id'])
+                    lapsed_endpoints.add(endpoint)
                     continue
                 fresh = repropose(relation)
                 remap.setdefault(relation['relation_id'], fresh['relation_id'])
+                by_endpoint.setdefault(endpoint, fresh)
                 proposals.setdefault(fresh['relation_id'], fresh)
             if 'confirmed_knowledge_relations' in new:
                 new['confirmed_knowledge_relations'] = [r for r in confirmed if not stale(r)]
@@ -531,10 +540,12 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
                 # The evidence row names the same endpoint as its relation: it moves along, or lapses with it.
                 kept_evidence = []
                 for item in evidence['relations']:
-                    if item.get('relation_id') in lapsed_ids:
+                    endpoint = (item.get('relation_type'), item.get('target_object_id'), str(item.get('target_object_version')))
+                    if item.get('relation_id') in lapsed_ids or endpoint in lapsed_endpoints:
                         continue
-                    if item.get('relation_id') in remap:
-                        item['relation_id'] = remap[item['relation_id']]
+                    fresh = by_endpoint.get(endpoint)
+                    if item.get('relation_id') in remap or fresh is not None:
+                        item['relation_id'] = fresh['relation_id'] if fresh is not None else remap[item['relation_id']]
                         item['target_object_version'] = current[item['target_object_id']]
                     kept_evidence.append(item)
                 evidence['relations'] = kept_evidence

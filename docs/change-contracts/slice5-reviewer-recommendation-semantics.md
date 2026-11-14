@@ -231,3 +231,18 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
 3. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
+
+### Bewijs van begin tot eind voor relaties (`tests/test_relation_rebuild_e2e_1067.py`)
+
+Een echt document met twee kennisobjecten. Metis stelt een relatie A → B voor, met bronbewijs. De reviewer
+bevestigt haar en keurt A goed. B wordt in de kaart gecorrigeerd en via de productiebouw opnieuw gebouwd. Daarna
+geldt:
+
+- A is een nieuwe versie die terug moet naar de review;
+- het voorstel en het bronbewijs wijzen naar de nieuwe versie van B;
+- de toelating laat A door;
+- de reviewer bevestigt de relatie opnieuw en keurt A goed.
+
+Deze test vond een fout die de unittests niet zagen. Na goedkeuring draagt het bronbewijs nog het id van het
+oorspronkelijke voorstel. Daardoor verhuisde het niet mee en blokkeerde de toelating A. Het bronbewijs verhuist nu
+mee op eindpunt (soort relatie, doel en oude doelversie). Op `bfd3d57` faalt deze test.
