@@ -291,6 +291,29 @@ def test_unmatched_paths_get_a_fixed_label_and_inbound_trace_reaches_the_span(ev
         assert format(span.get_span_context().trace_id, '032x') == trace
 
 
+@pytest.mark.parametrize('header_length', [55, 512, 513, 10_000])
+def test_azure_request_bounds_inbound_traceparent(header_length):
+    from opentelemetry.sdk.trace import TracerProvider
+    from src.request_diagnostics_v1 import AzureTelemetry
+
+    provider = TracerProvider()
+    telemetry = AzureTelemetry.__new__(AzureTelemetry)
+    telemetry.tracer = provider.get_tracer('test')
+    trace_id = '0af7651916cd43dd8448eb211c80319c'
+    header = f'00-{trace_id}-b7ad6b7169203331-01'.ljust(header_length)
+    try:
+        with telemetry.request('/review', traceparent=header) as span:
+            context = span.get_span_context()
+            assert context.is_valid
+            if header_length <= 512:
+                assert context.trace_id == int(trace_id, 16)
+            else:
+                assert context.trace_id != int(trace_id, 16)
+                assert span.parent is None
+    finally:
+        provider.shutdown()
+
+
 def test_standalone_errors_follow_the_window_and_request_filters():
     now = time.time()
     rows = _history(now)
