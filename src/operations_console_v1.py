@@ -1491,10 +1491,14 @@ class OperationsConsole:
             code="invalid_source_date",
         )
         review_configuration = self._chosen_review_configuration(review_choice, actor_id)
-        if review_configuration is not None and review_configuration["contract"] != "review-configuration-v1":
-            # v2: de kernel leidt de policy af uit de keuze; een meegestuurde policy MOET gelijk zijn.
+        derived = None
+        if review_configuration is not None:
             from src.review.review_configuration_v1 import policy_for_configuration
             derived = policy_for_configuration(review_configuration, uploader_id=actor_id)
+        # v2, and a v1 choice that needs two approvals (#1072): the kernel derives the policy from the choice;
+        # a policy sent along MUST be equal. The review duty reads that policy, so it asks every required person.
+        if review_configuration is not None and (review_configuration["contract"] != "review-configuration-v1"
+                                                 or derived is not None):
             if review_policy is not None and review_policy != derived:
                 raise ConsoleError("review_configuration_policy_conflict")
             review_policy = derived
@@ -1534,8 +1538,11 @@ class OperationsConsole:
                 # H2-1 wint: alleen een eenduidige mapping legt vier ogen vast; needs_choice NOOIT.
                 from src.review.review_configuration_v1 import from_review_policy
                 mapped = from_review_policy(review_policy, uploader_id=actor_id)
+                # B10: two_others needs both named reviewers with or without the four-eyes flag, so the flag
+                # carries no duty there and cannot conflict (#1072).
                 if not mapped["needs_choice"] and \
-                        mapped["four_eyes_required"] != review_configuration["four_eyes_required"]:
+                        mapped["four_eyes_required"] != review_configuration["four_eyes_required"] and \
+                        not mapped["option"] == review_configuration["option"] == "two_others":
                     raise ConsoleError("review_configuration_policy_conflict")
             if review_configuration is not None and set(review_configuration["readers"]) & set(reviewers):
                 # Lezers krijgen NOOIT reviewtoegang via een (optionele) policy-deelname.
