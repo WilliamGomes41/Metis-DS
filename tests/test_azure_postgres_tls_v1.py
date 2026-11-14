@@ -151,13 +151,46 @@ def test_dsn_root_is_preserved_and_not_silently_replaced(monkeypatch, trust_root
         postgres_dsn_tls_options("host=metis.postgres.database.azure.com sslrootcert=/not-present/explicit.pem")
 
 
+def _tls_postgres_binaries():
+    """Use installed server tools; CI's data database remains PostgreSQL 16."""
+    candidates = [Path(os.environ['PGBIN'])] if os.environ.get('PGBIN') else []
+    pg_config = shutil.which('pg_config')
+    if pg_config:
+        configured = subprocess.run([pg_config, '--bindir'], capture_output=True, text=True)
+        if configured.returncode == 0 and configured.stdout.strip():
+            candidates.append(Path(configured.stdout.strip()))
+    initdb = shutil.which('initdb')
+    if initdb:
+        candidates.append(Path(initdb).parent)
+    candidates.extend(sorted(Path('/usr/lib/postgresql').glob('*/bin'), reverse=True))
+    candidates.append(Path('/workspace/.postgres/usr/lib/postgresql/17/bin'))
+    pgbin = next((p for p in candidates if all((p / name).is_file()
+                  for name in ('initdb', 'pg_ctl', 'postgres'))), None)
+    if pgbin is None:
+        pytest.fail("TLS proof needs installed PostgreSQL binaries; it must not be skipped")
+    return pgbin
+
+
+def test_tls_server_tools_follow_pg_config_instead_of_a_fixed_major(tmp_path, monkeypatch):
+    installed = tmp_path / 'postgresql' / '18' / 'bin'
+    installed.mkdir(parents=True)
+    for name in ('initdb', 'pg_ctl', 'postgres'):
+        (installed / name).touch()
+    monkeypatch.delenv('PGBIN', raising=False)
+    monkeypatch.setattr(shutil, 'which', lambda name: '/usr/bin/pg_config' if name == 'pg_config' else None)
+    invoked = []
+    def configured(command, **kwargs):
+        invoked.append(command)
+        return SimpleNamespace(returncode=0, stdout=str(installed)+'\n')
+    monkeypatch.setattr(subprocess, 'run', configured)
+    assert _tls_postgres_binaries() == installed
+    assert invoked == [['/usr/bin/pg_config', '--bindir']]
+
+
 @pytest.fixture(scope="module")
 def tls_postgres(tmp_path_factory):
     """Own cluster: never enable TLS or restart the supplied test server."""
-    candidates = [os.environ.get("PGBIN", ""), "/usr/lib/postgresql/16/bin", "/workspace/.postgres/usr/lib/postgresql/17/bin"]
-    pgbin = next((Path(p) for p in candidates if p and (Path(p) / "initdb").is_file()), None)
-    if pgbin is None:
-        pytest.fail("TLS proof needs installed PostgreSQL binaries; it must not be skipped")
+    pgbin = _tls_postgres_binaries()
     if shutil.which("openssl") is None:
         pytest.fail("TLS proof needs openssl; it must not be skipped")
     root = tmp_path_factory.mktemp("azure-tls")

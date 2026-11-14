@@ -389,6 +389,31 @@ openstaan. Diagramupdate: niet relevant; componenten, opslag-/lees-/schrijfroute
 en deploymenttopologie veranderen niet. `gh` was ontoegankelijk; Git en de
 GitHub-connector zijn gebruikt voor dezelfde branch-/issue-/PR-route.
 
+## CI-herstel na de eerste PR-run
+
+Run `43640711340` op PR #1075 faalde in suitepartitie 3 voor Python 3.12 en
+3.13. Beide rapporteerden dezelfde setupfout in de nieuwe echte TLS-proef:
+de fixture kende alleen PG16 en het lokale workspace-PG17-pad. De GitHub-runner
+is inmiddels Ubuntu 26.04 met PostgreSQL 18.6-binaries. De applicatiedatabase in
+de CI-servicecontainer is nog steeds PostgreSQL 16; die is niet aangepast.
+
+De ontbrekende TLS-setup veroorzaakte vervolgens het ontbreken van het
+samengevoegde JUnit-bestand. De export-/evidencechecks faalden daardoor eveneens;
+dit zijn vervolgmeldingen, geen afzonderlijk aangetoonde opslagregressies.
+De overige zes suitepartities, browser-, characterization-, bronverwerking-,
+Docling- en topologieproeven slaagden op die PR-head.
+
+De fixture ontdekt nu de geïnstalleerde servertools via PGBIN, pg_config,
+PATH of de geïnstalleerde PostgreSQL-versiemappen. Een gerichte regressie
+bootst de PG18-bindirectory na. Ontbrekende tools blijven een fout; de test
+wordt niet overgeslagen en gebruikt nog steeds uitsluitend een eigen tijdelijke
+TLS-server. Productiecode, TLS-beleid en de PG16-service blijven ongewijzigd.
+
+Lokale herhaling: 40 TLS-/adapter-/detectietests geslaagd, nul failures/errors/
+skips, inclusief echte positieve/negatieve TLS-handshakes. Repository-preflight,
+architectuurcontrole en diffcontrole slagen. De nieuwe exacte PR-head moet
+opnieuw door GitHub-CI; de gefaalde oude run geldt niet als groen bewijs.
+
 Bronnen: `src/workflows/workflow_postgres_migration_v1.py`,
 `src/workflows/workflow_transaction_v1.py`,
 `src/publication/canonical_publication_postgres_v1.py`,
