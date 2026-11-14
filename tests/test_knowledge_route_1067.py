@@ -154,7 +154,7 @@ def test_review_card_route_shows_the_four_eyes_review_chosen_at_intake(productio
 ])
 def test_the_route_shows_a_second_review_exactly_when_the_configuration_needs_two_approvals(
         contract, option, four_eyes, reviewers, second):
-    from src.review.review_configuration_v1 import second_approval_required
+    from src.review.four_eyes_v1 import second_approval_required
     envelope = {'uploader_account_id': 'up', 'review_configuration': {
         'contract': contract, 'option': option, 'four_eyes_required': four_eyes, 'reviewers': reviewers,
         'readers': [], 'revision': 1, 'locked_at': '2026-11-14T00:00:00Z', 'source': 'chosen'}}

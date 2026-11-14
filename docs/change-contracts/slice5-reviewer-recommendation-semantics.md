@@ -235,7 +235,8 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
    beschrijft alleen haar eigen relaties; de vorige versie bewaart de geschiedenis. Bewijs:
    `tests/test_kind_correction_1067.py::test_the_evidence_of_a_dropped_relation_goes_with_it`; faalt zonder de wijziging.
 4. **De tweede review in de routeregel volgt de regel van de publicatiecontrole** (Codex P2).
-   `second_approval_required` vraagt `configured_approval` of één goedkeuring de gekozen configuratie vervult. Zo
+   `second_approval_required` in `four_eyes_v1` (de publicatiecontrole; alleen die en de inname lezen de configuratie)
+   vraagt `configured_approval` of één goedkeuring de gekozen configuratie vervult. Zo
    staat ‘Tweede review’ er ook bij v1 `two_others` zonder vierogenvink, waar de publicatie op beide benoemde
    reviewers wacht. Bewijs: de tabeltest per configuratie in `tests/test_knowledge_route_1067.py`.
 5. **Afgewezen in de tweede review blijft op ‘Tweede review’** (Codex P2). De routeregel leest de fase van de

@@ -209,6 +209,25 @@ def four_eyes_satisfied(
 CONSOLE_VERIFIED_BLOCKERS = frozenset({"blocked_pending_immutable_locator"})
 
 
+def second_approval_required(envelope: dict[str, Any]) -> bool:
+    """#1067: the chosen review configuration cannot be met by one approval.
+
+    The publication gate owns this question, so the route asks it here and never says publication is next
+    while the gate still waits for a second named reviewer (v1 ``two_others`` included). It asks
+    ``configured_approval`` itself, the rule ``publish_authorization_contract`` applies.
+    """
+    from src.review.review_configuration_v1 import configured_approval, effective_configuration
+    effective = effective_configuration(envelope)
+    if effective["needs_choice"] or effective.get("source") != "chosen":
+        return False
+    uploader = str(envelope.get("uploader_account_id") or "")
+    for person in {uploader, *effective["reviewers"]} - {""}:
+        met, four_ok = configured_approval(effective, {person}, uploader_id=uploader)
+        if met and (four_ok or not effective["four_eyes_required"]):
+            return False
+    return True
+
+
 def publish_authorization_contract(
     *,
     obj: dict[str, Any],

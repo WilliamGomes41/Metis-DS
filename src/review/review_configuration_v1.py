@@ -174,23 +174,6 @@ def required_approvals(configuration: dict[str, Any], *, content_four_eyes: bool
     return 2 if configuration["four_eyes_required"] or content_four_eyes else 1
 
 
-def second_approval_required(envelope: dict[str, Any]) -> bool:
-    """#1067: the chosen configuration cannot be met by one approval.
-
-    Asked of ``configured_approval`` itself, the rule the publication gate applies, so the route never says
-    publication is next while the gate still waits for a second named reviewer (v1 ``two_others`` included).
-    """
-    effective = effective_configuration(envelope)
-    if effective["needs_choice"] or effective.get("source") != "chosen":
-        return False
-    uploader = str(envelope.get("uploader_account_id") or "")
-    for person in {uploader, *effective["reviewers"]} - {""}:
-        met, four_ok = configured_approval(effective, {person}, uploader_id=uploader)
-        if met and (four_ok or not effective["four_eyes_required"]):
-            return False
-    return True
-
-
 def policy_for_configuration(configuration: dict[str, Any], *, uploader_id: str) -> dict[str, Any] | None:
     """v2: de policy die exact dezelfde plicht uitdrukt, of None als geen policy dat kan.
 
