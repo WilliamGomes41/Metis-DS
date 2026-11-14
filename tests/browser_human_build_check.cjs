@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
   const manifest = await (await fetch(base+'/browser-manifest')).json();
   const browser = await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE, headless:true});
   let context = await browser.newContext({viewport:{width:1440,height:1000}});
-  let page = await context.newPage();
+  let page = await context.newPage();globalThis.metisProofPage=page;
   const errors = [];
   async function login() {
     page.on('pageerror', error => errors.push(error.message));
@@ -44,6 +44,8 @@ const assert = require('node:assert/strict');
   }
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('link',{name:'Verder aanwijzen'}).click();
+  // A person selects in a card that is ready; a selection made while the page still loads is no card behaviour.
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
   const core = page.locator('[data-source-block]').first();
   const points = await core.evaluate(node => {
     const text = node.firstChild, range = document.createRange();
@@ -64,7 +66,7 @@ const assert = require('node:assert/strict');
   await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
   await context.close();
   context = await browser.newContext({viewport:{width:1440,height:1000}});
-  page = await context.newPage(); await login();
+  page = await context.newPage(); globalThis.metisProofPage=page; await login();
   await page.goto(base+'/annotations?document='+sid);
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   const saved = await page.evaluate(async sid => (await fetch('/annotations/api?document='+sid)).json(), sid);
@@ -119,4 +121,4 @@ const assert = require('node:assert/strict');
     exactFields:true,pause:true,newSession:true,overview:true,seal:true,durableDispatch:true,
     humanBuild:true,reviewRoute:true,widths:[1440,390]},null,2));
   await browser.close();
-})().catch(error => {console.error(error);process.exit(1);});
+})().catch(async error => {console.error(error);await tasks.describeCard(globalThis.metisProofPage);process.exit(1);});

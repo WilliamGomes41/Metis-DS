@@ -31,6 +31,13 @@ const fs=require('node:fs');
   assert.equal(await page.evaluate(()=>getSelection().toString()),emoji,'One key must select the complete emoji grapheme');
   // #1067: the card shows the selection as the statement; saving commits it.
   assert.match(await page.locator('#annotation-simple-rows dd[data-row=core]').innerText(),new RegExp(emoji));
+  // As in CI: the answer to the save arrives after the server stored it, so the card re-renders while the next
+  // selection is already being made.
+  let slowSave=true;
+  await page.route('**/annotations/api',async route=>{
+    if(slowSave && route.request().method()==='POST') {const response=await route.fetch();await new Promise(r=>setTimeout(r,2500));await route.fulfill({response});}
+    else await route.continue();
+  });
   await page.locator('#annotation-ready:enabled').click();
   const read=p=>p.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
   await page.waitForFunction(async sid=>((await (await fetch('/annotations/api?document='+sid)).json()).entries[0]?.ranges||[]).length===1,sid);
@@ -41,6 +48,9 @@ const fs=require('node:fs');
   for(let n=0;n<3;n++) await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('Shift+ArrowLeft');
   assert.equal(await page.evaluate(()=>getSelection().toString()),emoji);
+  // The late answer re-renders the marks; the selection being made must survive it.
+  await page.waitForTimeout(3500);slowSave=false;
+  assert.equal(await page.evaluate(()=>getSelection().toString()),emoji,'A re-render must keep the selection being made');
   await page.keyboard.type('x');assert.equal(await block.textContent(),text,'The source remains read-only');
   await page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   const annotation=saved.annotation_id;

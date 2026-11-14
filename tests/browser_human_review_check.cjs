@@ -35,6 +35,8 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-simple-rows dt[data-row=evidence] button.annotation-sign').click();
   await tasks.selectText(page,page.locator('[data-source-block]').filter({hasText:'De beoordeling'}),moved);
   await row('evidence').getByText(moved,{exact:true}).waitFor();
+  // #1067: a wrong kind is corrected in the same card, like any other row.
+  await page.locator('#annotation-simple-type-select').selectOption('definition');
   await page.waitForFunction(() => document.getElementById('annotation-rebuild').textContent==='Kennisobject opnieuw bouwen' && !document.getElementById('annotation-rebuild').disabled);
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:output+'/annotation-pending-mobile.png',fullPage:true});
@@ -47,6 +49,8 @@ const assert = require('node:assert/strict');
   // While the build runs the card says so and refreshes itself; approving waits for the new version.
   for (let i=0; i<60 && await page.locator('[data-ko-rebuilding]').count(); i++) {
     assert.equal(await page.locator('[name=review_action][value=approve]').isDisabled(),true);
+    // #1067: the route marks the build and says what follows.
+    assert.equal(await page.locator('nav.ko-route').getAttribute('data-route'),'build');
     await page.waitForTimeout(1000);
     await page.goto(base+'/review?'+new URLSearchParams({document:m.document,object:m.object}));
   }
@@ -54,11 +58,14 @@ const assert = require('node:assert/strict');
   const current = await page.locator('[data-full-knowledge-passage]').getAttribute('data-reviewed-version');
   assert.notEqual(current,m.version);
   assert.equal(await page.locator('[data-full-knowledge-passage]').innerText(),'De kwetsbare huid verklaart de pijn.');
+  assert.match(await page.locator('.ko-type').innerText(),/^Definitie/,'the corrected kind reaches the new version');
   assert.match(await page.locator('body').innerText(),/Onderzoek beschrijft dit verband/);
   assert.match(await page.locator('body').innerText(),/De beoordeling betreft volwassenen/);
   assert.match(await page.locator('.ko-progress').innerText(),new RegExp(current.replaceAll('.','\\.')));
   assert.match(await page.locator('.ko-progress').innerText(),new RegExp('opnieuw gebouwd na correctie van versie '+m.version.replaceAll('.','\\.')));
   assert.equal(await page.locator('[name=evidence_not_applicable]').count(),0,'Literal linked evidence must not require an NVT workaround');
+  assert.equal(await page.locator('nav.ko-route [aria-current=step]').innerText(),'Review');
+  assert.match(await page.locator('nav.ko-route .ko-route-next').innerText(),/^Hierna: na goedkeuren /);
   await page.screenshot({path:output+'/review-corrected-desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:output+'/review-corrected-mobile.png',fullPage:true});

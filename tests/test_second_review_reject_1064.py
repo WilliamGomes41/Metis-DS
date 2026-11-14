@@ -195,3 +195,10 @@ def test_second_reviewer_rejects_from_the_review_card_and_the_first_reviewer_rea
     assert ('Afgewezen in de tweede review door ' + console._account(second)['username']
             + ': Dit is een kop, geen kennis.') in page
     assert 'De passage kan nu niet worden goedgekeurd' not in page
+    # #1067, Codex P2: the route keeps the milestone where the rejection was recorded, on every view.
+    with TestClient(application_for(console)) as client:
+        login(client, first)
+        inventory = client.get('/review', params={'document': sid, 'object': rejected, 'task': 'inventory'}).text
+    for view in (page, inventory):
+        current = re.search(r'<li aria-current="step">([^<]+)</li>', view).group(1)
+        assert current == 'Tweede review' and 'Afgewezen: dit kennisobject wordt niet gepubliceerd' in view

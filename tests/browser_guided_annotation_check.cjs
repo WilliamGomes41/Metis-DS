@@ -10,7 +10,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
  try{
   let context=await browser.newContext({viewport:{width:1440,height:1000}});
-  let page=await context.newPage();const errors=[];
+  let page=await context.newPage();const errors=[];globalThis.metisProofPage=page;
   async function login(){
    page.on('pageerror',e=>errors.push(e.message));
    await page.goto(base+'/login');await page.locator('[name=username]').fill(manifest.username);await page.locator('[name=password]').fill(manifest.password);
@@ -78,7 +78,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   assert.equal((await read()).entries[0].status,'ready');
   await page.screenshot({path:output+'/guided-ready-desktop.png',fullPage:true});
   await context.close();
-  context=await browser.newContext({viewport:{width:390,height:844}});page=await context.newPage();await login();
+  context=await browser.newContext({viewport:{width:390,height:844}});page=await context.newPage();globalThis.metisProofPage=page;await login();
   await page.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   await row('core').getByText(statement,{exact:true}).waitFor();
@@ -90,5 +90,6 @@ const tasks=require('./browser_annotation_tasks.cjs');
   await page.screenshot({path:output+'/guided-resumed-desktop.png',fullPage:true});
   assert.deepEqual(errors,[]);
   fs.writeFileSync(output+'/guided-result.json',JSON.stringify({annotation,retry:true,olderEditRefused:true,resumed:true,errors}));
- }finally{await browser.close();}
+ }catch(error){await tasks.describeCard(globalThis.metisProofPage);throw error;}
+ finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

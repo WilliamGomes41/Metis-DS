@@ -48,7 +48,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await proposal.getByText(intro,{exact:true}).waitFor();
  assert.equal(await proposal.locator('.annotation-proposal-label').innerText(),'Voorstel van Metis');
  assert.equal(await block(intro).locator('mark[data-proposal]').innerText(),intro);
- assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);
+ // Before the statement is stored there is no kind to show yet.
+ assert.equal(await page.locator('#annotation-simple-type-select').count(),0);
  await page.screenshot({path:output+'/card-statement.png',fullPage:true});
  // The proposal's '+' and '−' stay in the one column of signs, and its text lines up with the other texts.
  const edges=await page.evaluate(()=>({signs:[...document.querySelectorAll('#annotation-simple-rows .annotation-line .annotation-sign:last-child')].map(b=>Math.round(b.getBoundingClientRect().right)),
@@ -127,14 +128,14 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await plus('evidence').click();
  await page.locator('#annotation-simple-type').waitFor();
  await page.locator('#annotation-simple-type-select').selectOption('explanation');
- await page.waitForFunction(()=>document.getElementById('annotation-simple-type').hidden);
+ await page.waitForFunction(()=>document.getElementById('annotation-simple-type-select')?.value==='explanation');
  await tasks.selectText(page,block(support),support);
  await row('evidence').getByText(support,{exact:true}).waitFor();
  // A statement in two pieces: '+' on "Uitspraak" adds the next piece.
  await plus('core').click();await tasks.selectText(page,block(failing),failing.slice(14));
  await row('core').getByText(failing.slice(14),{exact:true}).waitFor();
  await page.locator('#annotation-ready:enabled').waitFor();
- assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);  // the chosen type is kept
+ assert.equal(await page.locator('#annotation-simple-type-select').inputValue(),'explanation');  // the chosen type is kept
  entry=await current();
  assert.equal(entry.status,'draft');assert.equal(entry.object_type,'explanation');
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.evidence_function]),
