@@ -598,7 +598,9 @@ def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=
     corrected = confirmable_proposed_type(raw)
     if not confirmed or not corrected or corrected == confirmed:
         return
-    for field in ('confirmed_object_type', 'confirmed_recommendation_semantics', 'confirmed_recommendation_strength'):
+    # The legacy proposed strength is no part of a fresh build either: it only described the old kind.
+    for field in ('confirmed_object_type', 'confirmed_recommendation_semantics', 'confirmed_recommendation_strength',
+                  'proposed_recommendation_strength'):
         proposed.pop(field, None)
     _drop_risk_of_the_old_kind(proposed, raw, confirmed=confirmed)
     peers, next_kinds = peers or {}, next_kinds or {}

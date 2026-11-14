@@ -15,6 +15,14 @@ def test_another_kind_drops_the_old_confirmation_and_recommendation_semantics():
     assert proposed == {}
 
 
+def test_a_legacy_proposed_strength_goes_with_the_old_kind():
+    # Codex P2: it would keep marking the corrected object as a recommendation with complex semantics.
+    proposed = confirmed('recommendation', confirmed_recommendation_strength='doen',
+                         proposed_recommendation_strength='doen')
+    _drop_confirmation_of_another_kind(proposed, {'proposed_object_type': 'definition'})
+    assert 'proposed_recommendation_strength' not in proposed
+
+
 def test_the_same_kind_keeps_every_confirmation():
     proposed = confirmed('recommendation', confirmed_recommendation_semantics={'direction': 'for'})
     before = dict(proposed)
