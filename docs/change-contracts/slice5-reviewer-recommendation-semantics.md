@@ -208,3 +208,26 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
   - Behandeling: de reviewkaart toont het nieuwe soort.
 - Karakteriseringsgoldens: alleen het versienummer van `console.css` verandert;
   vergeleken met dat nummer weggefilterd zijn alle 31 bestanden gelijk.
+
+### Besluiten William, 14 november 2026 (uit de Codex-review van #1070)
+
+1. **Relatie naar een doel dat opnieuw wordt gebouwd: de relatie vervalt en wordt opnieuw bevestigd**
+   (`revision_workflow._retarget_relations_to_rebuilt`).
+   - Een bevestigde relatie noemt de exacte versie van het doel die de reviewer zag.
+   - Krijgt dat doel in dezelfde bouw een nieuwe versie, dan:
+     - vervalt de bevestiging;
+     - wijst het voorstel naar de nieuwe versie, zodat de reviewer het opnieuw kan bevestigen.
+   - Een bronobject dat zelf niet veranderde, krijgt een nieuwe versie en gaat terug naar de review, want zijn
+     goedkeuring ging over de oude doeltekst.
+   - Een nieuwe versie kan weer andere relaties raken. Daarom herhaalt deze stap zich tot er niets meer
+     verandert, met een grens die een eindeloze lus weigert.
+   - Fail-closed. Dit gat bestond al vóór slice 5 en gold voor elke correctie van een doel.
+   - Bewijs: `tests/test_kind_correction_1067.py::test_a_relation_to_a_rebuilt_target_is_confirmed_again`, op
+     echte gebouwde objecten.
+2. **Soort wisselen in de kaart: terugzetten herstelt het voorstel van Metis, zonder extra vraag.**
+   - De kaart onthoudt de betekenisvelden per soort zolang de kaart openstaat.
+   - Bewijs: de suggestieproef (aanbeveling → toelichting → aanbeveling: de richting komt terug). Die proef faalt
+     zonder de wijziging.
+3. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+   dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
+   - Bewijs: de bindingsproef met een vertraagde controle.

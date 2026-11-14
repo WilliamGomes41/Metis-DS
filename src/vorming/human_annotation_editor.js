@@ -18,6 +18,7 @@ import {bindRange} from '/annotations/binding.mjs';
   };
   const helpOpen=new Set();
   let saving=false;
+  const kindMemory={};
   const kindBox=document.createElement('div'),kindSelect=document.createElement('select');
   {
     const label=document.createElement('label');
@@ -379,8 +380,15 @@ import {bindRange} from '/annotations/binding.mjs';
   function setSimpleType(value) {
     if(saving || finalizing || deriving) {kindSelect.value=entry.object_type || '';return;}
     if(!value || value===entry.object_type) return;
+    // Besluit William 2026-11-14: switching back restores Metis' proposal for that kind, without asking.
+    const memory=kindMemory[entry.annotation_id] ||= {};
+    if(entry.object_type) memory[entry.object_type]={field_evidence:clone(entry.field_evidence || null),
+      recommendation_semantics:clone(entry.recommendation_semantics || null)};
     delete entry.disposition;entry.object_type=value;el('type').value=value;
-    resetFields();change();renderFields();renderSimple();runCheck();
+    if(memory[value]) {
+      entry.field_evidence=clone(memory[value].field_evidence);entry.recommendation_semantics=clone(memory[value].recommendation_semantics);
+    } else resetFields();
+    change();renderFields();renderSimple();runCheck();
   }
   document.addEventListener('click',event=>{
     const mark=event.target.closest?.('mark[data-annotation]');

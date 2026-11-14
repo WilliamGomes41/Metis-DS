@@ -426,10 +426,72 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
         raise ValueError('annotation_replacement_required')
     if len({row['object_id'] for row in result}) != len(result):
         raise ValueError('annotation_identity_conflict')
+    _retarget_relations_to_rebuilt(result, {row['object_id']: row for row in previous}, unchanged,
+                                   snapshot_id=snapshot_id, actor=basis['actor_id'])
     result = apply_admission_gate(result, klasse=context['class'], fragments=fragments,
         document_version=context['version'], source_hash=context['sha256'])
     return [deepcopy(unchanged[row['object_id']]) if row['object_id'] in unchanged else row
             for row in apply_passage_register(result)]
+
+def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapshot_id, actor):
+    """#1067, besluit William 2026-11-14: a relation to a target rebuilt in this build is confirmed again.
+
+    A confirmed relation names the exact target version its reviewer saw. When that target gets a new version,
+    the confirmation lapses; the proposal is pointed at the new version so the reviewer can confirm it again.
+    A source that did not change itself becomes a new version too, because its approval covered the old target
+    text. That can move other targets, so this repeats until nothing changes. Edits ``result`` in place.
+    """
+    from src.knowledge_relations_v1 import build_knowledge_relation, relation_sort_key
+    for _ in range(len(result) + 1):
+        current = {row['object_id']: str(row['object_version']) for row in result}
+        rebuilt = {object_id for object_id, version in current.items()
+                   if object_id in previous_by_id and str(previous_by_id[object_id]['object_version']) != version}
+
+        def stale(relation):
+            target = relation.get('target_object_id')
+            return target in rebuilt and str(relation.get('target_object_version')) != current[target]
+        moved = False
+        for index, row in enumerate(result):
+            confirmed = row.get('confirmed_knowledge_relations') or []
+            proposed = row.get('proposed_knowledge_relations') or []
+            if not any(stale(relation) for relation in [*confirmed, *proposed]):
+                continue
+            new, remap = deepcopy(row), {}
+            if 'confirmed_knowledge_relations' in new:
+                new['confirmed_knowledge_relations'] = [r for r in confirmed if not stale(r)]
+            if 'proposed_knowledge_relations' in new:
+                kept = []
+                for relation in proposed:
+                    if stale(relation):
+                        moved_relation = build_knowledge_relation(
+                            source_object_id=row['object_id'], source_object_version=str(row['object_version']),
+                            relation_type=relation['relation_type'], target_object_id=relation['target_object_id'],
+                            target_object_version=current[relation['target_object_id']])
+                        remap[relation['relation_id']] = moved_relation['relation_id']
+                        relation = moved_relation
+                    kept.append(relation)
+                new['proposed_knowledge_relations'] = sorted(kept, key=relation_sort_key)
+            metadata = new.get('metadata') or {}
+            evidence = metadata.get('knowledge_relation_evidence')
+            if isinstance(evidence, dict):
+                for item in evidence.get('relations') or []:
+                    if item.get('relation_id') in remap:
+                        item['relation_id'] = remap[item['relation_id']]
+            review = metadata.get('knowledge_relation_review')
+            if isinstance(review, dict) and 'confirmed_relation_ids' in review:
+                review['confirmed_relation_ids'] = [r['relation_id'] for r in new.get('confirmed_knowledge_relations') or []]
+            previous = previous_by_id.get(row['object_id'])
+            if previous is not None and str(previous['object_version']) == str(row['object_version']):
+                unchanged.pop(row['object_id'], None)
+                new = revise_object(previous, new, snapshot_id=snapshot_id, actor=actor,
+                                    reason='relation target rebuilt')
+            stamp_canonical_hashes(new)
+            result[index] = new
+            moved = True
+        if not moved:
+            return
+    raise ValueError('annotation_relation_retarget_unstable')
+
 
 def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=None):
     """#1067: a kind corrected in the annotation card is not overridden by the old version's confirmation.

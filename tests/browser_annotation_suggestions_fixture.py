@@ -18,6 +18,8 @@ def controlled_transport(url, headers, payload, limits):
         raw['fields']['supported_object'] = {'quote': None, 'missing_reason': 'not_stated'}
         raw['object_type'] = 'explanation'
         return provider(raw)
+    if 'Controleer de huid' in text:
+        return provider(proposal(subject_span='de huid', predicate_span='Controleer', type_evidence_spans=text))
     if 'De huid is droog' in text:
         raw = proposal(subject_span='De huid', predicate_span='is', defined_term='De huid',
                        definiens_span='droog en de huid is rood.', type_evidence_spans=text)
