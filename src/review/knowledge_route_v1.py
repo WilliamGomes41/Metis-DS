@@ -76,10 +76,16 @@ def review_route(state: str | None, *, stage_second: bool, required_second: bool
                           'Tot dan kan deze versie niet worden goedgekeurd.', second_review=second)
     if state == GEPUBLICEERD:
         return route_html('publish', 'Dit kennisobject is gepubliceerd.', second_review=second)
-    if state in {AFGEWEZEN, VERVANGEN, INGETROKKEN}:
+    if state == AFGEWEZEN:
         return route_html('second_review' if stage_second and second else 'review',
                           'Afgewezen: dit kennisobject wordt niet gepubliceerd. '
                           'Een correctie in de kaart maakt een nieuwe versie.', second_review=second)
+    if state == VERVANGEN:
+        return route_html('publish', 'Vervangen: een nieuwere versie van dit kennisobject volgt de route.',
+                          second_review=second)
+    if state == INGETROKKEN:
+        return route_html('publish', 'Ingetrokken: dit kennisobject wordt niet meer uitgeleverd.',
+                          second_review=second)
     if state == GOEDGEKEURD:
         return route_html('publish', 'Hierna: het kennisobject wordt gepubliceerd met het document.',
                           second_review=second)

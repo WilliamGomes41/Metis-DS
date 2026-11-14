@@ -3,7 +3,8 @@ import re
 
 import pytest
 
-from src.review.knowledge_object_state_v1 import AFGEWEZEN, GEPUBLICEERD, GOEDGEKEURD, IN_REVIEW, TWEEDE_REVIEW
+from src.review.knowledge_object_state_v1 import (AFGEWEZEN, GEPUBLICEERD, GOEDGEKEURD, IN_REVIEW, INGETROKKEN,
+                                                  TWEEDE_REVIEW, VERVANGEN)
 from src.review.knowledge_route_v1 import annotation_route, review_route, route_html
 
 
@@ -52,6 +53,8 @@ def test_annotation_pages_say_what_follows(kwargs, expected_current, expected_ne
     (GOEDGEKEURD, dict(stage_second=False, required_second=False), 'Publicatie', 'gepubliceerd met het document'),
     (GEPUBLICEERD, dict(stage_second=False, required_second=False), 'Publicatie', 'is gepubliceerd'),
     (AFGEWEZEN, dict(stage_second=False, required_second=False), 'Review', 'wordt niet gepubliceerd'),
+    (VERVANGEN, dict(stage_second=False, required_second=False), 'Publicatie', 'nieuwere versie'),
+    (INGETROKKEN, dict(stage_second=False, required_second=False), 'Publicatie', 'niet meer uitgeleverd'),
 ])
 def test_review_card_says_what_follows_from_real_state(state, kwargs, expected_current, expected_next):
     html = review_route(state, **kwargs)

@@ -92,3 +92,48 @@ def test_a_relation_to_a_rebuilt_target_is_confirmed_again(production_console, t
     again = deepcopy(result)
     _retarget_relations_to_rebuilt(again, {a['object_id']: a, b['object_id']: b}, {}, snapshot_id=sid, actor=actor)
     assert again == result
+
+
+def test_an_approved_source_with_only_a_confirmed_relation_gets_it_proposed_again(production_console, tmp_path):
+    """Codex P1: approval leaves only the confirmed relation (and its legacy mirror). It must not disappear."""
+    from copy import deepcopy
+    from src.knowledge_relations_v1 import build_knowledge_relation, knowledge_relation_errors
+    from src.review.revision_workflow import _retarget_relations_to_rebuilt, current_revisions, revise_object
+    from src.vorming.knowledge_relation_proposal_v1 import PROPOSABLE_RELATION_TYPES
+    from tests.test_second_review_reject_1064 import four_eyes
+    console, actor, sid, _, _, _, first_id, second_id = four_eyes(production_console, tmp_path)
+    rows = {o['object_id']: o for o in current_revisions(console.snapshot_objects(sid, include_blocked=True), snapshot_id=sid)}
+    a, b = deepcopy(rows[first_id]), rows[second_id]
+    kind = sorted(PROPOSABLE_RELATION_TYPES)[0]
+    relation = build_knowledge_relation(source_object_id=a['object_id'], source_object_version=str(a['object_version']),
+                                        relation_type=kind, target_object_id=b['object_id'],
+                                        target_object_version=str(b['object_version']))
+    a.pop('proposed_knowledge_relations', None)
+    a.update(confirmed_knowledge_relations=[relation], relations=[], confirmed_relations=[{
+        'relation_type': kind, 'target_object_id': b['object_id'],
+        'target_object_version': str(b['object_version']), 'confirmed': True}])
+    assert knowledge_relation_errors(a) == []
+    corrected = deepcopy(b)
+    corrected['proposed_object_type'] = 'definition' if b.get('proposed_object_type') != 'definition' else 'explanation'
+    b_new = revise_object(b, corrected, snapshot_id=sid, actor=actor, reason='test correction')
+    result = [deepcopy(a), b_new]
+    _retarget_relations_to_rebuilt(result, {a['object_id']: a, b['object_id']: b}, {a['object_id']: a},
+                                   snapshot_id=sid, actor=actor)
+    source = result[0]
+    assert source['confirmed_knowledge_relations'] == [] and source['confirmed_relations'] == []
+    assert [(r['relation_type'], r['target_object_version']) for r in source['proposed_knowledge_relations']] == [
+        (kind, str(b_new['object_version']))], 'the lapsed confirmation is offered again'
+    assert knowledge_relation_errors(source) == []
+
+
+def test_a_proposal_the_corrected_kind_cannot_carry_is_dropped():
+    """Codex P2: an unconfirmed proposal is filtered like a confirmed relation, so admission accepts the object."""
+    from src.vorming.knowledge_relation_proposal_v1 import PROPOSABLE_RELATION_TYPES, relation_endpoint_compatible
+    peers = {'peer': {'confirmed_object_type': 'recommendation'}}
+    dropped = [kind for kind in sorted(PROPOSABLE_RELATION_TYPES)
+               if relation_endpoint_compatible(kind, source_type='recommendation', target_type='recommendation')
+               and not relation_endpoint_compatible(kind, source_type='definition', target_type='recommendation')]
+    proposed = confirmed('recommendation', proposed_knowledge_relations=[
+        {'relation_type': dropped[0], 'target_object_id': 'peer'}])
+    _drop_confirmation_of_another_kind(proposed, {'proposed_object_type': 'definition'}, peers=peers)
+    assert proposed['proposed_knowledge_relations'] == []

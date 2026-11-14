@@ -433,13 +433,24 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
     return [deepcopy(unchanged[row['object_id']]) if row['object_id'] in unchanged else row
             for row in apply_passage_register(result)]
 
+def _legacy_mirror(rows, *, keep, moved=(), confirmed):
+    """Keep a legacy relation mirror equal to its new-format authority (``legacy_relation_mirror_matches``)."""
+    kept = [row for row in rows if keep(row)]
+    for relation in moved:
+        kept.append({'relation_type': relation['relation_type'], 'target_object_id': relation['target_object_id'],
+                     'target_object_version': relation['target_object_version'], 'confirmed': confirmed})
+    return kept
+
+
 def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapshot_id, actor):
     """#1067, besluit William 2026-11-14: a relation to a target rebuilt in this build is confirmed again.
 
     A confirmed relation names the exact target version its reviewer saw. When that target gets a new version,
-    the confirmation lapses; the proposal is pointed at the new version so the reviewer can confirm it again.
-    A source that did not change itself becomes a new version too, because its approval covered the old target
-    text. That can move other targets, so this repeats until nothing changes. Edits ``result`` in place.
+    the confirmation lapses and the relation is proposed again, pointing at the new version, so the reviewer can
+    confirm it. An approved source usually holds only the confirmed relation; that becomes the proposal. A source
+    that did not change itself becomes a new version too, because its approval covered the old target text. That
+    can move other targets, so this repeats until nothing changes. Legacy mirrors follow the authority. Edits
+    ``result`` in place.
     """
     from src.knowledge_relations_v1 import build_knowledge_relation, relation_sort_key
     for _ in range(len(result) + 1):
@@ -457,20 +468,39 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
             if not any(stale(relation) for relation in [*confirmed, *proposed]):
                 continue
             new, remap = deepcopy(row), {}
+
+            def repropose(relation):
+                return build_knowledge_relation(
+                    source_object_id=row['object_id'], source_object_version=str(row['object_version']),
+                    relation_type=relation['relation_type'], target_object_id=relation['target_object_id'],
+                    target_object_version=current[relation['target_object_id']])
+            proposals = {}
+            for relation in proposed:
+                if stale(relation):
+                    fresh = repropose(relation)
+                    remap[relation['relation_id']] = fresh['relation_id']
+                    relation = fresh
+                proposals[relation['relation_id']] = relation
+            # A lapsed confirmation is offered again as a proposal for the new target version.
+            lapsed = [relation for relation in confirmed if stale(relation)]
+            for relation in lapsed:
+                fresh = repropose(relation)
+                remap.setdefault(relation['relation_id'], fresh['relation_id'])
+                proposals.setdefault(fresh['relation_id'], fresh)
             if 'confirmed_knowledge_relations' in new:
                 new['confirmed_knowledge_relations'] = [r for r in confirmed if not stale(r)]
-            if 'proposed_knowledge_relations' in new:
-                kept = []
-                for relation in proposed:
-                    if stale(relation):
-                        moved_relation = build_knowledge_relation(
-                            source_object_id=row['object_id'], source_object_version=str(row['object_version']),
-                            relation_type=relation['relation_type'], target_object_id=relation['target_object_id'],
-                            target_object_version=current[relation['target_object_id']])
-                        remap[relation['relation_id']] = moved_relation['relation_id']
-                        relation = moved_relation
-                    kept.append(relation)
-                new['proposed_knowledge_relations'] = sorted(kept, key=relation_sort_key)
+            new['proposed_knowledge_relations'] = sorted(proposals.values(), key=relation_sort_key)
+            fresh_rows = [r for r in new['proposed_knowledge_relations'] if r['relation_id'] in remap.values()]
+            if new.get('confirmed_relations'):
+                new['confirmed_relations'] = _legacy_mirror(new['confirmed_relations'], confirmed=True,
+                    keep=lambda r: not stale(r))
+            if new.get('relations'):
+                new['relations'] = _legacy_mirror(new['relations'], confirmed=False, moved=[
+                    r for r in fresh_rows if not any(
+                        (old.get('relation_type'), old.get('target_object_id'), str(old.get('target_object_version')))
+                        == (r['relation_type'], r['target_object_id'], r['target_object_version'])
+                        for old in new['relations'] if not stale(old))],
+                    keep=lambda r: not stale(r))
             metadata = new.get('metadata') or {}
             evidence = metadata.get('knowledge_relation_evidence')
             if isinstance(evidence, dict):
@@ -504,6 +534,7 @@ def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=
     """
     from src.review.review_cockpit_v1 import confirmable_proposed_type
     from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
+    from src.knowledge_relations_v1 import serving_relation_type
     confirmed = proposed.get('confirmed_object_type')
     corrected = confirmable_proposed_type(raw)
     if not confirmed or not corrected or corrected == confirmed:
@@ -518,9 +549,15 @@ def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=
         target = str(next_kinds.get(relation.get('target_object_id')) or peer.get('confirmed_object_type')
                      or peer.get('proposed_object_type') or peer.get('object_type') or '')
         return relation_endpoint_compatible(relation.get('relation_type'), source_type=corrected, target_type=target)
-    if 'confirmed_knowledge_relations' in proposed:
-        proposed['confirmed_knowledge_relations'] = [
-            relation for relation in proposed['confirmed_knowledge_relations'] if fits(relation)]
+    # Proposals the corrected kind cannot carry go too; otherwise admission refuses the corrected object.
+    for field, legacy in (('confirmed_knowledge_relations', 'confirmed_relations'),
+                          ('proposed_knowledge_relations', 'relations')):
+        if field in proposed:
+            proposed[field] = [relation for relation in proposed[field] if fits(relation)]
+        if proposed.get(legacy):
+            # Legacy rows may carry an older relation name; judge them by their served name, like the mirror check.
+            proposed[legacy] = [row for row in proposed[legacy]
+                                if fits({**row, 'relation_type': serving_relation_type(row.get('relation_type'))})]
 
 
 def _rebind_relations(result, previous, staged_version):
