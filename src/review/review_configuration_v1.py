@@ -175,16 +175,28 @@ def required_approvals(configuration: dict[str, Any], *, content_four_eyes: bool
 
 
 def policy_for_configuration(configuration: dict[str, Any], *, uploader_id: str) -> dict[str, Any] | None:
-    """v2: de policy die exact dezelfde plicht uitdrukt, of None als geen policy dat kan.
+    """De policy die exact dezelfde plicht uitdrukt als ``configured_approval``, of None als geen policy dat kan.
 
     Een policy vereist iedere verplichte reviewer. Daarom past ze alleen wanneer alle
     aangewezen personen ook verplicht zijn; twee aangewezen personen zonder vier ogen
     kan een policy niet uitdrukken.
+
+    #1072 (besluit William 2026-11-14, optie A): onder v1 vraagt de publicatiepoort bij
+    ``two_others`` altijd beide benoemde reviewers (B10), en bij ``one_other`` met vier ogen
+    de reviewer en de uploader. Die plicht wordt een policy, zodat de reviewplicht de tweede
+    persoon ook vraagt. Een v1-keuze met één goedkeuring blijft zonder policy, zoals voorheen.
     """
     from src.review.review_policy_v1 import CONTRACT as POLICY_CONTRACT
     option, reviewers = configuration["option"], list(configuration["reviewers"])
     if configuration["contract"] != CONTRACT_V2:
-        return None
+        if option == "two_others":
+            primary, required = reviewers[0], reviewers[1:]
+        elif option == "one_other" and configuration["four_eyes_required"]:
+            primary, required = reviewers[0], [uploader_id]
+        else:
+            return None
+        return {"contract": POLICY_CONTRACT, "revision": 1, "primary": primary,
+                "assignments": [{"reviewer_id": r, "participation": "required"} for r in required]}
     if option == "uploader_sole":
         primary, required = uploader_id, []
     elif option == "one_other":
