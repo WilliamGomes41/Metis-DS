@@ -174,6 +174,35 @@ def test_a_relation_to_a_rebuilt_target_is_confirmed_again(production_console, t
     assert again == result
 
 
+def test_relations_in_a_cycle_are_retargeted_once(production_console, tmp_path):
+    """Codex P1: A and B relate to each other and B is rebuilt. A becomes one new version, every relation points at
+    the final versions, and the build never ping-pongs into 'annotation_relation_retarget_unstable'."""
+    from copy import deepcopy
+    from src.knowledge_relations_v1 import build_knowledge_relation
+    from src.review.revision_workflow import _retarget_relations_to_rebuilt
+    sid, actor, a, b = _built_pair(production_console, tmp_path)
+
+    def relate(source, target):
+        return build_knowledge_relation(source_object_id=source['object_id'],
+            source_object_version=str(source['object_version']), relation_type=_relation_kind(source, target),
+            target_object_id=target['object_id'], target_object_version=str(target['object_version']))
+    a, b = deepcopy(a), deepcopy(b)
+    a['proposed_knowledge_relations'] = [relate(a, b)]
+    b['proposed_knowledge_relations'] = [relate(b, a)]
+    b_new = _rebuilt(b, sid, actor)
+    result, unchanged = [deepcopy(a), b_new], {a['object_id']: a}
+    _retarget_relations_to_rebuilt(result, {a['object_id']: a, b['object_id']: b}, unchanged,
+                                   snapshot_id=sid, actor=actor)
+    a_new, b_final = result
+    assert str(a_new['object_version']) != str(a['object_version'])
+    assert a_new['metadata']['revision_lineage']['previous_object_version'] == str(a['object_version']), 'one step'
+    assert str(b_final['object_version']) == str(b_new['object_version']), 'B is not revised again'
+    [to_b] = a_new['proposed_knowledge_relations']
+    [to_a] = b_final['proposed_knowledge_relations']
+    assert to_b['target_object_version'] == str(b_final['object_version'])
+    assert to_a['target_object_version'] == str(a_new['object_version'])
+
+
 def test_an_approved_source_with_only_a_confirmed_relation_gets_it_proposed_again(production_console, tmp_path):
     """Codex P1: approval leaves only the confirmed relation (and its legacy mirror). It must not disappear."""
     from copy import deepcopy
