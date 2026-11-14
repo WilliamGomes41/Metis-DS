@@ -255,7 +255,14 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
 8. **Een relatiereview blijft bij de versie die is beoordeeld** (Codex P2). Vervalt een bevestiging omdat het doel
    opnieuw is gebouwd, dan krijgt de nieuwe versie geen herschreven kopie van de oude ontvangst; ze krijgt een eigen
    ontvangst bij haar review. Bewijs: `tests/test_relation_rebuild_e2e_1067.py`; faalt zonder de wijziging.
-9. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+9. **Risico dat alleen bij het oude soort hoorde, vervalt met die bevestiging** (Codex P2). Een bevestigde
+   uitzondering markeert een hoog risico met tweede review. Krijgt het object een ander soort, dan vervalt dat
+   uitzonderingsrisico; risico uit de inhoud zelf blijft, en een hoog risiconiveau blijft alleen als de bouw het zelf
+   meldt. Bewijs: de risicotests in `tests/test_kind_correction_1067.py`; falen zonder de wijziging.
+10. **Het soortgeheugen hoort bij de exacte uitspraak** (Codex P2). Terugzetten herstelt alleen het voorstel voor
+   dezelfde uitspraak; verandert de uitspraak, dan komt er niets van de oude terug. Bewijs: de suggestieproef breidt
+   de uitspraak uit en wisselt terug; faalt zonder de wijziging.
+11. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 

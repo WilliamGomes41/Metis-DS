@@ -565,6 +565,23 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
     raise ValueError('annotation_relation_retarget_unstable')
 
 
+def _drop_risk_of_the_old_kind(proposed, raw, *, confirmed):
+    """Risk that only the confirmed kind carried goes with that confirmation (fail-closed for the rest).
+
+    ``mark_four_eyes_on_object`` marks a confirmed exception as a high-risk field with a second review. Other risk
+    fields come from the content and stay; a high risk level stays only when the fresh build itself reports it.
+    The second review follows from what remains; confirming the corrected kind marks it again.
+    """
+    from src.review.four_eyes_v1 import requires_four_eyes
+    risk = proposed.get('risk')
+    if confirmed != 'exception' or not isinstance(risk, dict):
+        return
+    risk['risk_fields'] = [field for field in risk.get('risk_fields') or [] if field != 'exception']
+    if risk.get('risk_level') == 'high' and (raw.get('risk') or {}).get('risk_level') != 'high':
+        risk['risk_level'] = 'standard'
+    risk['requires_second_review'] = requires_four_eyes(proposed)
+
+
 def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=None):
     """#1067: a kind corrected in the annotation card is not overridden by the old version's confirmation.
 
@@ -583,6 +600,7 @@ def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=
         return
     for field in ('confirmed_object_type', 'confirmed_recommendation_semantics', 'confirmed_recommendation_strength'):
         proposed.pop(field, None)
+    _drop_risk_of_the_old_kind(proposed, raw, confirmed=confirmed)
     peers, next_kinds = peers or {}, next_kinds or {}
 
     def fits(relation):

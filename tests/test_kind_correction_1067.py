@@ -1,4 +1,6 @@
 """#1067 part C: a kind corrected in the annotation card reaches the rebuilt version (fail-closed)."""
+import pytest
+
 from src.review.revision_workflow import _drop_confirmation_of_another_kind
 
 
@@ -62,6 +64,29 @@ def test_the_evidence_of_a_dropped_relation_goes_with_it():
     # The dropped relation's evidence goes, matched by endpoint even though it names the proposal's id.
     assert [r['relation_id'] for r in proposed['metadata']['knowledge_relation_evidence']['relations']] == [
         'p-stays', 'other']
+
+
+@pytest.mark.parametrize('fields,level,second', [
+    # Codex P2: risk that only the confirmed exception carried goes with that confirmation.
+    (['exception'], 'standard', False),
+    # Risk from the content itself stays.
+    (['exception', 'dosage'], 'standard', True),
+])
+def test_risk_of_the_old_kind_goes_with_its_confirmation(fields, level, second):
+    proposed = confirmed('exception', risk={'risk_fields': list(fields), 'risk_level': 'high',
+                                            'requires_second_review': True})
+    _drop_confirmation_of_another_kind(proposed, {'proposed_object_type': 'definition'})
+    assert proposed['risk']['risk_fields'] == [f for f in fields if f != 'exception']
+    assert proposed['risk']['risk_level'] == level
+    assert proposed['risk']['requires_second_review'] is second
+
+
+def test_high_risk_the_build_itself_reports_stays():
+    proposed = confirmed('exception', risk={'risk_fields': ['exception'], 'risk_level': 'high',
+                                            'requires_second_review': True})
+    _drop_confirmation_of_another_kind(proposed, {'proposed_object_type': 'definition',
+                                                  'risk': {'risk_level': 'high'}})
+    assert proposed['risk']['risk_level'] == 'high' and proposed['risk']['requires_second_review'] is True
 
 
 def test_a_target_corrected_in_the_same_build_is_judged_by_its_new_kind():
