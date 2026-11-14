@@ -191,6 +191,8 @@ HUMAN_SIGNAL_CODES = frozenset({
     *(code for _kind, _field, code, _independent in _TARGET_EXTRAS),
     "annotation_relation_target_missing",
     "incomplete_sentence", "no_independent_claim", "recommendation_core_incomplete",
+    # #1067: the reviewer sets direction and strength; a missing proposal only informs.
+    "recommendation_semantics_open",
 })
 # type_contract_incomplete also accompanies a non-literal field; then it blocks.
 _FIDELITY_CODES = frozenset({"span_not_in_source", "source_fidelity_failure"})
@@ -553,6 +555,8 @@ def _recommendation_semantics_codes(
         return []
 
     semantics = row.get("proposed_recommendation_semantics")
+    if (not isinstance(semantics, dict) or not semantics) and row.get("semantic_selection_origin") == "human_annotation":
+        return ["recommendation_semantics_open"]
     if not isinstance(semantics, dict) or not semantics:
         return [
             "recommendation_direction_missing",
