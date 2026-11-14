@@ -272,7 +272,7 @@ def test_strict_check_is_bounded_and_does_not_treat_minima_as_maxima(runtime_rol
     assert 'workflow.accounts' in result['unassessed_relations']
 
 
-@pytest.mark.parametrize('source', ['direct', 'public', 'inherited', 'set-role'])
+@pytest.mark.parametrize('source', ['direct', 'column', 'public', 'inherited', 'set-role'])
 def test_strict_check_rejects_forbidden_update_from_every_reachable_role(runtime_role, source):
     con, role = runtime_role
     _grant_expected(con, role)
@@ -287,7 +287,8 @@ def test_strict_check_rejects_forbidden_update_from_every_reachable_role(runtime
                 con.execute(f'GRANT "{group}" TO "{role}"')
         else:
             target = 'PUBLIC' if source == 'public' else f'"{role}"'
-            con.execute(f'GRANT UPDATE ON workflow.publication_refusals TO {target}')
+            privilege = 'UPDATE(actor)' if source == 'column' else 'UPDATE'
+            con.execute(f'GRANT {privilege} ON workflow.publication_refusals TO {target}')
         assert _observe(con, role)['status'] == 'PASS'
         result = _observe(con, role, strict=True)
         assert result['status'] == 'BLOCKED'
@@ -295,8 +296,9 @@ def test_strict_check_rejects_forbidden_update_from_every_reachable_role(runtime
                    for f in result['excess_privileges'])
         # Inspection must not remediate a grant, even when it is excessive.
         target_role = group if source == 'set-role' else role
-        assert con.execute("SELECT has_table_privilege(%s,'workflow.publication_refusals','UPDATE')",
-                           (target_role,)).fetchone()[0]
+        assert con.execute("SELECT has_table_privilege(%s,'workflow.publication_refusals','UPDATE') OR "
+                           "has_any_column_privilege(%s,'workflow.publication_refusals','UPDATE')",
+                           (target_role, target_role)).fetchone()[0]
     finally:
         con.execute('REVOKE UPDATE ON workflow.publication_refusals FROM PUBLIC')
         if source in {'inherited', 'set-role'}:
@@ -304,7 +306,7 @@ def test_strict_check_rejects_forbidden_update_from_every_reachable_role(runtime
             con.execute(f'DROP ROLE "{group}"')
 
 
-@pytest.mark.parametrize('attribute', ['SUPERUSER', 'BYPASSRLS', 'CREATEROLE'])
+@pytest.mark.parametrize('attribute', ['SUPERUSER', 'BYPASSRLS', 'CREATEROLE', 'CREATEDB', 'REPLICATION'])
 def test_strict_check_rejects_unsafe_runtime_attributes(runtime_role, attribute):
     con, role = runtime_role
     _grant_expected(con, role)
@@ -338,4 +340,19 @@ def test_strict_check_reports_reachable_table_ownership(runtime_role):
     finally:
         con.execute(f'ALTER TABLE workflow.accounts OWNER TO CURRENT_USER')
         con.execute(f'DROP OWNED BY "{group}"')
+        con.execute(f'DROP ROLE "{group}"')
+
+
+def test_strict_check_rejects_membership_admin_even_without_inherit_or_set(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    group = f'metis_admin_group_{uuid.uuid4().hex[:8]}'
+    con.execute(f'CREATE ROLE "{group}" NOLOGIN')
+    try:
+        con.execute(f'GRANT "{group}" TO "{role}" WITH ADMIN TRUE, INHERIT FALSE, SET FALSE')
+        result = _observe(con, role, strict=True)
+        assert result['status'] == 'BLOCKED'
+        assert any(f['attribute'] == 'ROLE_ADMIN' and f['target_role'] == group
+                   for f in result['unsafe_role_attributes'])
+    finally:
         con.execute(f'DROP ROLE "{group}"')

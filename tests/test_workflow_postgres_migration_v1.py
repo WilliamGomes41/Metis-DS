@@ -57,6 +57,8 @@ class FakeConnection:
         return nullcontext()
 
     def execute(self, query: str, params=None):
+        if query == 'SHOW lock_timeout':
+            return Rows([{'lock_timeout': '0'}])
         if query.startswith("SELECT set_config"):
             return Rows([{"set_config": params[0]}])
         if query.startswith("SELECT current_database"):
@@ -262,3 +264,73 @@ def test_default_lock_timeout_is_local_to_the_migration(complete_postgres, tmp_p
         apply_migrations(con, paths=(path,), expected_digest=migration_digest((path,)))
         assert con.execute('SELECT value FROM workflow.design_timeout').fetchone()['value'] == '5s'
         assert con.execute('SHOW lock_timeout').fetchone()['lock_timeout'] == before
+
+
+@pytest.mark.parametrize('arguments', [
+    ['verify', '--strict-runtime-privileges'],
+    ['apply', '--strict-runtime-privileges', '--runtime-role', 'runtime'],
+    ['plan', '--lock-timeout-ms', '0'],
+])
+def test_cli_rejects_invalid_hardening_options_before_connect(monkeypatch, arguments):
+    import sys
+    from scripts import apply_workflow_postgres_migrations as cli
+
+    attempted = []
+    monkeypatch.setattr(cli, 'connect_entra', lambda **kwargs: attempted.append(kwargs))
+    monkeypatch.setattr(sys, 'argv', ['apply_workflow_postgres_migrations.py', *arguments,
+                                     '--host', 'example', '--database', 'metis', '--user', 'admin'])
+    with pytest.raises(SystemExit) as error:
+        cli.main()
+    assert error.value.code == 2
+    assert attempted == []
+
+
+def test_cli_forwards_strict_policy_without_mutating_privileges(monkeypatch, capsys):
+    import sys
+    from scripts import apply_workflow_postgres_migrations as cli
+
+    class Connection(FakeConnection):
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+
+    captured = {}
+    def observe(con, role, **kwargs):
+        captured.update(role=role, **kwargs)
+        return {'status': 'BLOCKED', 'excess_privileges': ['forbidden-update']}
+    monkeypatch.setattr(cli, 'connect_entra', lambda **kwargs: Connection())
+    monkeypatch.setattr(cli, 'observe_runtime_privileges', observe)
+    monkeypatch.setattr(sys, 'argv', ['apply_workflow_postgres_migrations.py', 'verify',
+                                     '--host', 'example', '--database', 'metis', '--user', 'admin',
+                                     '--runtime-role', 'runtime', '--strict-runtime-privileges'])
+    assert cli.main() == 2
+    assert captured['strict'] is True and captured['role'] == 'runtime'
+    import json
+    report = json.loads(capsys.readouterr().out)
+    assert report['status'] == 'BLOCKED' and report['mutation'] == 'none'
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_timeout_is_restored_inside_a_caller_owned_transaction(complete_postgres, tmp_path, fail):
+    import psycopg
+    from psycopg.rows import dict_row
+
+    path = tmp_path/'nested.sql'
+    statement = "CREATE TABLE workflow.design_nested AS SELECT current_setting('lock_timeout') AS value;"
+    if fail:
+        statement += ' SELECT 1 / 0;'
+    path.write_text(statement)
+    with psycopg.connect(complete_postgres.dsn, row_factory=dict_row) as con:
+        con.execute("SET LOCAL lock_timeout='2s'")
+        if fail:
+            with pytest.raises(WorkflowMigrationError, match='workflow_migration_failed:nested.sql'):
+                apply_migrations(con, paths=(path,), expected_digest=migration_digest((path,)), lock_timeout_ms=100)
+            assert con.execute("SELECT to_regclass('workflow.design_nested') AS name").fetchone()['name'] is None
+        else:
+            apply_migrations(con, paths=(path,), expected_digest=migration_digest((path,)), lock_timeout_ms=100)
+            assert con.execute('SELECT value FROM workflow.design_nested').fetchone()['value'] == '100ms'
+        assert con.execute('SHOW lock_timeout').fetchone()['lock_timeout'] == '2s'
+        # The migration must not commit or discard the caller's transaction.
+        con.rollback()
+        assert con.execute("SELECT to_regclass('workflow.design_nested') AS name").fetchone()['name'] is None
