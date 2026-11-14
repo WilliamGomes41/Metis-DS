@@ -238,7 +238,11 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
    `second_approval_required` vraagt `configured_approval` of één goedkeuring de gekozen configuratie vervult. Zo
    staat ‘Tweede review’ er ook bij v1 `two_others` zonder vierogenvink, waar de publicatie op beide benoemde
    reviewers wacht. Bewijs: de tabeltest per configuratie in `tests/test_knowledge_route_1067.py`.
-5. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+5. **Afgewezen in de tweede review blijft op ‘Tweede review’** (Codex P2). De routeregel leest de fase van de
+   afwijzing uit het reviewlogboek, net als de afwijzingsmelding, in de inventaris en op de reviewkaart. Bewijs:
+   `tests/test_second_review_reject_1064.py::test_second_reviewer_rejects_from_the_review_card_and_the_first_reviewer_reads_why`;
+   faalt zonder de wijziging.
+6. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 

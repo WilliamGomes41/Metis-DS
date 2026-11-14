@@ -204,13 +204,25 @@ def _continuation_proposal(obj, snapshot_id, revision, task):
         '<a href="' + escape(owner, quote=True) + '">Bronaanvulling herstellen in Vorming</a></aside>')
 
 
-def _rejection_notice(console, obj):
-    """#1064: who rejected this exact version, at which review, and why. Read from the review ledger."""
+def _rejection_event(console, obj):
+    """The ledger event that rejected this exact version, if any."""
+    if (obj.get('governance') or {}).get('validation_status') != 'rejected':
+        return None
     from src.review.review_ledger import read_events
     version = str(obj.get('object_version') or '')
-    event = next((row for row in reversed(read_events(console._ledger_path))
-                  if row.get('object_id') == obj.get('object_id') and str(row.get('object_version') or '') == version
-                  and str(row.get('event_type') or '').endswith('_review_reject')), None)
+    return next((row for row in reversed(read_events(console._ledger_path))
+                 if row.get('object_id') == obj.get('object_id') and str(row.get('object_version') or '') == version
+                 and str(row.get('event_type') or '').endswith('_review_reject')), None)
+
+
+def _rejected_in_second_review(console, obj):
+    """#1067: the route keeps the milestone where the rejection was recorded."""
+    return ((_rejection_event(console, obj) or {}).get('event_type')) == 'second_review_reject'
+
+
+def _rejection_notice(console, obj):
+    """#1064: who rejected this exact version, at which review, and why. Read from the review ledger."""
+    event = _rejection_event(console, obj)
     if event is None:
         return '<p class="ko-notice" role="status" data-ko-rejected>Deze versie is afgewezen.</p>'
     stage = 'in de tweede review ' if event['event_type'] == 'second_review_reject' else ''
@@ -360,7 +372,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + '<p class="ko-progress">Huidige versie ' + escape(descriptor.object_version) + history
             + ' <span aria-hidden="true">·</span> <strong data-ko-state>'
             + escape(state or 'Broncontext') + '</strong></p></header>'
-            + (review_route(state, stage_second=False, required_second=route_second, second_pending=second_pending)
+            + (review_route(state, stage_second=_rejected_in_second_review(console, obj), required_second=route_second,
+                            second_pending=second_pending)
                if annotation else '')
             + '<div class="ko-review-layout">' + _source_panel(console, inputs, obj, task='inventory')
             + '<section class="ko-object-panel" aria-labelledby="ko-object-title">'
@@ -394,7 +407,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '')
             + (' <span data-required-second-review>Er is een onafhankelijke tweede beoordeling nodig.</span>' if required_second and not second else '') + '</p></header>'
             # #1067: where this object is and what happens next; only for objects from annotation.
-            + (review_route(state, stage_second=second, required_second=route_second, rebuilding=rebuilding or '',
+            + (review_route(state, stage_second=second or _rejected_in_second_review(console, obj),
+                            required_second=route_second, rebuilding=rebuilding or '',
                             second_pending=second_pending)
                if annotation else '')
             + notice + '<div class="ko-review-layout" data-document-assessment="'
