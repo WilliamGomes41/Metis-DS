@@ -4,11 +4,16 @@ Black-box on native PostgreSQL, from intake to publication readiness. The public
 people (``configured_approval``, B10); the review duty now asks the second one, so the document can be published.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale herstart
 # release-control-evidence: toegang
 # release-control-evidence: kwaliteit
+# release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
 import pytest
+
+from src.operations_console_v1 import ConsoleError
+from tests.production_support import restart_production
 
 from src.review.review_duty_v1 import FIRST_REVIEW, SECOND_REVIEW, review_stage
 from src.review.revision_workflow import current_revisions
@@ -82,3 +87,28 @@ def test_a_v1_configuration_with_one_approval_is_unchanged(production_console, t
                      'reviewers': ['r1'] if option == 'one_other' else [], 'readers': [], 'revision': 1,
                      'locked_at': None, 'source': 'chosen'}
     assert policy_for_configuration(configuration, uploader_id='up') is None
+
+
+def test_the_second_duty_survives_a_restart_and_one_approval_wins(production_console, tmp_path):
+    """Opslag: the derived policy is durable (herstart), and the second approval is guarded by the exact revision
+    (stale), and the same approval arriving twice counts once (concurrent)."""
+    console, sid, oid, first, second = _document(production_console, tmp_path, option='two_others', four_eyes=False)
+    approve(console, sid, oid, first)
+    console = restart_production(console)
+    assert _stage(console, sid, oid) == SECOND_REVIEW
+    revision = console.objects_revision(sid)
+    with pytest.raises(ConsoleError):
+        console.approve_second_review(actor_id=second, snapshot_id=sid, object_id=oid, expected_revision='stale',
+                                      assessment=affirmative_assessment(), evidence_not_applicable=True)
+    assert _stage(console, sid, oid) == SECOND_REVIEW
+    console.approve_second_review(actor_id=second, snapshot_id=sid, object_id=oid, expected_revision=revision,
+                                  assessment=affirmative_assessment(), evidence_not_applicable=True)
+    # The same approval arriving twice (a retry or a second tab) counts once: it changes nothing.
+    before = console.snapshot_objects(sid, include_blocked=True), console.object_review_bindings(sid)
+    try:
+        console.approve_second_review(actor_id=second, snapshot_id=sid, object_id=oid, expected_revision=revision,
+                                      assessment=affirmative_assessment(), evidence_not_applicable=True)
+    except ConsoleError:
+        pass
+    assert (console.snapshot_objects(sid, include_blocked=True), console.object_review_bindings(sid)) == before
+    assert _stage(console, sid, oid) is None
