@@ -1,0 +1,7 @@
+{
+  "pytest_exit_code": 0,
+  "probes_exit_code": 0,
+  "postgres_version": "postgres (PostgreSQL) 17.11 (Debian 17.11-0+deb13u1)",
+  "git_revision": "0bbd58f2aa2b1f4a9e6dff288458ec76b4809c56",
+  "owned_server_stopped": true
+}
