@@ -1,7 +1,8 @@
 # PostgreSQL in Azure: ontwerp, pstack-beoordeling en verificatie vóór implementatie
 
 Datum: 2026-11-14. Onderzochte code: `0bbd58f2aa2b1f4a9e6dff288458ec76b4809c56`.
-Status: ontwerp en lokale baseline uitgevoerd; productie-implementatie niet gestart.
+Status: ontwerp en repository-implementatie uitgevoerd; volledige verificatie loopt.
+Geen deployment of productiehandeling uitgevoerd.
 
 ## Besluiten (GO projectlead, 2026-11-14)
 
@@ -30,7 +31,7 @@ Pstack-route, via de `architect`-skill:
 - [x] Ground: huidige aanroeppaden, bevoegdheden en transacties onderzocht.
 - [x] Sketch: twee structureel verschillende kandidaten uitgewerkt en beoordeeld.
 - [x] Agree: GO projectlead op 2026-11-14; uitvoering onder #1074/MET-80.
-- [ ] Implement: volgt na de afzonderlijke push van dit voorbereidingsbewijs.
+- [x] Implement: na de afzonderlijke push van voorbereidingscommit `628e5de2`.
 - [ ] Scrap: niet geactiveerd; heroverweeg bij de hieronder genoemde stopcondities.
 
 Dit document is ontwerpdocumentatie: Class C, Rewrite risk: none. De voorgestelde
@@ -325,6 +326,68 @@ zijn lokaal onderbouwd. Kandidaat A is de voorgestelde implementatierichting.
 De strengere verifier, runnerintegratie en volledige TLS-adapterdekking bestaan
 nog niet; hun acceptatietests zijn expliciet gespecificeerd. PG16- en Azure-bewijs
 blijven open. Er is geen productiecode gewijzigd en geen productiehandeling uitgevoerd.
+
+## Uitvoering en verificatie — #1074 / MET-80
+
+GO projectlead: de gebruikersopdracht op 2026-11-14 autoriseert push en vervolgens
+repository-implementatie; geen merge of Azure-mutatie. De code staat in
+`a5490f3e895be679d329c306bed6f960d59aa36a`, na de test-first-commit `3715e954`.
+
+De bestaande verifier heeft nu een optionele strikte beoordeling van het
+bevestigde UPDATE-verbod op `publication_refusals`, inclusief kolomrechten,
+PUBLIC, overerving en bereikbare SET ROLE-rollen. Gevaarlijke rolkenmerken,
+membership-ADMIN, workflow-schema-CREATE en relation ownership worden zichtbaar.
+De bestaande minimumcontrole blijft compatibel. `inspection_scope` en
+`least_privilege_complete: false` begrenzen de uitkomst; overige privilege-maxima
+zijn niet vastgesteld. Geen GRANT/REVOKE wordt uitgevoerd.
+
+De migratierunner heeft een positieve, standaard 5000 ms transaction-local
+lock-timeout. Een aparte kwaliteitsreview ontdekte dat SET LOCAL na succesvolle
+savepoint-release kon blijven staan. De runner leest nu de vorige waarde binnen
+de transactiecontext en herstelt die vóór succes. Fouten herstellen via rollback.
+Native tests dekken beide outer-transactiegevallen. Zelfstandige commits per
+bestand gelden wanneer de runner de outer transactie bezit; bestaande callers
+met een outer transactie behouden hun eigen commit-/rollbackverantwoordelijkheid.
+
+Alle geïnventariseerde Azure-adapters gebruiken `verify-full` met een expliciet
+leesbaar PEM-bestand of de bestaande systeem-CA. Herkenbare Azure-DSN-hosts en
+PGHOST kunnen dit niet downgraden; lokale DSN's blijven compatibel. Verborgen
+service-file-hosts en private DNS-aliassen vallen buiten automatische detectie.
+Managed-identity hostconfiguratie krijgt ongeacht de naam serververificatie.
+Er is geen nieuwe opslag-, authenticatie- of beheerlaag en geen tokencache bijgekomen.
+
+Bewijs op de huidige code: 90 hardeningtests geslaagd, nul failures/errors/skips,
+in 4,95 s op eigen PostgreSQL 17.11 en Python 3.13.5. Zij bevatten echte
+TLS-hostname/CA-negatieven, native privileges en geneste/zelfstandige transacties.
+De oorspronkelijke optionele-contracttests gingen eerst rood (10 privileges,
+8 locktests; onder meer de native default-lock-timeout zag 0 in plaats van 5s).
+De TLS-agent mat eerst 24 failures/5 passed, daarna alle 39 TLS-cases groen.
+
+Een mutation-check in een eigen wegwerpcheckout schakelde uitsluitend de strikte
+blokkade uit. De directe-UPDATE-regressie faalde precies op PASS versus BLOCKED.
+De werkbranch is daarbij niet gewijzigd; de wegwerpcheckout is verwijderd.
+De afzonderlijke kwaliteitsreview beoordeelde de gerepareerde code als
+GOOD WITHIN SCOPE, zonder resterende concrete bevindingen uit die begrensde pass.
+
+Repository-preflight, release-control-preflight tegen origin/main, compileall,
+architectuurgrenzen en de Linear-sync-configuratiecontrole zijn geslaagd.
+De eerste bredere run had 152 passed en één fout in een nieuwe CLI-teststub;
+de stub is gecorrigeerd en de definitieve hardeningherhaling is groen.
+
+De eerste volledige run is onderbroken nadat een gerichte herhaling aantoonde
+dat `psql` niet op PATH stond. Die omgevingsfout is gecorrigeerd; de betrokken
+native controle slaagt nu. De complete collectie van 8806 tests draait opnieuw
+met de bestaande vier CI-partities, elk op een eigen tijdelijke PG17-server.
+Dit is nog geen geslaagde full-suiteclaim. PG16- en Azure-image/Entra-bewijs
+blijven open; ophalen van lokale PG16-binaries werd door HTTP 403 verhinderd.
+De bestaande GitHub-CI levert de vereiste PostgreSQL16-uitvoering.
+
+GitHub is de bron van ontwerp, code en bewijs. MET-80 onder MET-10 houdt status
+en sessiehandoff; het is niet Done. Een PR krijgt de echte head-SHA en
+`remaining_work: true` zolang review, vereiste CI en operationele verificatie
+openstaan. Diagramupdate: niet relevant; componenten, opslag-/lees-/schrijfroutes
+en deploymenttopologie veranderen niet. `gh` was ontoegankelijk; Git en de
+GitHub-connector zijn gebruikt voor dezelfde branch-/issue-/PR-route.
 
 Bronnen: `src/workflows/workflow_postgres_migration_v1.py`,
 `src/workflows/workflow_transaction_v1.py`,
