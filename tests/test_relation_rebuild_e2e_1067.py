@@ -117,6 +117,9 @@ def test_a_relation_to_a_corrected_target_is_confirmed_again_end_to_end(producti
     [again] = a_new['proposed_knowledge_relations']
     assert (again['relation_type'], again['target_object_version']) == (kind, str(b_new['object_version']))
     assert knowledge_relation_errors(a_new) == []
+    # Codex P2: the relation review of the approved version stays on that version; nobody reviewed this one yet.
+    assert 'knowledge_relation_review' in approved['metadata']
+    assert 'knowledge_relation_review' not in a_new['metadata']
     assert admission_of(a_new)['gate_result'] == 'allowed', admission_of(a_new)
 
     # 4. The reviewer confirms the relation again and approves A.
@@ -125,4 +128,6 @@ def test_a_relation_to_a_corrected_target_is_confirmed_again_end_to_end(producti
     assert final['governance']['validation_status'] == 'approved'
     assert [(r['relation_type'], r['target_object_version']) for r in final['confirmed_knowledge_relations']] == [
         (kind, str(b_new['object_version']))]
+    receipt = final['metadata']['knowledge_relation_review']
+    assert receipt['source_object_version_after'] == str(final['object_version'])
     assert deepcopy(final) == _current(console, sid, a_id)

@@ -47,7 +47,13 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-help-belongs').getByText('Niet: waarom het klopt. Dat hoort bij Onderbouwing.').waitFor();
  assert.equal(await help.getAttribute('aria-expanded'),'true');
  // A wrong kind is corrected in the card: the selections stay, the kind is stored.
+ // Codex P2: the check after a kind choice answers late and re-renders the card while the control has focus.
+ let slowCheck=true;
+ await page.route('**/annotations/check**',async route=>{if(slowCheck) await new Promise(r=>setTimeout(r,1500));await route.continue();});
  await page.locator('#annotation-simple-type-select').selectOption('explanation');
+ await page.locator('#annotation-simple-type-select').focus();
+ await page.waitForTimeout(2500);slowCheck=false;
+ assert.equal(await page.evaluate(()=>document.activeElement?.id),'annotation-simple-type-select','A re-render must keep the kind control focused');
  for(let i=0;i<60 && (await current()).object_type!=='explanation';i++) await page.waitForTimeout(250);
  entry=await current();
  assert.equal(entry.object_type,'explanation');assert.equal(entry.ranges[0].quote,core);

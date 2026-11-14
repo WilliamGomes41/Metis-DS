@@ -29,6 +29,10 @@ import {bindRange} from '/annotations/binding.mjs';
     kindSelect.addEventListener('change',()=>{setSimpleType(kindSelect.value);});
     kindBox.append(label,kindSelect);
   }
+  // #1067: the kind row stays mounted while it is shown. Moving or re-inserting the control would drop its focus and
+  // close an open choice, so the other rows are rebuilt around it.
+  const typeDt=document.createElement('dt'),typeDd=document.createElement('dd');
+  typeDt.dataset.row=typeDd.dataset.row='type';
   const labels = {core:'Kernuitspraak',population:'Doelgroep',context:'Context',condition:'Voorwaarde',exception:'Uitzondering',explanation:'Toelichting',evidence:'Onderbouwing',
     actor:'Uitvoerder',scope:'Toepassingssituatie',timing:'Tijdstip of periode',list_introduction:'Inleiding bij een lijst',row_header:'Rijkop',column_header:'Kolomkop'};
   let entry, selected = null, dirty = 0, committed = 0, timer, running = null, retryRequest = null, retryVersion = 0, failed = false;
@@ -254,7 +258,9 @@ import {bindRange} from '/annotations/binding.mjs';
     el('simple-heading').textContent=!core.length && !selected ? 'Selecteer de uitspraak in de bron' : done ? 'Klaar voor documentcontrole' : '';
     el('simple-heading').hidden=!el('simple-heading').textContent;
     const findings=current ? check.findings : [],signals=current ? check.signals || [] : [],proposals=openProposals();
-    const rows=el('simple-rows');rows.replaceChildren();
+    const rows=el('simple-rows'),showType=!entry.disposition && core.length>0 && !deriving;
+    for(const child of [...rows.childNodes]) if(!showType || (child!==typeDt && child!==typeDd)) child.remove();
+    let beforeType=typeDt.isConnected ? typeDt : null;
     const hint=(dd,value)=>{const p=document.createElement('p');p.textContent=value;p.className='annotation-hint';dd.append(p);};
     const sign=(parent,glyph,label,run,pressed=null)=>{const button=document.createElement('button');button.type='button';button.className='annotation-sign';button.textContent=glyph;button.setAttribute('aria-label',label);button.title=label;if(pressed!==null) button.setAttribute('aria-pressed',String(pressed));button.addEventListener('click',run);parent.append(button);return button;};
     const line=(dd,value,label,remove)=>{const div=document.createElement('div'),p=document.createElement('p');div.className='annotation-line';p.textContent=value;div.append(p);sign(div,'−',label,remove);dd.append(div);};
@@ -275,7 +281,20 @@ import {bindRange} from '/annotations/binding.mjs';
       });
       name.append(button);dd.append(box);
     };
-    const row=(key,label,build,add=null)=>{const dt=document.createElement('dt'),dd=document.createElement('dd'),name=document.createElement('span'),text=document.createElement('span');text.textContent=label;name.className='annotation-row-name';name.append(text);dt.append(name);dt.dataset.row=key;dd.dataset.row=key;if(HELP[key]) explain(name,dd,key,label);if(add) sign(dt,'+',add.label,add.run,add.pressed);build(dd);rows.append(dt,dd);};
+    const row=(key,label,build,add=null)=>{
+      const kind=key==='type',dt=kind ? typeDt : document.createElement('dt'),dd=kind ? typeDd : document.createElement('dd');
+      const name=document.createElement('span'),text=document.createElement('span');
+      if(kind) {dt.replaceChildren();for(const child of [...dd.childNodes]) if(child!==kindBox) child.remove();}
+      else {dt.dataset.row=key;dd.dataset.row=key;}
+      text.textContent=label;name.className='annotation-row-name';name.append(text);dt.append(name);
+      if(HELP[key]) explain(name,dd,key,label);
+      if(kind && kindBox.parentNode===dd) for(const child of [...dd.childNodes]) if(child!==kindBox) dd.insertBefore(child,kindBox);
+      if(add) sign(dt,'+',add.label,add.run,add.pressed);
+      build(dd);
+      if(kind) {if(!dt.isConnected) rows.append(dt,dd);beforeType=null;}
+      else if(beforeType) {rows.insertBefore(dt,beforeType);rows.insertBefore(dd,beforeType);}
+      else rows.append(dt,dd);
+    };
     // #1067: source text that is no statement (recorded in the document check) shows what it is, nothing to fill in.
     if(entry.disposition) {
       const reasons=Object.values(fieldContract.source_roles).flat();
@@ -291,11 +310,11 @@ import {bindRange} from '/annotations/binding.mjs';
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
     },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
     // #1067: the kind of statement is a row like the others: Metis proposes it, anyone working in the card corrects it.
-    if(core.length && !deriving) row('type','Soort',dd=>{
-      // The same control is reused on every render, so a choice in progress keeps its focus.
+    if(showType) row('type','Soort',dd=>{
+      // The control stays mounted (see typeDd), so a choice in progress keeps its focus.
       if(document.activeElement!==kindSelect) kindSelect.value=entry.object_type || '';
       kindSelect.disabled=saving;
-      dd.append(kindBox);
+      if(kindBox.parentNode!==dd) dd.append(kindBox);
       hint(dd,entry.object_type ? 'Klopt het soort niet? Kies het juiste soort.' : 'Metis kon het soort niet bepalen. Kies het soort.');
     });
     if(core.length || provisional) {

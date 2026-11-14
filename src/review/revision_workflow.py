@@ -549,9 +549,9 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
                         item['target_object_version'] = current[item['target_object_id']]
                     kept_evidence.append(item)
                 evidence['relations'] = kept_evidence
-            review = metadata.get('knowledge_relation_review')
-            if isinstance(review, dict) and 'confirmed_relation_ids' in review:
-                review['confirmed_relation_ids'] = [r['relation_id'] for r in new.get('confirmed_knowledge_relations') or []]
+            # A relation review is a receipt of what a reviewer saw on that version. It stays there (history);
+            # this version gets its own receipt when it is reviewed, never a rewritten copy of the old one.
+            metadata.pop('knowledge_relation_review', None)
             previous = previous_by_id.get(row['object_id'])
             if previous is not None and str(previous['object_version']) == str(row['object_version']):
                 unchanged.pop(row['object_id'], None)

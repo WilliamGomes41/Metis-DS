@@ -249,7 +249,13 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
    `replaceBlock` vervangt een bronblok alleen bij een echte wijziging en zet een lopende selectie terug op dezelfde
    tekenposities, met dezelfde richting. Bewijs: de bronselectieproef met een laat antwoord op het opslaan; faalt
    zonder de wijziging. De bouwproef wacht voortaan tot de kaart gereed is voordat hij selecteert.
-7. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+7. **De soortkeuze houdt haar focus bij een nieuwe weergave** (Codex P2). Een late controle bouwt de kaart opnieuw
+   op; de soortregel blijft daarbij staan en de andere regels worden eromheen opgebouwd, zodat een keuze in
+   uitvoering niet wordt afgebroken. Bewijs: de suggestieproef met een late controle; faalt zonder de wijziging.
+8. **Een relatiereview blijft bij de versie die is beoordeeld** (Codex P2). Vervalt een bevestiging omdat het doel
+   opnieuw is gebouwd, dan krijgt de nieuwe versie geen herschreven kopie van de oude ontvangst; ze krijgt een eigen
+   ontvangst bij haar review. Bewijs: `tests/test_relation_rebuild_e2e_1067.py`; faalt zonder de wijziging.
+9. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 
