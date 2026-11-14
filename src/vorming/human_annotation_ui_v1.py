@@ -266,8 +266,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         intro += '<p><a target="_blank" rel="noopener" href="/annotations/original?'+esc(urlencode({'document':document}))+'">Open het vastgelegde origineel</a></p>'
         # #1067: where the work is and what happens next, the same line as on the review card.
         from src.review.knowledge_route_v1 import annotation_route, build_is_current
-        from src.review.four_eyes_v1 import second_approval_required
-        second_review = second_approval_required(envelope)
+        from src.review.four_eyes_v1 import document_requires_second_review
+        second_review = document_requires_second_review(envelope, state['entries'])
         built = (state.get('current_build') or {}).get('state', '') if overview else ''
         if built == 'succeeded' and not build_is_current(state['entries'], state.get('object_bindings') or {}):
             built = ''

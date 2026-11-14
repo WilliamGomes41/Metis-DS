@@ -159,3 +159,17 @@ def test_the_route_shows_a_second_review_exactly_when_the_configuration_needs_tw
         'contract': contract, 'option': option, 'four_eyes_required': four_eyes, 'reviewers': reviewers,
         'readers': [], 'revision': 1, 'locked_at': '2026-11-14T00:00:00Z', 'source': 'chosen'}}
     assert second_approval_required(envelope) is second
+
+
+@pytest.mark.parametrize('entries,second', [
+    ([{'object_type': 'explanation', 'status': 'ready'}], False),
+    # Codex P2: an exception demands two approvals by its content, whatever the configuration says.
+    ([{'object_type': 'explanation', 'status': 'ready'}, {'object_type': 'exception', 'status': 'draft'}], True),
+    ([{'object_type': 'exception', 'status': 'withdrawn'}], False),
+])
+def test_the_document_route_counts_statements_that_need_a_second_review(entries, second):
+    from src.review.four_eyes_v1 import document_requires_second_review
+    envelope = {'uploader_account_id': 'up', 'review_configuration': {
+        'contract': 'review-configuration-v2', 'option': 'one_other', 'four_eyes_required': False,
+        'reviewers': ['r1'], 'readers': [], 'revision': 1, 'locked_at': '2026-11-14T00:00:00Z', 'source': 'chosen'}}
+    assert document_requires_second_review(envelope, entries) is second

@@ -228,6 +228,18 @@ def second_approval_required(envelope: dict[str, Any]) -> bool:
     return True
 
 
+def document_requires_second_review(envelope: dict[str, Any], entries: Iterable[dict[str, Any]]) -> bool:
+    """#1067: the annotation pages show the second review when the configuration or any statement needs it.
+
+    A statement's kind can demand two approvals by itself (an exception), whatever the configuration says; the
+    review card shows that per object, so the document's route shows it before the build as well.
+    """
+    if second_approval_required(envelope):
+        return True
+    return any(content_requires_four_eyes({}, confirmed_type=entry.get("object_type"))
+               for entry in entries if entry.get("status") != "withdrawn" and entry.get("object_type"))
+
+
 def publish_authorization_contract(
     *,
     obj: dict[str, Any],

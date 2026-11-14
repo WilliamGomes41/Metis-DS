@@ -264,7 +264,11 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
    de uitspraak uit en wisselt terug; faalt zonder de wijziging.
 11. **De soortkeuze toont altijd het opgeslagen soort** (Codex P2). Zodra er een soort is, staat ‘Kies het soort’
    uit; een lege keuze zet het opgeslagen soort terug in de lijst. Bewijs: de suggestieproef; faalt zonder de wijziging.
-12. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+12. **De route van het document telt ook de inhoud** (Codex P2). Een uitzondering vraagt op grond van haar inhoud twee
+   goedkeuringen, ongeacht de configuratie. `document_requires_second_review` (in de publicatiecontrole) toont de
+   tweede review op de annotatiekaart en de documentcontrole zodra een uitspraak die niet is ingetrokken zo'n soort
+   heeft. Bewijs: de tabeltest in `tests/test_knowledge_route_1067.py`; faalt zonder de wijziging.
+13. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 
