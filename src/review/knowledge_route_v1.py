@@ -65,7 +65,8 @@ def annotation_route(*, overview: bool, second_review: bool, finalized: str = ''
                       'Daarna bouwt Metis de kennisobjecten.', second_review=second_review)
 
 
-def review_route(state: str | None, *, stage_second: bool, required_second: bool, rebuilding: str = '') -> str:
+def review_route(state: str | None, *, stage_second: bool, required_second: bool, rebuilding: str = '',
+                 second_pending: bool = False) -> str:
     """The review card of a knowledge object from annotation."""
     second = required_second or stage_second or state == TWEEDE_REVIEW
     if rebuilding == 'building':
@@ -86,6 +87,9 @@ def review_route(state: str | None, *, stage_second: bool, required_second: bool
     if state == INGETROKKEN:
         return route_html('publish', 'Ingetrokken: dit kennisobject wordt niet meer uitgeleverd.',
                           second_review=second)
+    if state == GOEDGEKEURD and second_pending:
+        # Approved once, but the four-eyes review still needs its second approval before publication.
+        return route_html('second_review', 'Hierna: een tweede reviewer beoordeelt deze versie.', second_review=True)
     if state == GOEDGEKEURD:
         return route_html('publish', 'Hierna: het kennisobject wordt gepubliceerd met het document.',
                           second_review=second)

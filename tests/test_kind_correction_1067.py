@@ -191,3 +191,22 @@ def test_a_proposal_the_corrected_kind_cannot_carry_is_dropped():
         {'relation_type': dropped[0], 'target_object_id': 'peer'}])
     _drop_confirmation_of_another_kind(proposed, {'proposed_object_type': 'definition'}, peers=peers)
     assert proposed['proposed_knowledge_relations'] == []
+
+
+def test_a_rejected_source_stays_rejected_when_its_target_is_rebuilt(production_console, tmp_path):
+    """Codex P1: a target's correction never reopens a rejected, superseded or returned source."""
+    from copy import deepcopy
+    from src.knowledge_relations_v1 import build_knowledge_relation
+    from src.review.revision_workflow import _retarget_relations_to_rebuilt
+    sid, actor, a, b = _built_pair(production_console, tmp_path)
+    relation = build_knowledge_relation(source_object_id=a['object_id'], source_object_version=str(a['object_version']),
+                                        relation_type=_relation_kind(a, b), target_object_id=b['object_id'],
+                                        target_object_version=str(b['object_version']))
+    for status in ('rejected', 'superseded', 'revise'):
+        source = deepcopy(a)
+        source.update(confirmed_knowledge_relations=[relation])
+        source.setdefault('governance', {})['validation_status'] = status
+        result, unchanged = [deepcopy(source), _rebuilt(b, sid, actor)], {a['object_id']: source}
+        _retarget_relations_to_rebuilt(result, {a['object_id']: source, b['object_id']: b}, unchanged,
+                                       snapshot_id=sid, actor=actor)
+        assert result[0] == source and a['object_id'] in unchanged, status

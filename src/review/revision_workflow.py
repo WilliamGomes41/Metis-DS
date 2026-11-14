@@ -455,6 +455,7 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
     from src.knowledge_relations_v1 import build_knowledge_relation, relation_sort_key
     from src.review.review_cockpit_v1 import confirmable_proposed_type, serving_type_for_admission_type
     from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
+    from src.review.knowledge_object_state_v1 import RETIRED_VALIDATION_STATUSES
 
     def kind(obj):
         # The admission record is refreshed only after this step, so the corrected kind is read first.
@@ -475,6 +476,9 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
             confirmed = row.get('confirmed_knowledge_relations') or []
             proposed = row.get('proposed_knowledge_relations') or []
             if not any(stale(relation) for relation in [*confirmed, *proposed]):
+                continue
+            # A rejected, superseded or returned source stays where it is: a target's correction never reopens it.
+            if (row.get('governance') or {}).get('validation_status') in RETIRED_VALIDATION_STATUSES:
                 continue
             new, remap, lapsed_ids = deepcopy(row), {}, set()
 
