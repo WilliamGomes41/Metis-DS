@@ -32,8 +32,15 @@ Part of MET-78. Besluit William, 14 november 2026: optie A (“A”). Vastgelegd
   - `two_others`: de eerste benoemde reviewer is de hoofdreviewer, de tweede is verplicht;
   - `one_other` met vierogenvink: de reviewer is de hoofdreviewer, de uploader is verplicht;
   - elke andere v1-keuze: geen beleid, zoals voorheen.
-- De inname leidt dat beleid af voor v2 én voor een v1-keuze die het oplevert. Een meegestuurd beleid moet gelijk
-  zijn. Het beleid komt via de bestaande projectie op elk object. De reviewplicht leest het daar.
+- De inname leidt dat beleid af voor v2 én voor een v1-keuze die het oplevert. Het beleid komt via de bestaande
+  projectie op elk object. De reviewplicht leest het daar.
+  - v2: een meegestuurd beleid moet gelijk zijn aan het afgeleide, zoals voorheen.
+  - v1: een meegestuurd beleid geldt, zoals voorheen, en de H2-1-controles toetsen het. Alleen zonder meegestuurd
+    beleid leidt de inname het af.
+- Bij een afgeleid beleid vergelijkt de lidmaatschapscontrole de benoemde reviewers zonder de uploader. Bij v1
+  `one_other` met vierogenvink is de uploader daardoor ook benoemd. `eligible_reviewers` rekende de uploader daar al
+  toe, en de publicatiecontrole eist diens goedkeuring. Eén bestaande verwachting is daarop aangepast:
+  `test_http_upload_with_choice_stores_chosen`.
 - De consistentiecontrole van H2-1 laat bij `two_others` de vierogenvink buiten beschouwing. Volgens B10 vraagt
   `two_others` met en zonder vink dezelfde plicht.
 

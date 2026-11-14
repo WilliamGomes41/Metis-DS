@@ -1491,16 +1491,18 @@ class OperationsConsole:
             code="invalid_source_date",
         )
         review_configuration = self._chosen_review_configuration(review_choice, actor_id)
-        derived = None
+        derived, policy_from_choice = None, False
         if review_configuration is not None:
             from src.review.review_configuration_v1 import policy_for_configuration
             derived = policy_for_configuration(review_configuration, uploader_id=actor_id)
-        # v2, and a v1 choice that needs two approvals (#1072): the kernel derives the policy from the choice;
-        # a policy sent along MUST be equal. The review duty reads that policy, so it asks every required person.
+        # v2: the kernel derives the policy from the choice; a policy sent along MUST be equal.
+        # v1 (#1072): a policy sent along keeps its H2-1 checks below; without one, a choice that needs two
+        # approvals gets its derived policy, so the review duty asks every required person.
         if review_configuration is not None and (review_configuration["contract"] != "review-configuration-v1"
-                                                 or derived is not None):
+                                                 or derived is not None and review_policy is None):
             if review_policy is not None and review_policy != derived:
                 raise ConsoleError("review_configuration_policy_conflict")
+            policy_from_choice = review_policy is None and derived is not None
             review_policy = derived
             if review_policy is None and review_configuration["option"] == "uploader_and_other" \
                     and not named_reviewers:
@@ -1529,7 +1531,12 @@ class OperationsConsole:
             review_policy = self._validated_review_policy(review_policy)
             from src.review.review_policy_v1 import participants, required_reviewers
             reviewers = participants(review_policy)
-            if named_reviewers and set(named_reviewers) != set(reviewers):
+            # A policy derived from the choice may add the uploader (v1 one_other with four eyes, #1072); the
+            # named reviewers are the choice's reviewers, so they are compared without the uploader.
+            named, members = set(named_reviewers or ()), set(reviewers)
+            if policy_from_choice:
+                named, members = named - {actor_id}, members - {actor_id}
+            if named_reviewers and named != members:
                 raise ConsoleError("review_policy_membership_conflict")
             required = set(required_reviewers(review_policy))
             if review_configuration is not None and required - {actor_id} != set(review_configuration["reviewers"]):
