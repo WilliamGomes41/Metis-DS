@@ -1,121 +1,94 @@
-const {selectText}=require('./browser_annotation_tasks.cjs');
 const {chromium}=require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
-const fs=require('node:fs');
-const assert=require('node:assert/strict');
+const assert=require('node:assert/strict');const fs=require('node:fs');
+const tasks=require('./browser_annotation_tasks.cjs');
+// #1067: the step form is retired. The card keeps the guarantees the guided form proved:
+// a failed save keeps the work and retries exactly, another tab's newer save is never overwritten,
+// and a new login resumes the saved work.
 (async()=>{
  const base=process.env.METIS_BROWSER_BASE,output=process.env.METIS_BROWSER_OUTPUT;
- const m=await(await fetch(base+'/browser-manifest')).json();
+ const manifest=await(await fetch(base+'/browser-manifest')).json();
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
- require('./browser_annotation_tasks.cjs').useAdvancedForm(browser);
- try {
-  const context=await browser.newContext({viewport:{width:1440,height:1000}});
-  const page=await context.newPage(),errors=[];
-  page.on('pageerror',e=>errors.push(e.message));
-  await page.goto(base+'/login');await page.locator('[name=username]').fill(m.username);await page.locator('[name=password]').fill(m.password);
-  await Promise.all([page.waitForURL(u=>u.pathname!='/login'),page.locator('button[type=submit]').click()]);
+ try{
+  let context=await browser.newContext({viewport:{width:1440,height:1000}});
+  let page=await context.newPage();const errors=[];
+  async function login(){
+   page.on('pageerror',e=>errors.push(e.message));
+   await page.goto(base+'/login');await page.locator('[name=username]').fill(manifest.username);await page.locator('[name=password]').fill(manifest.password);
+   await Promise.all([page.waitForURL(u=>u.pathname!='/login'),page.locator('button[type=submit]').click()]);
+  }
+  await login();
   await page.goto(base+'/ingest');
-  await page.locator('[name=file]').setInputFiles({name:'guided.html',mimeType:'text/html',buffer:Buffer.from('<html><body><h1>Annoteren zonder omwegen</h1><p>De kwetsbare huid verklaart de pijn.</p><p>Alleen bij klachten.</p></body></html>')});
-  for(const [field,value] of Object.entries({title:'Betekenis en context van een uitspraak bij kwetsbare huid',version:'1',date:'2026-11-11',family:'test'})) await page.locator(`[name=${field}]`).fill(value);
+  const statement='De huid wordt dagelijks gecontroleerd.',support='Onderzoek beschrijft dit verband.',extra='Bij volwassenen in de thuiszorg.';
+  await page.locator('[name=file]').setInputFiles({name:'card.html',mimeType:'text/html',buffer:Buffer.from('<html><body><p>'+statement+'</p><p>'+support+'</p><p>'+extra+'</p></body></html>')});
+  for(const [name,value] of Object.entries({title:'Kaart veerkracht',version:'1',date:'2026-11-13',family:'test'}))await page.locator(`[name=${name}]`).fill(value);
   await page.locator('[name=class_]').selectOption('richtlijn');await page.locator('[name=review_option][value=uploader_sole]').check();
   await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
   const sid=new URL(page.url()).searchParams.get('document');
-  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
-  await page.locator('#annotation-editor-inputs:enabled').waitFor();
-  const step=async n=>{await page.locator('#annotation-step-'+n).click();};
+  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+  const block=text=>page.locator('[data-source-block]').filter({hasText:text.slice(0,20)});
   const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
-  const saved=()=>page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
-  const source=page.locator('[data-source-block]').filter({hasText:'De kwetsbare huid verklaart de pijn.'});
-  const primaryCount=async()=>assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
-  assert.equal(await page.locator('#annotation-source-input,.annotation-selection-help').count(),0);
-  assert.equal(await page.locator('#annotation-selection').innerText(),'');
-  assert.match(await page.locator('#annotation-status').innerText(),/Nog niets opgeslagen/);
-  assert.equal((await read()).entries.length,0);
-  assert.equal(await page.locator('#annotation-task-1').isVisible(),true);await primaryCount();
-  await page.screenshot({path:output+'/guided-select-desktop.png',fullPage:true});
-  await page.locator('#annotation-type').selectOption('explanation');await source.click();await page.locator('#annotation-select-block').click();
-  const selectedQuote=await page.locator('#annotation-selection').innerText();
-  const sourceTop=await page.locator('.annotation-document').evaluate(node=>node.scrollTop);
-  await step(2);assert.equal(await page.locator('#annotation-selection').innerText(),selectedQuote);
-  await step(1);assert.equal(await page.locator('.annotation-document').evaluate(node=>node.scrollTop),sourceTop);
-  assert.equal(await page.evaluate(()=>document.activeElement.id),'annotation-heading-1');
-  await page.locator('#annotation-add').click();await page.locator('#annotation-add').click();
-  assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
-  assert.equal(await page.locator('#annotation-type').isVisible(),false);await primaryCount();
-  // Run the same server checks before claiming completion, without a circular draft gate.
-  // #1060: unidentified parts and unlinked evidence are no open points for the worker.
-  await step(3);await page.locator('#annotation-ready:enabled').waitFor();
-  assert.equal(await page.locator('#annotation-task-3 dd[data-open]').count(),0);
-  let view=await read();assert.equal(view.entries[0].status,'draft');
-  assert.equal(await page.locator('#annotation-check').innerText().then(t=>t.includes('nog niet gereed')),false);
-  await step(2);
-  for(const [field,text] of [['subject_span','De kwetsbare huid'],['predicate_span','verklaart'],['supported_object','de pijn']]) {
-   await page.locator(`[data-field="${field}"]`).click();
-   await source.click();
-   await selectText(page,source,text);
-   await primaryCount();await page.locator('#annotation-add').click();
-  }
-  await page.locator('#annotation-na').check();await saved();
-  // A type-change warning leaves saved work intact until explicit confirmation.
-  await step(1);await page.locator('#annotation-type').selectOption('definition');
-  assert.equal(await page.locator('#annotation-confirm').isVisible(),true);
-  await page.locator('#annotation-confirm-cancel').click();
-  assert.equal(await page.locator('#annotation-type').inputValue(),'explanation');
-  assert.equal((await read()).entries[0].object_type,'explanation');await step(2);
-  const annotation=(await read()).entries[0].annotation_id;
-  assert.equal(new URL(page.url()).searchParams.get('annotation'),annotation,'Reload must retain the current saved annotation');
-  await page.screenshot({path:output+'/guided-meaning-desktop.png',fullPage:true});
-  await page.locator('#annotation-add').click();
-  await page.locator('#annotation-ready:enabled').waitFor();await primaryCount();
-  // Changing an answer invalidates the previous check immediately.
-  await step(2);await page.locator('[data-field=subject_span]').click();await page.locator('#annotation-fields select:visible').selectOption('uncertain');
-  // #1060: an unidentified subject is a signal for worker and reviewer; it no longer blocks.
-  await step(3);await page.locator('#annotation-review-summary dd[data-row=subject_span][data-signal]').waitFor();
-  await page.locator('#annotation-ready:enabled').waitFor();
-  assert.match(await page.locator('#annotation-check').innerText(),/Je kunt afronden/);
-  await page.locator('#annotation-review-summary dd[data-row=subject_span] button').click();
-  assert.equal(await page.locator('#annotation-task-2').isVisible(),true);
-  await source.click();await selectText(page,source,'De kwetsbare huid');
-  await page.locator('#annotation-add').click();
-  // Answering the opened point returns to the check; other fields stayed out of view.
-  await page.locator('#annotation-ready:enabled').waitFor();
-  assert.equal(await page.locator('#annotation-task-3').isVisible(),true);
-  // Storage failure must retain the edit and block navigation until an exact retry succeeds.
-  await step(2);await page.route('**/annotations/api',route=>route.abort());
-  await page.locator('#annotation-na').uncheck();
-  await page.waitForFunction(()=>document.getElementById('annotation-status').textContent.startsWith('Opslaan mislukt.'));
-  await page.locator('#annotation-more summary').click();await page.locator('#annotation-pause').click();assert.equal(new URL(page.url()).pathname,'/annotations');
-  await page.unroute('**/annotations/api');await page.locator('#annotation-retry').click();await saved();
-  await page.locator('#annotation-na').check();await saved();
-  await step(3);await page.locator('#annotation-ready:enabled').waitFor();
-  await page.screenshot({path:output+'/guided-check-desktop.png',fullPage:true});
-  // Another tab may save after the displayed check. Rechecking must refuse to
-  // use its newer basis with our older writer, without silently overwriting it.
-  const other=await page.context().newPage();
+  const row=key=>page.locator('#annotation-simple-rows dd[data-row='+key+']');
+  const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
+  // Wait for what is stored, not for a status text (polled from Node: the page forbids eval).
+  const stored=async test=>{for(let i=0;i<60;i++){const entry=(await read()).entries[0]||{};if(test(entry)) return;await page.waitForTimeout(250);}
+    throw new Error('stored state never matched');};
+  assert.equal(await page.locator('#annotation-steps').isVisible(),false);
+  await tasks.selectText(page,block(statement),statement);
+  await page.locator('#annotation-ready:enabled').click();
+  await page.locator('#annotation-simple-type').waitFor();
+  await page.locator('#annotation-simple-type-select').selectOption('explanation');
+  await stored(entry=>entry.object_type==='explanation');
+  const annotation=new URL(page.url()).searchParams.get('annotation');
+  // 1. A failed save keeps the edit visible, offers a retry and keeps the page from closing.
+  await page.route('**/annotations/api',route=>route.request().method()==='POST' ? route.abort() : route.continue());
+  await plus('evidence').click();await tasks.selectText(page,block(support),support);
+  await page.locator('#annotation-retry').waitFor();
+  await row('evidence').getByText(support,{exact:true}).waitFor();
+  assert.match(await page.locator('#annotation-status').innerText(),/^Opslaan mislukt\. /);
+  assert.doesNotMatch(await page.locator('#annotation-status').innerText(),/Failed to fetch/);
+  assert.equal((await read()).entries[0].ranges.some(a=>a.role==='evidence'),false);
+  await page.screenshot({path:output+'/guided-failure-desktop.png',fullPage:true});
+  await page.unroute('**/annotations/api');await page.locator('#annotation-retry').click();
+  await stored(entry=>(entry.ranges||[]).some(a=>a.role==='evidence'));
+  assert.equal((await read()).entries[0].ranges.some(a=>a.role==='evidence' && a.quote===support),true);
+  // 2. Another tab saves later; this tab's older edit is refused, never written over it.
+  const other=await context.newPage();
   await other.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
-  await other.locator('#annotation-step-2').click();await other.locator('#annotation-na').uncheck();
+  await other.locator('#annotation-editor-inputs:enabled').waitFor();
+  await other.locator('#annotation-simple-rows dt[data-row=belongs] button.annotation-sign').click();
+  await tasks.selectText(other,other.locator('[data-source-block]').filter({hasText:extra.slice(0,20)}),extra);
   await other.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
-  await other.locator('#annotation-na').check();
-  await other.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
-  await page.locator('#annotation-ready').click();
-  await page.waitForFunction(()=>document.getElementById('annotation-status').textContent.includes('opgeslagen werk is gewijzigd'));
-  assert.equal((await read()).entries[0].status,'draft');
-  assert.equal(await page.locator('#annotation-ready').isDisabled(),true);await other.close();
-  await page.reload();await step(3);await page.locator('#annotation-ready:enabled').waitFor();
-  await page.locator('#annotation-ready').click();
-  await page.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Klaar voor documentcontrole en opgeslagen.');
-  view=await read();assert.equal(view.entries[0].status,'ready');
-  assert.equal(view.entries[0].field_evidence.predicate_span.span.end-view.entries[0].field_evidence.predicate_span.span.start,9);
-  await primaryCount();assert.equal(await page.locator('#annotation-new').isVisible(),true);
+  await other.close();
+  await page.locator('#annotation-simple-rows dd[data-row=evidence] .annotation-line').filter({hasText:support}).locator('button.annotation-sign').click();
+  await page.locator('#annotation-save-conflict').waitFor();
+  let entry=(await read()).entries[0];
+  assert.equal(entry.ranges.some(a=>a.quote===extra),true,'the other tab’s save stays');
+  assert.equal(entry.ranges.some(a=>a.quote===support),true,'the refused edit did not overwrite anything');
+  await page.screenshot({path:output+'/guided-conflict-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.screenshot({path:output+'/guided-conflict-mobile.png',fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
+  // 3. Reopening shows the stored version; finishing then succeeds, and a new login resumes it.
   await page.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
-  assert.equal(await page.locator('#annotation-task-3').isVisible(),true);
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
+  await row('belongs').getByText(extra,{exact:true}).waitFor();
+  await page.locator('#annotation-ready:enabled').click();
+  await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
   assert.equal((await read()).entries[0].status,'ready');
-  for(const [task,width] of [[1,390],[2,390],[3,390]]) {
-   await page.setViewportSize({width,height:844});await step(task);await primaryCount();
-   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-   assert.ok(await page.locator('.annotation-document').evaluate(node=>node.getBoundingClientRect().height)>120,'Source reader must remain visible on mobile');
-   await page.screenshot({path:output+`/guided-task-${task}-mobile.png`,fullPage:true});
-  }
+  await page.screenshot({path:output+'/guided-ready-desktop.png',fullPage:true});
+  await context.close();
+  context=await browser.newContext({viewport:{width:390,height:844}});page=await context.newPage();await login();
+  await page.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
+  await row('core').getByText(statement,{exact:true}).waitFor();
+  assert.equal((await read()).entries[0].status,'ready');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  assert.ok(await page.locator('.annotation-document').evaluate(node=>node.getBoundingClientRect().height)>120,'Source reader must remain visible on mobile');
+  await page.screenshot({path:output+'/guided-resumed-mobile.png',fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:output+'/guided-resumed-desktop.png',fullPage:true});
   assert.deepEqual(errors,[]);
-  fs.writeFileSync(output+'/guided-result.json',JSON.stringify({annotation,threeTasks:true,onePrimary:true,readOnlyCheck:true,repair:true,retry:true,readyPersisted:true,errors}));
+  fs.writeFileSync(output+'/guided-result.json',JSON.stringify({annotation,retry:true,olderEditRefused:true,resumed:true,errors}));
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

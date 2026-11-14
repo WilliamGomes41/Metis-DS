@@ -210,9 +210,15 @@ def _invoke_review_kernel(console, command, invoke, inputs, changes, *, compact=
             from src.review.beslisboom_path_v1 import review_path_for_klasse
             current = current_revisions(inputs.histories, snapshot_id=inputs.snapshot_id)
             focal = next(row for row in current if row['object_id'] == inputs.target_object_id)
+            # #1067: the reviewer's own direction/strength choice is what this approval endorses.
+            # The descriptor decides whether the card offered this choice (annotation only).
+            choice = (internal.get('recommendation_direction'), internal.get('recommendation_strength_level'))
             descriptor = displayed_review_descriptor(focal, current,
                 review_path_for_klasse(inputs.envelope['class']),
-                bindings=inputs.bindings, fragments=inputs.fragments)
+                bindings=inputs.bindings, fragments=inputs.fragments, semantics_choice=choice)
+            # The approval endorses exactly the displayed values: a choice the card did not offer is dropped.
+            internal.pop('recommendation_direction', None)
+            internal.pop('recommendation_strength_level', None)
             internal.update(compact_approval_arguments(assessment, descriptor))
     internal['expected_revision'] = changes.revision if command.get('expected_revision') is not None else None
     if (inputs.interaction_id and internal.get('decision') != 'later'

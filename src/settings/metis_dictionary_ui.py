@@ -76,25 +76,33 @@ def _term(term: Term, escape: Callable[[object], str]) -> str:
 
 def _overview(escape: Callable[[object], str]) -> str:
     steps = (
-        ("Bron aanleveren", "De precieze bronversie en herkomst worden vastgelegd."),
-        ("Kennisvoorstellen maken", "Bronpassages worden met hun noodzakelijke context tot voorstellen gevormd."),
-        ("Inhoudelijk beoordelen", "Een bevoegde professional beoordeelt betekenis, context en brontrouw."),
-        ("Publiceren", "Een bevoegd besluit geeft beoordeelde kennis expliciet vrij."),
-        ("Gebruiken", "Een toegelaten toepassing kan passende gepubliceerde kennis ophalen."),
+        ("Bron aanleveren", "De precieze bronversie wordt vastgelegd en verandert daarna niet meer. Je kiest of er één of twee beoordelaars nodig zijn."),
+        ("Kennisobjecten aanwijzen", "Per kennisobject selecteer je in de annotatiekaart de uitspraak en voeg je met + toe wat erbij hoort en de onderbouwing. Metis stelt voor wat het kan afleiden."),
+        ("Bron afronden en bouwen", "De documentcontrole bewaakt dat alle brontekst een plek heeft. Daarna bouwt Metis de kennisobjecten, letterlijk uit wat je hebt aangewezen."),
+        ("Inhoudelijk beoordelen", "Een beoordelaar controleert elk kennisobject, past het zo nodig aan in dezelfde kaart en bouwt opnieuw, of wijst het af."),
+        ("Publiceren", "Een bevoegde publisher geeft de goedgekeurde kennisobjecten vrij."),
+        ("Gebruiken", "Een toegelaten toepassing krijgt alleen gepubliceerde kennisobjecten, met hun vindplaats in de bron."),
     )
     chain = "".join(f'<li><strong>{escape(title)}</strong><p>{escape(body)}</p></li>'
                     for title, body in steps)
-    return f'''<h2 id="zo-werkt-metis">Van bron naar bruikbare kennis</h2>
-      <p class="explained-intro">Metis verwerkt en beheert beroepskennis. Bij ieder kennisstuk moet zichtbaar blijven waar het vandaan komt, wat het betekent en onder welke voorwaarden het gebruikt mag worden.</p>
-      <ol class="explained-chain" aria-label="De kennisketen">{chain}</ol>
-      <section class="explained-reading-section" id="waarborgen">
-        <h2>Wat geeft vertrouwen in de kennis?</h2>
+    knowledge_object = page_url("begrippen", anchor="begrip-kennisstuk-kennisobject")
+    return f'''<h2 id="kennisobject">Het kennisobject: de bouwsteen van Metis</h2>
+      <p class="explained-intro">Een kennisobject is één uitspraak uit een bron, letterlijk overgenomen, met de tekst die nodig is om haar juist te begrijpen, de onderbouwing als de bron die geeft, het soort uitspraak, de precieze vindplaats en een eigen versie.</p>
+      <p>Neem een opsomming over smetten: ‘Bij diabetes mellitus zou de huid vatbaarder kunnen zijn voor irritatie en infecties.’ Los gelezen is niet duidelijk waarover die zin gaat. Daarom hoort de inleidende zin ‘De volgende mechanismen spelen mogelijk een rol bij het risico op smetten:’ bij hetzelfde kennisobject.</p>
+      <section class="explained-reading-section" id="waarom-kennisobjecten">
+        <h3>Waarom alles om het kennisobject draait</h3>
         <dl class="explained-principles">
-          <div><dt>Herleidbare bron</dt><dd>Bron, versie en passage blijven herkenbaar. Een juiste bronkoppeling bewijst niet zelfstandig de kwaliteit van de bron.</dd></div>
-          <div><dt>Betekenis met context</dt><dd>Doelgroep, voorwaarden en uitzonderingen horen bij de kennis waarvoor zij nodig zijn.</dd></div>
-          <div><dt>Een expliciet menselijk besluit</dt><dd>Een AI-voorstel, een geslaagde technische controle en een inhoudelijke goedkeuring zijn verschillende dingen.</dd></div>
+          <div><dt>Eén uitspraak, één oordeel</dt><dd>Een beoordelaar keurt geen hele richtlijn goed, maar elke uitspraak afzonderlijk. Zo valt een fout op één plek op en blijft de rest bruikbaar.</dd></div>
+          <div><dt>De context reist mee</dt><dd>Doelgroep, voorwaarden en uitzonderingen zitten in het kennisobject zelf. Een toepassing kan de uitspraak dus niet los van haar voorwaarden gebruiken.</dd></div>
+          <div><dt>Altijd terug te vinden</dt><dd>Elk kennisobject wijst naar de exacte bronversie en passage. Wie een antwoord krijgt, kan nagaan waar het op berust. Dat bewijst niet dat de bron zelf actueel of sterk onderbouwd is.</dd></div>
+          <div><dt>Een oordeel geldt voor één versie</dt><dd>Wordt een kennisobject aangepast, dan ontstaat een nieuwe versie die opnieuw beoordeeld moet worden. Een oude goedkeuring geldt nooit stilzwijgend voor nieuwe tekst.</dd></div>
+          <div><dt>Een mens beslist</dt><dd>Een voorstel van Metis, een geslaagde technische controle en een inhoudelijke goedkeuring zijn verschillende dingen. Alleen een mens keurt goed en publiceert.</dd></div>
+          <div><dt>Alleen gepubliceerde kennis wordt gebruikt</dt><dd>Toepassingen krijgen alleen gepubliceerde kennisobjecten. Is er geen passend kennisobject, dan volgt geen onderbouwd antwoord in plaats van een gok.</dd></div>
         </dl>
+        <p><a href="{escape(knowledge_object)}">Lees de begrippen rond het kennisobject</a></p>
       </section>
+      <h2 id="zo-werkt-metis">Van bron naar bruikbare kennis</h2>
+      <ol class="explained-chain" aria-label="De kennisketen">{chain}</ol>
       <section class="explained-reading-section">
         <h2>Verder lezen</h2>
         <ul class="explained-reading-links">

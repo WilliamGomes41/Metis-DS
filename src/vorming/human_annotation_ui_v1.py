@@ -61,7 +61,18 @@ ERRORS = {
     'annotation_context_proposal_open':'Metis stelt tekst voor die bij deze uitspraak hoort. Voeg het voorstel in de kaart toe met + of wijs het af met −.',
     'annotation_declined_context_invalid':'Een afgewezen voorstel past niet bij deze bron. Open de opgeslagen annotatie opnieuw.',
 }
+# A point without its own sentence still offers the one action that always works in the card.
+UNKNOWN_FINDING = 'Metis kan deze uitspraak zo niet vastleggen. Haal haar weg met − en selecteer haar opnieuw in de bron.'
 FINDINGS = {**ERRORS,
+    # #1067: every point the card can still show says what is wrong and what to do, in the card.
+    'context_necessary_unresolved':'Er is tekst als noodzakelijk voor de betekenis aangemerkt die niet meer gekoppeld is. Voeg haar opnieuw toe met + bij Hoort erbij.',
+    'recommendation_evidence_missing':'Sla de uitspraak opnieuw op; de aanbeveling moet zelf als uitspraak zijn vastgelegd.',
+    'type_evidence_missing':'Sla de uitspraak opnieuw op; de uitspraak moet zelf als bewijs voor haar soort zijn vastgelegd.',
+    'recommendation_core_omits_source':'De uitspraak laat woorden uit de bron weg. Haal haar weg met − en selecteer de hele zin opnieuw.',
+    'recommendation_core_field_mismatch':'Een onderdeel van de aanbeveling past niet bij de geselecteerde tekst. Haal de uitspraak weg met − en selecteer haar opnieuw.',
+    'source_fidelity_failure':'De vastgelegde tekst komt niet letterlijk overeen met de bron. Haal de uitspraak weg met − en selecteer haar opnieuw.',
+    'span_not_in_source':'De vastgelegde tekst staat niet letterlijk in de bron. Haal de uitspraak weg met − en selecteer haar opnieuw.',
+    'annotation_context_proposal_open':'Metis stelt tekst voor die bij deze uitspraak hoort. Voeg het voorstel toe met + of wijs het af met −.',
     'annotation_source_empty':'Er is geen leesbare brontekst beschikbaar. Controleer het vastgelegde origineel voordat je verdergaat.',
     'annotation_not_ready':'Deze annotatie is nog niet gereed.',
     'annotation_fields_required':'Wijs de noodzakelijke betekenisvelden van deze uitspraak aan.',
@@ -86,6 +97,7 @@ FINDINGS = {**ERRORS,
 
 # #1060: what Metis could not derive. A question for a human, never a blocker.
 SIGNALS = {
+    'recommendation_semantics_open':'Richting en sterkte van deze aanbeveling stelt de reviewer vast.',
     'subject_missing':'Niet vastgesteld over wie of wat de uitspraak gaat.',
     'recommendation_subject_missing':'Niet vastgesteld over wie of wat de aanbeveling gaat.',
     'predicate_missing':'Niet vastgesteld wat erover gezegd wordt.',
@@ -611,7 +623,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 'De controle kon niet worden gelezen. Open de opgeslagen annotatie opnieuw.')},
                 status_code=status, headers={'Cache-Control':'no-store'})
         result['findings'] = [{'code':code,'field':CHECK_FIELDS.get(code),'message':FINDINGS.get(code,
-            'Controleer de betekenisvelden en de bijbehorende bronselectie.')} for code in result.pop('codes')]
+            UNKNOWN_FINDING)} for code in result.pop('codes')]
         result['signals'] = [{'code':code,'field':CHECK_FIELDS.get(code),'message':SIGNALS.get(code,
             'Metis kon een onderdeel van deze uitspraak niet vaststellen.')} for code in result.pop('signals')]
         return JSONResponse(result, headers={'Cache-Control':'no-store'})

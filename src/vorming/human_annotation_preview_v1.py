@@ -20,6 +20,35 @@ def _span(anchor):
     return {key: anchor[key] for key in ('block_id', 'start', 'end')}
 
 
+def usable_annotation_semantics(payload, *, fragments):
+    """#1067: Metis' direction/strength proposal as it may be built, or None.
+
+    The worker never answers for it. A proposal that is incomplete, does not
+    bind to the source or fails its contract is no proposal: the reviewer
+    chooses. The stored annotation is not changed.
+    """
+    from src.vorming.recommendation_semantics_v1 import (
+        complete_annotation_semantics, validate_recommendation_semantics)
+    raw = payload.get('recommendation_semantics')
+    if payload.get('object_type') != 'recommendation' or not complete_annotation_semantics(raw):
+        return None
+    from src.vorming.semantic_passage_v1 import _recommendation_semantics_from_proposal, semantic_source_blocks
+    from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
+    by_id = {block['block_id']: block for block in semantic_source_blocks(fragments)}
+    selected = [{key: anchor[key] for key in ('block_id', 'start', 'end')} | {'section_path': by_id[anchor['block_id']]['section_path']}
+                for anchor in payload['ranges'] if anchor['role'] == 'core' and anchor['block_id'] in by_id]
+    if not selected:
+        return None
+    try:
+        semantics, _ = _recommendation_semantics_from_proposal(raw, proposed_type='recommendation', selected=selected,
+            evidence_by_id=_read_source_blocks(fragments, include_headings=True))
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not semantics or validate_recommendation_semantics(semantics, confirmed=False):
+        return None
+    return semantics
+
+
 def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, signals=None):
     """The same per-entry inspection for document sealing and the editor.
 
@@ -74,19 +103,12 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
                     from src.vorming.semantic_passage_v1 import _recommendation_semantics_from_proposal
                     from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
                     from src.vorming.recommendation_semantics_v1 import validate_recommendation_semantics
-                    raw = payload.get('recommendation_semantics')
-                    if raw is None:
-                        codes.append('recommendation_semantics_invalid')
+                    from src.vorming.recommendation_semantics_v1 import complete_annotation_semantics
+                    semantics = usable_annotation_semantics(payload, fragments=fragments)
+                    if semantics is None:
+                        codes.append('recommendation_semantics_open')  # the reviewer decides (#1067)
                     else:
-                        semantics, _ = _recommendation_semantics_from_proposal(raw,
-                            proposed_type='recommendation', selected=[{**span, 'section_path':
-                                by_id[span['block_id']]['section_path']} for span in selected_literals],
-                            evidence_by_id=_read_source_blocks(fragments, include_headings=True))
                         row['proposed_recommendation_semantics'] = semantics
-                        if validate_recommendation_semantics(semantics, confirmed=False):
-                            codes.append('recommendation_semantics_invalid')
-                        if semantics.get('strength_status') == 'unmapped':
-                            codes.append('recommendation_strength_unmapped')
                 codes.extend(literal_field_codes(row, v3=True, check_locator=False))
                 for field in TYPE_FIELDS.get(payload['object_type'], ()):
                     if payload['field_evidence'][field].get('missing_reason') == VIA_RELATION:

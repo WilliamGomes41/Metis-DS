@@ -52,11 +52,15 @@ def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_
     assert "Metis uitgelegd" in response.text
     assert "Zo werkt Metis" in response.text
     assert "Bron aanleveren" in response.text
-    assert "Kennisvoorstellen maken" in response.text
+    assert "Het kennisobject: de bouwsteen van Metis" in response.text
+    assert "Kennisobjecten aanwijzen" in response.text
+    assert "Bron afronden en bouwen" in response.text
     assert "Inhoudelijk beoordelen" in response.text
     response = client.get("/over-console?section=begrippen")
     assert response.status_code == 200
-    assert "Kennisstuk (kennisobject)" in response.text
+    assert 'id="begrip-kennisstuk-kennisobject"' in response.text  # stable link target
+    assert "Het kennisobject" in response.text
+    assert response.text.index("Het kennisobject") < response.text.index("Werken met een bron")
     assert "Context" in response.text
     assert "Voorwaarde" in response.text
     assert "Uitzondering" in response.text
