@@ -262,7 +262,9 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
 10. **Het soortgeheugen hoort bij de exacte uitspraak** (Codex P2). Terugzetten herstelt alleen het voorstel voor
    dezelfde uitspraak; verandert de uitspraak, dan komt er niets van de oude terug. Bewijs: de suggestieproef breidt
    de uitspraak uit en wisselt terug; faalt zonder de wijziging.
-11. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+11. **De soortkeuze toont altijd het opgeslagen soort** (Codex P2). Zodra er een soort is, staat ‘Kies het soort’
+   uit; een lege keuze zet het opgeslagen soort terug in de lijst. Bewijs: de suggestieproef; faalt zonder de wijziging.
+12. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 

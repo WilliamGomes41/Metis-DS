@@ -313,7 +313,7 @@ import {bindRange} from '/annotations/binding.mjs';
     if(showType) row('type','Soort',dd=>{
       // The control stays mounted (see typeDd), so a choice in progress keeps its focus.
       if(document.activeElement!==kindSelect) kindSelect.value=entry.object_type || '';
-      kindSelect.disabled=saving;
+      kindSelect.disabled=saving;kindSelect.options[0].disabled=!!entry.object_type;
       if(kindBox.parentNode!==dd) dd.append(kindBox);
       hint(dd,entry.object_type ? 'Klopt het soort niet? Kies het juiste soort.' : 'Metis kon het soort niet bepalen. Kies het soort.');
     });
@@ -398,7 +398,8 @@ import {bindRange} from '/annotations/binding.mjs';
   // A changed kind keeps the selections; meaning parts of the old kind are cleared and stay open for the reviewer.
   function setSimpleType(value) {
     if(saving || finalizing || deriving) {kindSelect.value=entry.object_type || '';return;}
-    if(!value || value===entry.object_type) return;
+    // The visible control always shows the stored kind; an empty choice never hides a kind that is still saved.
+    if(!value || value===entry.object_type) {kindSelect.value=entry.object_type || '';return;}
     // Besluit William 2026-11-14: switching back restores Metis' proposal for that kind, without asking.
     // The memory belongs to this exact statement: a changed statement never gets meaning derived from the old one.
     const statement=entry.annotation_id+'|'+JSON.stringify(entry.ranges.filter(a=>a.role==='core').map(a=>[a.block_id,a.start,a.end]));

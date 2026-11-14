@@ -54,6 +54,10 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-simple-type-select').focus();
  await page.waitForTimeout(2500);slowCheck=false;
  assert.equal(await page.evaluate(()=>document.activeElement?.id),'annotation-simple-type-select','A re-render must keep the kind control focused');
+ // Codex P2: once a kind is set, the empty choice cannot hide it while it is still stored.
+ assert.equal(await page.locator('#annotation-simple-type-select option[value=""]').isDisabled(),true);
+ await page.locator('#annotation-simple-type-select').evaluate(select=>{select.value='';select.dispatchEvent(new Event('change'));});
+ assert.equal(await page.locator('#annotation-simple-type-select').inputValue(),'explanation','the control shows the stored kind');
  for(let i=0;i<60 && (await current()).object_type!=='explanation';i++) await page.waitForTimeout(250);
  entry=await current();
  assert.equal(entry.object_type,'explanation');assert.equal(entry.ranges[0].quote,core);
