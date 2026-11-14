@@ -44,6 +44,8 @@ const assert = require('node:assert/strict');
   }
   await page.setViewportSize({width:1440,height:1000});
   await page.getByRole('link',{name:'Verder aanwijzen'}).click();
+  // A person selects in a card that is ready; a selection made while the page still loads is no card behaviour.
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
   const core = page.locator('[data-source-block]').first();
   const points = await core.evaluate(node => {
     const text = node.firstChild, range = document.createRange();

@@ -243,7 +243,13 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
    afwijzing uit het reviewlogboek, net als de afwijzingsmelding, in de inventaris en op de reviewkaart. Bewijs:
    `tests/test_second_review_reject_1064.py::test_second_reviewer_rejects_from_the_review_card_and_the_first_reviewer_reads_why`;
    faalt zonder de wijziging.
-6. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+6. **Een selectie die wordt gemaakt, overleeft het hertekenen van de bron** (besluit William: “Zet de volgende
+   acties door”; vastgelegd in #1067 en MET-78). Na ‘Gereed’ tekent de kaart de markeringen opnieuw. Kwam het
+   antwoord laat, dan wiste dat de volgende selectie stil; dat was de oorzaak van de wisselende browserfouten in CI.
+   `replaceBlock` vervangt een bronblok alleen bij een echte wijziging en zet een lopende selectie terug op dezelfde
+   tekenposities, met dezelfde richting. Bewijs: de bronselectieproef met een laat antwoord op het opslaan; faalt
+   zonder de wijziging. De bouwproef wacht voortaan tot de kaart gereed is voordat hij selecteert.
+7. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 

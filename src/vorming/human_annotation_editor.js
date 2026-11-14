@@ -526,6 +526,23 @@ import {bindRange} from '/annotations/binding.mjs';
       window.location.href=data.review_url;
     } catch(error) {status(error.message);rebuilding=false;updateBindingControls();}
   });
+  // #1067: re-rendering a source block must not drop a selection the user is making in it. The block's text never
+  // changes, so the selection is kept as text positions and put back on the new nodes, direction included.
+  function replaceBlock(node, children) {
+    const next=document.createElement('div');next.append(...children);
+    if(next.innerHTML===node.innerHTML) return;
+    const selection=getSelection(), inside=selection.rangeCount && node.contains(selection.anchorNode) && node.contains(selection.focusNode);
+    const position=(container,offset)=>{const range=document.createRange();range.setStart(node,0);range.setEnd(container,offset);return range.toString().length;};
+    const kept=inside ? [position(selection.anchorNode,selection.anchorOffset),position(selection.focusNode,selection.focusOffset)] : null;
+    node.replaceChildren(...next.childNodes);
+    if(!kept) return;
+    const point=at=>{
+      const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);let text,last=null;
+      while((text=walker.nextNode())) {if(at<=text.length) return [text,at];at-=text.length;last=text;}
+      return last ? [last,last.length] : [node,0];
+    };
+    selection.setBaseAndExtent(...point(kept[0]),...point(kept[1]));
+  }
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -544,8 +561,7 @@ import {bindRange} from '/annotations/binding.mjs';
       if (!node) continue;
       const anchors = ranges.get(block.block_id) || [];
       if (!anchors.length) {
-        if (node.childNodes.length !== 1 || node.firstChild.nodeType !== Node.TEXT_NODE || node.textContent !== block.text)
-          node.textContent = block.text;
+        replaceBlock(node,[document.createTextNode(block.text)]);
         continue;
       }
       const chars = Array.from(block.text);
@@ -562,7 +578,7 @@ import {bindRange} from '/annotations/binding.mjs';
           mark.textContent=value;content.append(mark);
         } else content.append(document.createTextNode(value));
       }
-      node.replaceChildren(content);
+      replaceBlock(node,[content]);
     }
   }
   el('source-reason').add(new Option('Functie kiezen',''));
