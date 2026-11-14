@@ -46,7 +46,8 @@ def build_is_current(entries, bindings) -> bool:
     """A successful build still describes the document: every statement is ready and built, none awaits a rebuild."""
     if any(binding.get('pending') for binding in bindings.values()):
         return False
-    return all(entry.get('status') == 'ready' and entry.get('annotation_id') in bindings
+    # Source text that is no statement (a disposition) is accounted for but never becomes an object.
+    return all(entry.get('status') == 'ready' and (entry.get('disposition') or entry.get('annotation_id') in bindings)
                for entry in entries if entry.get('status') != 'withdrawn')
 
 

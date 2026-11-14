@@ -111,6 +111,11 @@ def test_document_check_route_follows_the_real_build(tmp_path, production_consol
     ([{'annotation_id': 'a', 'status': 'ready'}], {'a': {'pending': True}}, False),
     # A ready statement without its object.
     ([{'annotation_id': 'a', 'status': 'ready'}], {}, False),
+    # Source text that is no statement never has an object, but must be ready.
+    ([{'annotation_id': 'a', 'status': 'ready'}, {'annotation_id': 'h', 'status': 'ready',
+      'disposition': {'role': 'structure', 'reason': 'heading'}}], {'a': {}}, True),
+    ([{'annotation_id': 'a', 'status': 'ready'}, {'annotation_id': 'h', 'status': 'draft',
+      'disposition': {'role': 'structure', 'reason': 'heading'}}], {'a': {}}, False),
 ])
 def test_a_build_is_current_only_while_nothing_changed_since(entries, bindings, current_build):
     from src.review.knowledge_route_v1 import build_is_current
