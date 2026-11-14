@@ -130,3 +130,20 @@ def test_an_uploader_without_review_role_is_refused_where_their_approval_is_requ
             'option': 'one_other', 'four_eyes_required': True, 'reviewers': [first], 'readers': []})
     assert refused.value.code == 'reviewer_role_required'
     assert console.list_envelopes() == []
+
+
+def test_named_reviewers_given_by_username_still_match_the_derived_policy(production_console, tmp_path):
+    """Codex P2: receive_source accepts usernames for named_reviewers; the derived policy is compared after they
+    resolve to account IDs, as before."""
+    console = production_console(root=tmp_path)
+    uploader = console.create_account(username='builder', password='human-build-secret',
+                                      roles=('researcher', 'reviewer'))['account_id']
+    first = console.create_account(username='reviewer', password='human-build-secret', roles=('reviewer',))['account_id']
+    other = console.create_account(username='reviewer2', password='human-build-secret', roles=('reviewer',))['account_id']
+    sid = console.receive_source(actor_id=uploader, filename='v1.html', content_type='text/html',
+        data=b'<html><body><p>De kwetsbare huid verklaart de pijn.</p></body></html>',
+        ingest_kind='new', title='v1', version='1.0', date='2026-11-14', live_url='', class_='richtlijn',
+        family='test', named_reviewers=['reviewer', 'reviewer2'], review_choice={'contract': 'review-configuration-v1',
+        'option': 'two_others', 'four_eyes_required': False, 'reviewers': [first, other], 'readers': []})['snapshot_id']
+    policy = console._envelope(sid)['review_policy']
+    assert policy['primary'] == first and [a['reviewer_id'] for a in policy['assignments']] == [other]

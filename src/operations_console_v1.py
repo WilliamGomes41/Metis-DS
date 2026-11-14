@@ -1535,6 +1535,9 @@ class OperationsConsole:
             # named reviewers are the choice's reviewers, so they are compared without the uploader.
             named, members = set(named_reviewers or ()), set(reviewers)
             if policy_from_choice:
+                # Same input contract as before the derived policy: names and aliases resolve to account IDs.
+                if named_reviewers:
+                    named = set(self._resolve_named_reviewers(named_reviewers, actor_id))
                 named, members = named - {actor_id}, members - {actor_id}
             if named_reviewers and named != members:
                 raise ConsoleError("review_policy_membership_conflict")
