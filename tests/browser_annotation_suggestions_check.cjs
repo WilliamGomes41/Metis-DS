@@ -32,12 +32,27 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-simple-status').filter({hasText:'Metis leest'}).waitFor();
  await page.screenshot({path:output+'/meaning-pending.png',fullPage:true});
  await reading();
- assert.equal(await page.locator('#annotation-simple-type').isVisible(),false);
+ // #1067: Metis' kind shows in its own row and stays correctable.
+ assert.equal(await page.locator('#annotation-simple-type-select').inputValue(),'definition');
  let entry=await current();
  assert.equal(entry.object_type,'definition');assert.equal(entry.ranges[0].quote,core);
  assert.equal(entry.field_evidence.defined_term.span.start,0);assert.equal(entry.field_evidence.defined_term.span.end,12);
  assert.equal(entry.field_evidence.definiens_span.span.start,16);
  await page.screenshot({path:output+'/meaning-proposed.png',fullPage:true});
+ // #1067: the route says where the work is and what follows; '?' explains each row and stays open.
+ assert.equal(await page.locator('nav.ko-route [aria-current=step]').innerText(),'Annoteren');
+ assert.match(await page.locator('nav.ko-route .ko-route-next').innerText(),/^Hierna: /);
+ const help=page.locator('#annotation-simple-rows dt[data-row=belongs] .annotation-help-toggle');
+ await help.click();
+ await page.locator('#annotation-help-belongs').getByText('Niet: waarom het klopt. Dat hoort bij Onderbouwing.').waitFor();
+ assert.equal(await help.getAttribute('aria-expanded'),'true');
+ // A wrong kind is corrected in the card: the selections stay, the kind is stored.
+ await page.locator('#annotation-simple-type-select').selectOption('explanation');
+ for(let i=0;i<60 && (await current()).object_type!=='explanation';i++) await page.waitForTimeout(250);
+ entry=await current();
+ assert.equal(entry.object_type,'explanation');assert.equal(entry.ranges[0].quote,core);
+ assert.equal(await page.locator('#annotation-help-belongs').isVisible(),true,'the explanation stays open while working');
+ await page.screenshot({path:output+'/meaning-kind-corrected.png',fullPage:true});
  // 2. A selection made while Metis reads waits; the answer for the old statement never overwrites it.
  await page.keyboard.press('Escape');
  await page.locator('#annotation-ready:enabled').click();

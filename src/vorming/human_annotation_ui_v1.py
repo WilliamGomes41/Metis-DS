@@ -264,6 +264,12 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         back = '/annotations?' + urlencode({'document':document})
         intro = '<h1>'+('Documentoverzicht' if overview else 'Bron aanwijzen')+'</h1><h2>'+esc(state['title'])+'</h2><p data-working-revision="'+esc(state['working_revision_id'])+'">Bronversie '+version+'</p>'
         intro += '<p><a target="_blank" rel="noopener" href="/annotations/original?'+esc(urlencode({'document':document}))+'">Open het vastgelegde origineel</a></p>'
+        # #1067: where the work is and what happens next, the same line as on the review card.
+        from src.review.knowledge_route_v1 import annotation_route
+        second_review = bool((envelope.get('review_configuration') or {}).get('four_eyes_required'))
+        built = (state.get('current_build') or {}).get('state', '') if overview else ''
+        intro += annotation_route(overview=overview, second_review=second_review,
+                                  finalized=built if built in {'running', 'succeeded'} and not state.get('can_finalize') else '')
         if overview:
             items = []
             for entry in state['entries']:
@@ -309,8 +315,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 # #1060: information for worker and reviewer; never a reason to refuse sealing.
                 body += '<section aria-labelledby="annotation-signals"><h2 id="annotation-signals">Niet vastgesteld door Metis</h2><p>Dit houdt afsluiten niet tegen.</p><ul>'
                 for entry in noted:
-                    body += '<li>'+esc(' '.join(dict.fromkeys(SIGNALS.get(code, 'Een onderdeel is niet vastgesteld.') for code in entry['signals'])))
-                    body += ' <a href="'+esc(back+'&annotation='+entry['annotation_id'])+'">Annotatie bekijken</a></li>'
+                    # One point per line, so each can be read and checked on its own.
+                    body += '<li><ul>'+''.join('<li>'+esc(text)+'</li>' for text in
+                        dict.fromkeys(SIGNALS.get(code, 'Een onderdeel is niet vastgesteld.') for code in entry['signals']))
+                    body += '</ul><a href="'+esc(back+'&annotation='+entry['annotation_id'])+'">Annotatie bekijken</a></li>'
                 body += '</ul></section>'
             if inspection['unaccounted_ranges']:
                 # Text that is no statement is accounted for here, where it shows up; the card is for statements.
@@ -346,7 +354,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 else:
                     body += '<p>Afsluiten is pas mogelijk als alle annotaties en de bronafhandeling gereed zijn.'+(' De opgeslagen bouwopdracht blijft hierboven bereikbaar.' if current else '')+'</p>'
             body += '<p><a class="btn-secondary" href="'+escape(back,quote=True)+'">Verder aanwijzen</a></p>'
-            return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section><style>.annotation-gap{margin-block:1rem}.annotation-gap form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}.annotation-gap label{margin:0;font-weight:600}.annotation-gap select{width:auto;flex:0 1 16rem;font-size:1rem;min-height:2.75rem;max-width:100%}.annotation-gap .btn-secondary{min-height:2.75rem}</style>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
+            return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section><style>.room article.object{margin-block:0 1.5rem}.room article.object>a{display:inline-block;margin-top:.25rem}.room section[aria-labelledby]{margin-top:2rem}#annotation-signals+p+ul>li{margin-block:.5rem 1rem}#annotation-signals+p+ul ul{padding-left:1.1rem;margin:0 0 .25rem}.annotation-gap{margin-block:1rem}.annotation-gap form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}.annotation-gap label{margin:0;font-weight:600}.annotation-gap select{width:auto;flex:0 1 16rem;font-size:1rem;min-height:2.75rem;max-width:100%}.annotation-gap .btn-secondary{min-height:2.75rem}</style>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
         blocks = source_document_html(state['blocks'])
         pages = list(dict.fromkeys(loc['page'] for block in state['blocks']
             for loc in block.get('locations') or [] if loc.get('page')))
@@ -370,7 +378,6 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h3 id="annotation-current-version"></h3><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
 <section id="annotation-simple" aria-labelledby="annotation-simple-heading"><h3 id="annotation-simple-heading" tabindex="-1">Selecteer de uitspraak in de bron</h3>
 <dl id="annotation-simple-rows"></dl>
-<div id="annotation-simple-type" hidden><label for="annotation-simple-type-select">Metis kon het type niet bepalen. Wat voor uitspraak is dit?</label><select id="annotation-simple-type-select"><option value="">Kies het type</option></select></div>
 <p id="annotation-simple-status" role="status" aria-live="polite"></p><ul id="annotation-simple-notes"></ul></section>
 <section id="annotation-task-1" aria-labelledby="annotation-heading-1" hidden><h3 id="annotation-heading-1" tabindex="-1">Welke uitspraak wil je vastleggen?</h3>
 <label for="annotation-type">Type (optioneel vooraf kiezen)</label><select id="annotation-type">'''+type_options+'''</select>

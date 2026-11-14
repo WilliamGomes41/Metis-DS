@@ -401,6 +401,7 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
                 proposed['metadata'].pop(field, None)
         # A prior final assessment is evidence for its old tuple. Confirmed
         # classification/relations/semantics remain reviewer-owned choices.
+        _drop_confirmation_of_another_kind(proposed, raw)
         proposed['metadata'].pop('review_passage', None)
         proposed['metadata'].pop('passage_register', None)
         bound = proposed['metadata'].get('source_bound_context')
@@ -420,6 +421,22 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
         document_version=context['version'], source_hash=context['sha256'])
     return [deepcopy(unchanged[row['object_id']]) if row['object_id'] in unchanged else row
             for row in apply_passage_register(result)]
+
+def _drop_confirmation_of_another_kind(proposed, raw):
+    """#1067: a kind corrected in the annotation card is not overridden by the old version's confirmation.
+
+    A confirmation is about the kind it confirmed. When the corrected annotation now carries another kind,
+    that confirmation, and the direction/strength that only a recommendation has, no longer apply: the new
+    version shows the corrected kind as proposed and its reviewer confirms it. The same kind keeps everything.
+    """
+    from src.review.review_cockpit_v1 import confirmable_proposed_type
+    confirmed = proposed.get('confirmed_object_type')
+    corrected = confirmable_proposed_type(raw)
+    if not confirmed or not corrected or corrected == confirmed:
+        return
+    for field in ('confirmed_object_type', 'confirmed_recommendation_semantics', 'confirmed_recommendation_strength'):
+        proposed.pop(field, None)
+
 
 def _rebind_relations(result, previous, staged_version):
     """Rebuild IDs for the new source endpoint, never infer a new target."""

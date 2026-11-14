@@ -142,3 +142,69 @@ zien; de kaart is de enige weg.
   `browser_human_annotation_check.cjs` en de hulpfuncties voor het
   stappenformulier zijn vervallen: wat ze bewezen en nog bestaat zit in de
   veerkracht-, selectie- en bouwproef.
+
+## Deel C — richting voor de gebruiker, soort corrigeerbaar, uitleg op de plek
+
+Besluit William, 14 november 2026: “Alle drie”, zonder extra stappen; de
+gebruiker moet weten welke mijlpalen er komen. Vastgelegd in #1067 en MET-78.
+
+- **Routeregel** (`src/review/knowledge_route_v1.py`): één regel met de
+  mijlpalen Inleveren › Annoteren › Documentcontrole › Bouwen › Review ›
+  (Tweede review) › Publicatie en één zin “Hierna: …”. De tweede review staat
+  er alleen als die geldt: bij inleveren gekozen (annotatiepagina's) of voor dit
+  object vereist (reviewkaart). De regel staat op de annotatiekaart, de
+  documentcontrole en de reviewkaart van objecten uit annotatie. Hij wordt
+  afgeleid van bestaande toestand (KO-status, bouwstatus, correctie,
+  vierogenplicht) en voegt geen knop, vraag of stap toe.
+- **Soort als kaartregel**: de kaart toont het soort altijd als regel met een
+  keuzelijst. De keuzelijst is één blijvend element, zodat een keuze in
+  uitvoering de focus houdt. Wijzigen houdt de selecties; de betekenisvelden
+  van het oude soort vervallen en blijven open als signaal.
+- **Uitleg via ?** bij Uitspraak, Soort, Hoort erbij en Onderbouwing: tikken
+  klapt de uitleg open onder de regel (`aria-expanded`, geen hover-tooltip). De
+  uitleg blijft open tijdens het werk.
+- **Documentcontrole**: elk signaal staat op een eigen regel en de links
+  plakken niet meer aan de volgende kop (Impeccable-audit).
+
+### Bouwregel bij een gecorrigeerd soort (raakt de levenscyclus, fail-closed)
+
+`revision_workflow._drop_confirmation_of_another_kind`: bij opnieuw bouwen nam
+de nieuwe versie het eerder bevestigde soort over, waardoor een correctie van
+het soort in de kaart verloren ging. Dit gat bestond al vóór deel B.
+
+```text
+Lifecycle entity: WorkingRevision (opvolgende kennisobjectversie uit annotatie)
+Lifecycle transition: correctie in de kaart → opnieuw bouwen → nieuwe versie In review
+Initial durable state: een gebouwde versie met bevestigd soort S.
+Trigger: de annotatie krijgt in de kaart soort T ≠ S en wordt opnieuw gebouwd.
+Authorization: ongewijzigd (bestaande bouw- en correctierechten).
+Validation: ongewijzigd; alleen het gecorrigeerde soort wordt vergeleken.
+Mutable entities: de nieuwe versie: zonder bevestiging van S, en zonder
+  bevestigde richting en sterkte (die horen alleen bij een aanbeveling).
+Immutable entities: de vorige versie en haar bevestigingen, bron, annotaties,
+  bouwbewijs, releases.
+Workflow state before/after: In review → In review (nieuwe versie, zoals elke correctie).
+Release/Serving state: ongewijzigd; niets wordt uitgeleverd zonder nieuwe goedkeuring.
+Expected UI result: de reviewkaart van de nieuwe versie toont T als voorgesteld soort.
+Failure result: bij een bouwfout blijft de vorige versie ongewijzigd (bestaande bouw).
+Restart result: de nieuwe versie bewaart T; de oude bevestiging blijft historie.
+Legacy-data result: gelijk soort houdt alle bevestigingen; objecten buiten annotatie ongewijzigd.
+Required black-box scenario: GIVEN een goedgekeurde versie met soort Toelichting;
+  WHEN de reviewer via ‘Aanpassen in de kaart’ Definitie kiest en opnieuw bouwt;
+  THEN toont de nieuwe versie Definitie en wordt die na beoordeling goedgekeurd.
+Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annotatie.
+```
+
+### Bewijs
+
+- `tests/test_knowledge_route_1067.py` (routeregel uit toestand, geen bediening)
+  en `tests/test_kind_correction_1067.py` (bouwregel).
+- Browser: `browser_annotation_suggestions_check.cjs` (route, ?, soort
+  corrigeren), `browser_human_review_check.cjs` (route bij bouwen en review,
+  soort corrigeren tot en met goedkeuren), `browser_source_first_card_check.cjs`.
+- verify-this, met dezelfde reviewproef: VERIFIED.
+  - Nulmeting `d7dddf3`: de proef faalt, want de kaart heeft geen soortkeuze.
+  - Tussenmeting zonder bouwregel: de reviewkaart toont het oude soort.
+  - Behandeling: de reviewkaart toont het nieuwe soort.
+- Karakteriseringsgoldens: alleen het versienummer van `console.css` verandert;
+  vergeleken met dat nummer weggefilterd zijn alle 31 bestanden gelijk.
