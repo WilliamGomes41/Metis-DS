@@ -453,8 +453,17 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
     ``result`` in place.
     """
     from src.knowledge_relations_v1 import build_knowledge_relation, relation_sort_key
+    from src.review.review_cockpit_v1 import confirmable_proposed_type, serving_type_for_admission_type
+    from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
+
+    def kind(obj):
+        # The admission record is refreshed only after this step, so the corrected kind is read first.
+        proposed = str(obj.get('proposed_object_type') or '')
+        return str(obj.get('confirmed_object_type') or (serving_type_for_admission_type(proposed) if proposed else '')
+                   or confirmable_proposed_type(obj) or obj.get('object_type') or '')
     for _ in range(len(result) + 1):
         current = {row['object_id']: str(row['object_version']) for row in result}
+        rows = {row['object_id']: row for row in result}
         rebuilt = {object_id for object_id, version in current.items()
                    if object_id in previous_by_id and str(previous_by_id[object_id]['object_version']) != version}
 
@@ -467,7 +476,12 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
             proposed = row.get('proposed_knowledge_relations') or []
             if not any(stale(relation) for relation in [*confirmed, *proposed]):
                 continue
-            new, remap = deepcopy(row), {}
+            new, remap, lapsed_ids = deepcopy(row), {}, set()
+
+            def fits_now(relation):
+                # A target whose kind changed may no longer carry this relation: then it lapses, never re-proposed.
+                return relation_endpoint_compatible(relation['relation_type'], source_type=kind(row),
+                                                    target_type=kind(rows[relation['target_object_id']]))
 
             def repropose(relation):
                 return build_knowledge_relation(
@@ -477,13 +491,19 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
             proposals = {}
             for relation in proposed:
                 if stale(relation):
+                    if not fits_now(relation):
+                        lapsed_ids.add(relation['relation_id'])
+                        continue
                     fresh = repropose(relation)
                     remap[relation['relation_id']] = fresh['relation_id']
                     relation = fresh
                 proposals[relation['relation_id']] = relation
-            # A lapsed confirmation is offered again as a proposal for the new target version.
+            # A lapsed confirmation is offered again as a proposal for the new target version, if it still fits.
             lapsed = [relation for relation in confirmed if stale(relation)]
             for relation in lapsed:
+                if not fits_now(relation):
+                    lapsed_ids.add(relation['relation_id'])
+                    continue
                 fresh = repropose(relation)
                 remap.setdefault(relation['relation_id'], fresh['relation_id'])
                 proposals.setdefault(fresh['relation_id'], fresh)
@@ -503,10 +523,17 @@ def _retarget_relations_to_rebuilt(result, previous_by_id, unchanged, *, snapsho
                     keep=lambda r: not stale(r))
             metadata = new.get('metadata') or {}
             evidence = metadata.get('knowledge_relation_evidence')
-            if isinstance(evidence, dict):
-                for item in evidence.get('relations') or []:
+            if isinstance(evidence, dict) and isinstance(evidence.get('relations'), list):
+                # The evidence row names the same endpoint as its relation: it moves along, or lapses with it.
+                kept_evidence = []
+                for item in evidence['relations']:
+                    if item.get('relation_id') in lapsed_ids:
+                        continue
                     if item.get('relation_id') in remap:
                         item['relation_id'] = remap[item['relation_id']]
+                        item['target_object_version'] = current[item['target_object_id']]
+                    kept_evidence.append(item)
+                evidence['relations'] = kept_evidence
             review = metadata.get('knowledge_relation_review')
             if isinstance(review, dict) and 'confirmed_relation_ids' in review:
                 review['confirmed_relation_ids'] = [r['relation_id'] for r in new.get('confirmed_knowledge_relations') or []]
