@@ -226,6 +226,9 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
      echte gebouwde objecten.
 2. **Soort wisselen in de kaart: terugzetten herstelt het voorstel van Metis, zonder extra vraag.**
    - De kaart onthoudt de betekenisvelden per soort zolang de kaart openstaat.
+   - Het nieuwe soort bewaart alleen zijn eigen betekenisvelden. Velden van het vorige soort worden gewist, anders
+     zouden ze ongezien in het object worden gebouwd (Codex P2). Ze komen alleen via het terugzetten terug.
+     Bewijs: de suggestieproef (definitie → toelichting: term en definitie zijn leeg); faalt zonder de wijziging.
    - Bewijs: de suggestieproef (aanbeveling → toelichting → aanbeveling: de richting komt terug). Die proef faalt
      zonder de wijziging.
 3. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in

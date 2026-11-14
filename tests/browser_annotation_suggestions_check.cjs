@@ -52,6 +52,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  entry=await current();
  assert.equal(entry.object_type,'explanation');assert.equal(entry.ranges[0].quote,core);
  assert.equal(await page.locator('#annotation-help-belongs').isVisible(),true,'the explanation stays open while working');
+ // Codex P2: parts of the old kind are not stored with the new kind, where they would be built unseen.
+ assert.equal(entry.field_evidence.defined_term.span,null);assert.equal(entry.field_evidence.definiens_span.span,null);
  // Switching back restores Metis' proposal for that kind (besluit William 2026-11-14), without a question.
  await page.locator('#annotation-simple-type-select').selectOption('definition');
  for(let i=0;i<60 && (await current()).object_type!=='definition';i++) await page.waitForTimeout(250);

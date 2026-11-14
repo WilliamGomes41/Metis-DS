@@ -568,10 +568,20 @@ import {bindRange} from '/annotations/binding.mjs';
   el('source-reason').add(new Option('Functie kiezen',''));
   for(const [role,reasons] of Object.entries(fieldContract.source_roles))
     for(const reason of reasons) el('source-reason').add(new Option(reason.label,role+':'+reason.value));
+  // The meaning parts a kind has: the card shows exactly these, and a kind keeps no others.
+  function relevantFields(kind) {
+    const relevant=new Set(['subject_span','predicate_span',...(fieldContract.type_fields[kind] || [])]);
+    if(kind==='recommendation') for(const field of ['actor_span','target_group_span','scope_span','condition_span']) relevant.add(field);
+    return relevant;
+  }
   function resetFields() {
     entry.field_evidence ||= Object.fromEntries(fieldContract.fields.map(f => [f,{span:null,missing_reason:'uncertain'}]));
     for(const field of Object.values(fieldContract.type_core_fields))
       if(entry.field_evidence[field]?.core) entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
+    // Parts of another kind would be stored and built unseen; switching back restores them from kindMemory only.
+    const relevant=relevantFields(entry.object_type);
+    for(const field of fieldContract.fields)
+      if(field!=='type_evidence_spans' && !relevant.has(field)) entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
     entry.field_evidence.type_evidence_spans={core:true};
     const core=fieldContract.type_core_fields[entry.object_type];
     if(core) entry.field_evidence[core]={core:true};
@@ -580,8 +590,7 @@ import {bindRange} from '/annotations/binding.mjs';
   function renderFields() {
     el('to-controls').textContent=selected ? 'Aanwijzing koppelen' : 'Naar huidige annotatie';
     const currentField=el('field').value;
-    const relevant=new Set(['subject_span','predicate_span',...(fieldContract.type_fields[entry.object_type] || [])]);
-    if(entry.object_type==='recommendation') for(const field of ['actor_span','target_group_span','scope_span','condition_span']) relevant.add(field);
+    const relevant=relevantFields(entry.object_type);
     el('field').replaceChildren();
     for(const [field,label] of Object.entries(fieldContract.labels)) if(relevant.has(field)) el('field').add(new Option(label,field));
     if(relevant.has(currentField)) el('field').value=currentField;
