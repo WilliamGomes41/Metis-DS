@@ -115,3 +115,16 @@ def test_document_check_route_follows_the_real_build(tmp_path, production_consol
 def test_a_build_is_current_only_while_nothing_changed_since(entries, bindings, current_build):
     from src.review.knowledge_route_v1 import build_is_current
     assert build_is_current(entries, bindings) is current_build
+
+
+def test_review_card_route_shows_the_four_eyes_review_chosen_at_intake(production_console, tmp_path):
+    """Black-box: with four-eyes chosen at intake the first reviewer sees the second review coming."""
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    from tests.test_second_review_reject_1064 import four_eyes
+    console, _, sid, _, first, _, oid, _ = four_eyes(production_console, tmp_path)
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': console._account(first)['username'], 'password': 'human-build-secret'})
+        page = client.get('/review', params={'document': sid, 'object': oid}).text
+    assert 'Tweede review' in milestones(page) and current(page) == 'Review'
+    assert 'beoordeelt een tweede reviewer' in following(page)

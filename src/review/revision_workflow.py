@@ -363,6 +363,15 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
                 raise ValueError('annotation_identity_conflict')
             by_annotation[ref['annotation_id']] = row
     seen, result, unchanged = set(), [], {}
+    # #1067: the kind each annotation-backed object has after this build, for relation endpoint checks.
+    from src.review.review_cockpit_v1 import confirmable_proposed_type
+    next_kinds = {}
+    for raw in generated:
+        ref = (raw.get('metadata') or {}).get('human_annotation')
+        old = by_annotation.get(ref['annotation_id']) if ref else None
+        kind = confirmable_proposed_type(raw) if old is not None else ''
+        if kind and kind != old.get('confirmed_object_type'):
+            next_kinds[old['object_id']] = kind
     producer_metadata = ('semantic_passage', 'human_annotation', 'source_bound_fields',
         'source_bound_context', 'source_accountability', 'recommendation_semantics_evidence')
     for raw in generated:
@@ -401,7 +410,7 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
                 proposed['metadata'].pop(field, None)
         # A prior final assessment is evidence for its old tuple. Confirmed
         # classification/relations/semantics remain reviewer-owned choices.
-        _drop_confirmation_of_another_kind(proposed, raw, peers=by_id)
+        _drop_confirmation_of_another_kind(proposed, raw, peers=by_id, next_kinds=next_kinds)
         proposed['metadata'].pop('review_passage', None)
         proposed['metadata'].pop('passage_register', None)
         bound = proposed['metadata'].get('source_bound_context')
@@ -422,7 +431,7 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
     return [deepcopy(unchanged[row['object_id']]) if row['object_id'] in unchanged else row
             for row in apply_passage_register(result)]
 
-def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None):
+def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=None):
     """#1067: a kind corrected in the annotation card is not overridden by the old version's confirmation.
 
     A confirmation is about the kind it confirmed. When the corrected annotation now carries another kind,
@@ -439,11 +448,13 @@ def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None):
         return
     for field in ('confirmed_object_type', 'confirmed_recommendation_semantics', 'confirmed_recommendation_strength'):
         proposed.pop(field, None)
-    peers = peers or {}
+    peers, next_kinds = peers or {}, next_kinds or {}
 
     def fits(relation):
+        # A target corrected in the same build is judged by its new kind, never its old one.
         peer = peers.get(relation.get('target_object_id')) or {}
-        target = str(peer.get('confirmed_object_type') or peer.get('proposed_object_type') or peer.get('object_type') or '')
+        target = str(next_kinds.get(relation.get('target_object_id')) or peer.get('confirmed_object_type')
+                     or peer.get('proposed_object_type') or peer.get('object_type') or '')
         return relation_endpoint_compatible(relation.get('relation_type'), source_type=corrected, target_type=target)
     if 'confirmed_knowledge_relations' in proposed:
         proposed['confirmed_knowledge_relations'] = [

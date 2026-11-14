@@ -334,6 +334,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     from src.review.four_eyes_v1 import requires_four_eyes
     from src.review.knowledge_route_v1 import review_route
     required_second = requires_four_eyes(obj, confirmed_type=descriptor.object_type)
+    # The route also shows the four-eyes review chosen at intake; the publication gate applies it to every object.
+    route_second = required_second or bool((inputs.envelope.get('review_configuration') or {}).get('four_eyes_required'))
     rows = summary_rows(obj, inputs.objects, descriptor, review_path=path)
     shown = {text for values in rows.values() for text, _status, _origin in values}
     context_html, context_open = _context_evidence(obj, inputs.objects, sid, inputs.revision, shown)
@@ -355,7 +357,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + '<p class="ko-progress">Huidige versie ' + escape(descriptor.object_version) + history
             + ' <span aria-hidden="true">·</span> <strong data-ko-state>'
             + escape(state or 'Broncontext') + '</strong></p></header>'
-            + (review_route(state, stage_second=False, required_second=required_second) if annotation else '')
+            + (review_route(state, stage_second=False, required_second=route_second) if annotation else '')
             + '<div class="ko-review-layout">' + _source_panel(console, inputs, obj, task='inventory')
             + '<section class="ko-object-panel" aria-labelledby="ko-object-title">'
             '<h2 id="ko-object-title">Vastgelegd kennisobject</h2>'
@@ -388,7 +390,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '')
             + (' <span data-required-second-review>Er is een onafhankelijke tweede beoordeling nodig.</span>' if required_second and not second else '') + '</p></header>'
             # #1067: where this object is and what happens next; only for objects from annotation.
-            + (review_route(state, stage_second=second, required_second=required_second, rebuilding=rebuilding or '')
+            + (review_route(state, stage_second=second, required_second=route_second, rebuilding=rebuilding or '')
                if annotation else '')
             + notice + '<div class="ko-review-layout" data-document-assessment="'
             + escape(inputs.document_assessment, quote=True) + '">'
