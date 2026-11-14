@@ -112,3 +112,21 @@ def test_the_second_duty_survives_a_restart_and_one_approval_wins(production_con
         pass
     assert (console.snapshot_objects(sid, include_blocked=True), console.object_review_bindings(sid)) == before
     assert _stage(console, sid, oid) is None
+
+
+def test_an_uploader_without_review_role_is_refused_where_their_approval_is_required(production_console, tmp_path):
+    """Codex P2: v1 one_other with four eyes needs the uploader's approval. An uploader without the reviewer role
+    could never give it; such a document used to be accepted and stay unpublishable. Now the intake refuses it,
+    as it already did for v2 uploader_and_other, and stores nothing."""
+    console = production_console(root=tmp_path)
+    uploader = console.create_account(username='researcher', password='human-build-secret',
+                                      roles=('researcher',))['account_id']
+    first = console.create_account(username='reviewer', password='human-build-secret', roles=('reviewer',))['account_id']
+    with pytest.raises(ConsoleError) as refused:
+        console.receive_source(actor_id=uploader, filename='v1.html', content_type='text/html',
+            data=b'<html><body><p>De kwetsbare huid verklaart de pijn.</p></body></html>',
+            ingest_kind='new', title='v1', version='1.0', date='2026-11-14', live_url='', class_='richtlijn',
+            family='test', named_reviewers=[], review_choice={'contract': 'review-configuration-v1',
+            'option': 'one_other', 'four_eyes_required': True, 'reviewers': [first], 'readers': []})
+    assert refused.value.code == 'reviewer_role_required'
+    assert console.list_envelopes() == []

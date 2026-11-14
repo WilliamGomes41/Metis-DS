@@ -47,6 +47,13 @@ Part of MET-78. Besluit William, 14 november 2026: optie A (“A”). Vastgelegd
 Eén regel, één bron: de reviewplicht leert niets nieuws, en alleen de inname en de publicatiecontrole lezen de
 configuratie (`test_only_ingest_and_publish_gate_read_the_configuration`).
 
+- Bij v1 `one_other` met vierogenvink moet de uploader de reviewrol hebben, want diens goedkeuring is verplicht.
+  Een uploader zonder reviewrol wordt bij de inname geweigerd (`reviewer_role_required`), net als bij v2
+  `uploader_and_other`. Voorheen werd zo'n upload aangenomen en bleef het document onpubliceerbaar.
+- Met een afgeleid beleid volgen de reviewplicht én de publicatiecontrole dat beleid; de configuratie telt alleen
+  zonder beleid (`publish_authorization_contract` en `publication_readiness`). Een deelnemerswijziging houdt ze dus
+  gelijk, zoals bij v2.
+
 ## Lifecycle-specificatie (§14)
 
 ```text
