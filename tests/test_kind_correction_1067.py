@@ -44,6 +44,26 @@ def test_a_confirmed_relation_the_corrected_kind_cannot_hold_is_dropped():
     assert [r['relation_type'] for r in proposed['confirmed_knowledge_relations']] == kept
 
 
+def test_the_evidence_of_a_dropped_relation_goes_with_it():
+    """Codex P2: the successor describes only its own relations; kept relations keep their evidence."""
+    from src.vorming.knowledge_relation_proposal_v1 import PROPOSABLE_RELATION_TYPES, relation_endpoint_compatible
+    fits = lambda kind, source: relation_endpoint_compatible(kind, source_type=source, target_type='recommendation')
+    gone = next(k for k in sorted(PROPOSABLE_RELATION_TYPES) if fits(k, 'recommendation') and not fits(k, 'definition'))
+    stays = next(k for k in sorted(PROPOSABLE_RELATION_TYPES) if fits(k, 'definition'))
+    relation = lambda kind, rid: {'relation_id': rid, 'relation_type': kind, 'target_object_id': 'peer',
+                                  'target_object_version': '1'}
+    proposed = confirmed('recommendation', confirmed_knowledge_relations=[relation(gone, 'c-gone')],
+                         proposed_knowledge_relations=[relation(stays, 'p-stays')],
+                         metadata={'knowledge_relation_evidence': {'relations': [
+                             relation(gone, 'p-gone'), relation(stays, 'p-stays'), relation('unrelated', 'other')]}})
+    _drop_confirmation_of_another_kind(proposed, {'proposed_object_type': 'definition'},
+                                       peers={'peer': {'confirmed_object_type': 'recommendation'}})
+    assert [r['relation_type'] for r in proposed['confirmed_knowledge_relations']] == []
+    # The dropped relation's evidence goes, matched by endpoint even though it names the proposal's id.
+    assert [r['relation_id'] for r in proposed['metadata']['knowledge_relation_evidence']['relations']] == [
+        'p-stays', 'other']
+
+
 def test_a_target_corrected_in_the_same_build_is_judged_by_its_new_kind():
     from src.vorming.knowledge_relation_proposal_v1 import PROPOSABLE_RELATION_TYPES, relation_endpoint_compatible
     # A relation that fits explanation → condition but not explanation → definition.

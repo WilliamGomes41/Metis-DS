@@ -139,3 +139,23 @@ def test_review_card_route_shows_the_four_eyes_review_chosen_at_intake(productio
         page = client.get('/review', params={'document': sid, 'object': oid}).text
     assert 'Tweede review' in milestones(page) and current(page) == 'Review'
     assert 'beoordeelt een tweede reviewer' in following(page)
+
+
+@pytest.mark.parametrize('contract,option,four_eyes,reviewers,second', [
+    # Codex P2: v1 two_others needs both named reviewers, with or without the four-eyes flag.
+    ('review-configuration-v1', 'two_others', False, ['r1', 'r2'], True),
+    ('review-configuration-v1', 'one_other', False, ['r1'], False),
+    ('review-configuration-v1', 'one_other', True, ['r1'], True),
+    ('review-configuration-v1', 'uploader_sole', False, [], False),
+    ('review-configuration-v2', 'uploader_and_other', False, ['r1'], False),
+    ('review-configuration-v2', 'uploader_and_other', True, ['r1'], True),
+    ('review-configuration-v2', 'two_others', False, ['r1', 'r2'], False),
+    ('review-configuration-v2', 'two_others', True, ['r1', 'r2'], True),
+])
+def test_the_route_shows_a_second_review_exactly_when_the_configuration_needs_two_approvals(
+        contract, option, four_eyes, reviewers, second):
+    from src.review.review_configuration_v1 import second_approval_required
+    envelope = {'uploader_account_id': 'up', 'review_configuration': {
+        'contract': contract, 'option': option, 'four_eyes_required': four_eyes, 'reviewers': reviewers,
+        'readers': [], 'revision': 1, 'locked_at': '2026-11-14T00:00:00Z', 'source': 'chosen'}}
+    assert second_approval_required(envelope) is second

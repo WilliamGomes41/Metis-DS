@@ -591,15 +591,27 @@ def _drop_confirmation_of_another_kind(proposed, raw, *, peers=None, next_kinds=
         target = str(next_kinds.get(relation.get('target_object_id')) or peer.get('confirmed_object_type')
                      or peer.get('proposed_object_type') or peer.get('object_type') or '')
         return relation_endpoint_compatible(relation.get('relation_type'), source_type=corrected, target_type=target)
+    def endpoint(row):
+        return (row.get('relation_type'), row.get('target_object_id'), str(row.get('target_object_version')))
     # Proposals the corrected kind cannot carry go too; otherwise admission refuses the corrected object.
+    dropped = []
     for field, legacy in (('confirmed_knowledge_relations', 'confirmed_relations'),
                           ('proposed_knowledge_relations', 'relations')):
         if field in proposed:
+            dropped += [relation for relation in proposed[field] if not fits(relation)]
             proposed[field] = [relation for relation in proposed[field] if fits(relation)]
         if proposed.get(legacy):
             # Legacy rows may carry an older relation name; judge them by their served name, like the mirror check.
             proposed[legacy] = [row for row in proposed[legacy]
                                 if fits({**row, 'relation_type': serving_relation_type(row.get('relation_type'))})]
+    # The evidence of a dropped relation goes with it; the previous version keeps that history.
+    evidence = (proposed.get('metadata') or {}).get('knowledge_relation_evidence')
+    if dropped and isinstance(evidence, dict) and isinstance(evidence.get('relations'), list):
+        kept = {endpoint(relation) for field in ('confirmed_knowledge_relations', 'proposed_knowledge_relations')
+                for relation in proposed.get(field) or []}
+        gone_ids, gone = {relation.get('relation_id') for relation in dropped}, {endpoint(r) for r in dropped}
+        evidence['relations'] = [item for item in evidence['relations'] if endpoint(item) in kept
+                                 or (item.get('relation_id') not in gone_ids and endpoint(item) not in gone)]
 
 
 def _rebind_relations(result, previous, staged_version):

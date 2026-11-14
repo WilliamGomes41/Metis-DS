@@ -231,7 +231,14 @@ Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annot
      Bewijs: de suggestieproef (definitie → toelichting: term en definitie zijn leeg); faalt zonder de wijziging.
    - Bewijs: de suggestieproef (aanbeveling → toelichting → aanbeveling: de richting komt terug). Die proef faalt
      zonder de wijziging.
-3. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+3. **Relaties die het gecorrigeerde soort niet kan dragen, vervallen met hun bronbewijs** (Codex P2). De nieuwe versie
+   beschrijft alleen haar eigen relaties; de vorige versie bewaart de geschiedenis. Bewijs:
+   `tests/test_kind_correction_1067.py::test_the_evidence_of_a_dropped_relation_goes_with_it`; faalt zonder de wijziging.
+4. **De tweede review in de routeregel volgt de regel van de publicatiecontrole** (Codex P2).
+   `second_approval_required` vraagt `configured_approval` of één goedkeuring de gekozen configuratie vervult. Zo
+   staat ‘Tweede review’ er ook bij v1 `two_others` zonder vierogenvink, waar de publicatie op beide benoemde
+   reviewers wacht. Bewijs: de tabeltest per configuratie in `tests/test_knowledge_route_1067.py`.
+5. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
    dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
    - Bewijs: de bindingsproef met een vertraagde controle.
 

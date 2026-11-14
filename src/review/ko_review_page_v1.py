@@ -334,8 +334,9 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     from src.review.four_eyes_v1 import requires_four_eyes
     from src.review.knowledge_route_v1 import review_route
     required_second = requires_four_eyes(obj, confirmed_type=descriptor.object_type)
-    # The route also shows the four-eyes review chosen at intake; the publication gate applies it to every object.
-    route_second = required_second or bool((inputs.envelope.get('review_configuration') or {}).get('four_eyes_required'))
+    # The route also shows a second review the intake configuration requires; the publication gate applies it.
+    from src.review.review_configuration_v1 import second_approval_required
+    route_second = required_second or second_approval_required(inputs.envelope)
     # The second approval of a four-eyes review is still missing for this exact version.
     second_pending = route_second and len(exact_current_approver_ids(obj, inputs.bindings)) < 2
     rows = summary_rows(obj, inputs.objects, descriptor, review_path=path)
