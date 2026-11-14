@@ -17,6 +17,7 @@ import {bindRange} from '/annotations/binding.mjs';
       'Niet: voorwaarden of doelgroep. Die horen bij Hoort erbij.','Geen onderbouwing in de bron? Laat de regel leeg; de reviewer beoordeelt dat.'],
   };
   const helpOpen=new Set();
+  let saving=false;
   const kindBox=document.createElement('div'),kindSelect=document.createElement('select');
   {
     const label=document.createElement('label');
@@ -292,6 +293,7 @@ import {bindRange} from '/annotations/binding.mjs';
     if(core.length && !deriving) row('type','Soort',dd=>{
       // The same control is reused on every render, so a choice in progress keeps its focus.
       if(document.activeElement!==kindSelect) kindSelect.value=entry.object_type || '';
+      kindSelect.disabled=saving;
       dd.append(kindBox);
       hint(dd,entry.object_type ? 'Klopt het soort niet? Kies het juiste soort.' : 'Metis kon het soort niet bepalen. Kies het soort.');
     });
@@ -375,7 +377,8 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   // A changed kind keeps the selections; meaning parts of the old kind are cleared and stay open for the reviewer.
   function setSimpleType(value) {
-    if(!value || value===entry.object_type || finalizing || deriving) return;
+    if(saving || finalizing || deriving) {kindSelect.value=entry.object_type || '';return;}
+    if(!value || value===entry.object_type) return;
     delete entry.disposition;entry.object_type=value;el('type').value=value;
     resetFields();change();renderFields();renderSimple();runCheck();
   }
@@ -1023,8 +1026,12 @@ import {bindRange} from '/annotations/binding.mjs';
   const toOverview = () => { window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); };
   // In the card, saving first commits a statement that was only selected.
   async function saveCard() {
-    if(simple() && !hasCore() && selected) await useAs('core');
-    const saved=hasCore() && await finishCurrent();
+    // #1067: while 'Gereed' runs the kind cannot change; a choice made now would complete this save unseen.
+    saving=true;kindSelect.disabled=true;
+    try {
+      if(simple() && !hasCore() && selected) await useAs('core');
+      var saved=hasCore() && await finishCurrent();
+    } finally {saving=false;kindSelect.disabled=deriving;}
     if(!saved && simple() && openProposals().length) {
       asked=true;renderSimple();
       document.querySelector('#annotation-simple-rows [data-proposal=add]')?.focus();
