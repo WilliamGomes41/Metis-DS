@@ -258,3 +258,84 @@ def test_unknown_role_blocks_without_guessing(runtime_role):
     con, _ = runtime_role
     result = _observe(con, "no-such-runtime-role")
     assert result["status"] == "BLOCKED" and result["error"] == "workflow_runtime_role_missing"
+
+
+def test_strict_check_is_bounded_and_does_not_treat_minima_as_maxima(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    # This table has no independently reviewed maximum; do not invent one.
+    con.execute(f'GRANT DELETE ON workflow.accounts TO "{role}"')
+    result = _observe(con, role, strict=True)
+    assert result['status'] == 'PASS'
+    assert result['inspection_scope'] == ['workflow.publication_refusals:UPDATE', 'workflow:role_authority']
+    assert result['least_privilege_complete'] is False
+    assert 'workflow.accounts' in result['unassessed_relations']
+
+
+@pytest.mark.parametrize('source', ['direct', 'public', 'inherited', 'set-role'])
+def test_strict_check_rejects_forbidden_update_from_every_reachable_role(runtime_role, source):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    group = f'metis_privilege_group_{uuid.uuid4().hex[:8]}'
+    try:
+        if source in {'inherited', 'set-role'}:
+            con.execute(f'CREATE ROLE "{group}" NOLOGIN')
+            con.execute(f'GRANT UPDATE ON workflow.publication_refusals TO "{group}"')
+            if source == 'set-role':
+                con.execute(f'GRANT "{group}" TO "{role}" WITH INHERIT FALSE, SET TRUE')
+            else:
+                con.execute(f'GRANT "{group}" TO "{role}"')
+        else:
+            target = 'PUBLIC' if source == 'public' else f'"{role}"'
+            con.execute(f'GRANT UPDATE ON workflow.publication_refusals TO {target}')
+        assert _observe(con, role)['status'] == 'PASS'
+        result = _observe(con, role, strict=True)
+        assert result['status'] == 'BLOCKED'
+        assert any(f['relation'] == 'workflow.publication_refusals' and f['privilege'] == 'UPDATE'
+                   for f in result['excess_privileges'])
+        # Inspection must not remediate a grant, even when it is excessive.
+        target_role = group if source == 'set-role' else role
+        assert con.execute("SELECT has_table_privilege(%s,'workflow.publication_refusals','UPDATE')",
+                           (target_role,)).fetchone()[0]
+    finally:
+        con.execute('REVOKE UPDATE ON workflow.publication_refusals FROM PUBLIC')
+        if source in {'inherited', 'set-role'}:
+            con.execute(f'DROP OWNED BY "{group}"')
+            con.execute(f'DROP ROLE "{group}"')
+
+
+@pytest.mark.parametrize('attribute', ['SUPERUSER', 'BYPASSRLS', 'CREATEROLE'])
+def test_strict_check_rejects_unsafe_runtime_attributes(runtime_role, attribute):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    con.execute(f'ALTER ROLE "{role}" {attribute}')
+    result = _observe(con, role, strict=True)
+    assert result['status'] == 'BLOCKED'
+    assert any(f['attribute'] == attribute for f in result['unsafe_role_attributes'])
+
+
+def test_strict_check_rejects_workflow_schema_create(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    con.execute(f'GRANT CREATE ON SCHEMA workflow TO "{role}"')
+    result = _observe(con, role, strict=True)
+    assert result['status'] == 'BLOCKED'
+    assert any(f['attribute'] == 'SCHEMA_CREATE' for f in result['unsafe_role_attributes'])
+
+
+def test_strict_check_reports_reachable_table_ownership(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    group = f'metis_owner_group_{uuid.uuid4().hex[:8]}'
+    con.execute(f'CREATE ROLE "{group}" NOLOGIN')
+    try:
+        con.execute(f'GRANT "{group}" TO "{role}" WITH INHERIT FALSE, SET TRUE')
+        con.execute(f'ALTER TABLE workflow.accounts OWNER TO "{group}"')
+        result = _observe(con, role, strict=True)
+        assert result['status'] == 'BLOCKED'
+        assert any(f['attribute'] == 'RELATION_OWNER' and f['relation'] == 'workflow.accounts'
+                   for f in result['unsafe_role_attributes'])
+    finally:
+        con.execute(f'ALTER TABLE workflow.accounts OWNER TO CURRENT_USER')
+        con.execute(f'DROP OWNED BY "{group}"')
+        con.execute(f'DROP ROLE "{group}"')

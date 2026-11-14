@@ -56,7 +56,9 @@ class FakeConnection:
     def transaction(self):
         return nullcontext()
 
-    def execute(self, query: str):
+    def execute(self, query: str, params=None):
+        if query.startswith("SELECT set_config"):
+            return Rows([{"set_config": params[0]}])
         if query.startswith("SELECT current_database"):
             return Rows([{"database": "metis", "user": "admin"}])
         if "information_schema.tables" in query:
@@ -206,3 +208,57 @@ def test_registered_plan_installs_stop_guards_and_verifies_their_enabled_relatio
         assert observed['missing_triggers'] == ['processing_attempts.guard_prose_transition_attempt']
         con.execute('ALTER TABLE workflow.processing_attempts ENABLE TRIGGER guard_prose_transition_attempt')
         assert observe_schema(con)['status'] == 'PASS'
+
+
+@pytest.mark.parametrize('timeout', [0, -1, True, 1.5, '5000', 2147483648])
+def test_invalid_lock_timeout_is_rejected_before_any_migration(timeout):
+    con = FakeConnection()
+    paths = migration_paths(ROOT)
+    with pytest.raises(WorkflowMigrationError, match='workflow_migration_lock_timeout_invalid'):
+        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths), lock_timeout_ms=timeout)
+    assert con.applied == []
+
+
+def test_lock_timeout_rolls_back_only_the_failing_file_and_retry_succeeds(complete_postgres, tmp_path):
+    import psycopg
+    from psycopg.rows import dict_row
+
+    first = tmp_path/'first.sql'
+    second = tmp_path/'second.sql'
+    first.write_text('CREATE TABLE IF NOT EXISTS workflow.design_first(setting TEXT); '
+                     "INSERT INTO workflow.design_first SELECT current_setting('lock_timeout') "
+                     'WHERE NOT EXISTS(SELECT 1 FROM workflow.design_first);')
+    second.write_text('CREATE TABLE workflow.design_partial(value TEXT); '
+                      'ALTER TABLE workflow.documents ADD COLUMN IF NOT EXISTS design_column TEXT;')
+    paths = (first, second)
+    with psycopg.connect(complete_postgres.dsn, autocommit=True, row_factory=dict_row) as con:
+        con.execute("SET lock_timeout='2s'")
+        with psycopg.connect(complete_postgres.dsn) as holder:
+            holder.execute('SELECT * FROM workflow.documents LIMIT 0')
+            with pytest.raises(WorkflowMigrationError, match='workflow_migration_failed:second.sql') as error:
+                apply_migrations(con, paths=paths, expected_digest=migration_digest(paths), lock_timeout_ms=100)
+            assert error.value.__cause__.sqlstate == '55P03'
+            assert con.execute('SELECT setting FROM workflow.design_first').fetchone()['setting'] == '100ms'
+            assert con.execute("SELECT to_regclass('workflow.design_partial') AS name").fetchone()['name'] is None
+            assert not con.execute("SELECT 1 FROM information_schema.columns WHERE table_schema='workflow' "
+                                   "AND table_name='documents' AND column_name='design_column'").fetchone()
+            assert con.execute('SHOW lock_timeout').fetchone()['lock_timeout'] == '2s'
+            holder.rollback()
+        result = apply_migrations(con, paths=paths, expected_digest=migration_digest(paths), lock_timeout_ms=100)
+        assert result['status'] == 'PASS'
+        assert con.execute('SELECT count(*) AS n FROM workflow.design_first').fetchone()['n'] == 1
+        assert con.execute("SELECT to_regclass('workflow.design_partial') AS name").fetchone()['name']
+        assert con.execute('SHOW lock_timeout').fetchone()['lock_timeout'] == '2s'
+
+
+def test_default_lock_timeout_is_local_to_the_migration(complete_postgres, tmp_path):
+    import psycopg
+    from psycopg.rows import dict_row
+
+    path = tmp_path/'capture.sql'
+    path.write_text("CREATE TABLE workflow.design_timeout AS SELECT current_setting('lock_timeout') AS value;")
+    with psycopg.connect(complete_postgres.dsn, autocommit=True, row_factory=dict_row) as con:
+        before = con.execute('SHOW lock_timeout').fetchone()['lock_timeout']
+        apply_migrations(con, paths=(path,), expected_digest=migration_digest((path,)))
+        assert con.execute('SELECT value FROM workflow.design_timeout').fetchone()['value'] == '5s'
+        assert con.execute('SHOW lock_timeout').fetchone()['lock_timeout'] == before
