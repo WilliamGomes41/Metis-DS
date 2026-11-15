@@ -124,7 +124,6 @@ De harde regels veranderen niet:
 | --- | --- | --- |
 | Elk bereik verwijst naar dezelfde vastgelegde bron en exacte tekens | `annotations.save`, bron/extractie/normalisatie en ankervalidatie | Gewijzigde bron of graphemegrens wordt geweigerd |
 | Een oude tab overschrijft geen nieuw werk | Kernelcontrole op revision, generation en objectfrontier | Twee conflicterende tabs leveren één commit en één conflict |
-| Een essentiële relatie verdwijnt niet door alleen tekst weg te halen | `_relationship_history`, `required_links` en native guards | Verwijderen blijft een open verplichting na herladen |
 | Een onzekere retry maakt geen dubbele versie | `annotation_commands` en request hash | Dezelfde opdracht na responseverlies geeft hetzelfde receipt |
 | Annoteren verleent geen review/publicatie | Bestaande preview, seal/build, review en registry | Een client die lokaal ‘klaar’ toont kan geen gate passeren |
 | Opgeslagen historie wordt niet stil hervertaald | Bestaande inputversies en immutable annotation_versions | Een oudere of uitgedunde writer wordt geweigerd |
@@ -160,7 +159,8 @@ type Workspace = {
 contracten. `BindingTarget` bestaat alleen voor de bediening en wordt geen
 nieuw opslagveld. De bestaande selectie bevat nog steeds `ranges`,
 `pending_range`, `field_evidence`, `recommendation_semantics`,
-`evidence_not_applicable`, `required_links` en eventueel `disposition`.
+`evidence_not_applicable` en eventueel `disposition`. Het essentiële verband
+(`required_for_meaning`, `required_links`) is weg (#1060 deel 2).
 
 Dominante patronen: bron eenmaal openen; vaak aanwijzen en één annotatie wijzigen;
 na 600ms rust dezelfde annotatie bewaren; soms annotatie wisselen of het hele
@@ -260,10 +260,8 @@ interfaceontwerp.
   ‘Brononderbouwing toegevoegd’ of ‘Expliciet niet van toepassing’. Een lege
   selectie met `evidence_not_applicable:false` bewijst geen zoekhandeling.
   Onderbouwing en NA tegelijk blijven ongeldig. Geen automatische NA op type.
-- `required_for_meaning:false` bewijst niet dat iemand expliciet ‘niet essentieel’
-  heeft beoordeeld. Vraag dat bij nieuwe contextbinding zonder voorgeselecteerd
-  antwoord. Koppel pas na een keuze. Een tussentijds opgeslagen `pending_range`
-  is herstel van de bronselectie, geen bewijs van een beantwoord formulier.
+- Een tussentijds opgeslagen `pending_range` is herstel van de bronselectie,
+  geen bewijs van een beantwoord formulier.
 - Hervatten bewaart exacte ankers en bestaande rollen; de tijdelijke veldtaak
   is niet altijd reconstrueerbaar. Vraag dan opnieuw waaraan tekst moet worden
   gekoppeld. Raad geen veld, essentialiteit of onderbouwingsbetekenis.

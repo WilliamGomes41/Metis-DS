@@ -33,7 +33,6 @@ def build_objects(seal, entries, *, fragments):
             'field_evidence': deepcopy(payload['field_evidence']),
             'annotation_ranges': deepcopy(payload['ranges']),
             'evidence_not_applicable': payload['evidence_not_applicable'],
-            'required_links': deepcopy(payload.get('required_links') or []),
             # #1067: only a proposal that binds to the source is built; otherwise the reviewer chooses.
             'recommendation_semantics': deepcopy(payload.get('recommendation_semantics'))
                 if usable_annotation_semantics(payload, fragments=fragments) is not None else None,

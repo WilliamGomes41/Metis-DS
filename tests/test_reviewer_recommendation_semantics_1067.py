@@ -57,7 +57,7 @@ def test_recommendation_without_direction_and_strength_reaches_review_and_the_re
     fields = {key: {'span': None, 'missing_reason': 'uncertain'} for key in FIELDS}
     fields.update(type_evidence_spans={'core': True}, recommendation_evidence_span={'core': True})
     request = command(view, ranges=[core], status='ready')
-    request['selection'].update(object_type='recommendation', field_evidence=fields, required_links=[],
+    request['selection'].update(object_type='recommendation', field_evidence=fields,
                                 recommendation_semantics=None)
     # The worker sets nothing about direction or strength, and that does not stop the annotation.
     annotation.save(console, actor_id=actor, **request)

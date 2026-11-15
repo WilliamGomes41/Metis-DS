@@ -109,14 +109,14 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
                        'four_eyes_required': False, 'reviewers': [], 'readers': []})['snapshot_id']
     view = annotation.prepare(console, actor_id=actor, snapshot_id=sid, expected_revision=console.objects_revision(sid))
     core = anchor(view, 'Bij diabetes')
-    introduction = {**anchor(view, 'De volgende mechanismen', role='list_introduction'), 'required_for_meaning': True}
+    introduction = anchor(view, 'De volgende mechanismen', role='list_introduction')
     # The worker marked the statement and the text that belongs to it. No sentence part is filled in and
     # no evidence choice is made: with nothing linked, that decision is the reviewer's.
     fields = {key: {'span': None, 'missing_reason': 'uncertain'} for key in FIELDS}
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core, introduction], status='ready')
     request['selection'].update(object_type='explanation', evidence_not_applicable=False,
-                                field_evidence=fields, required_links=[])
+                                field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
 
     checked = annotation.check_current(console, actor_id=actor, snapshot_id=sid, annotation_id=request['annotation_id'])

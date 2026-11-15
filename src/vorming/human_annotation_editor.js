@@ -427,7 +427,7 @@ import {bindRange} from '/annotations/binding.mjs';
     selected=value;lostSelection='';
     el('to-source').href='#'+value.block_id;
     const role=!hasCore() ? 'core' : armed==='evidence' ? 'evidence' : 'context';
-    entry.pending_range={...selected,role,required_for_meaning:false,evidence_function:role==='evidence' ? 'supported_by' : null};
+    entry.pending_range={...selected,role,evidence_function:role==='evidence' ? 'supported_by' : null};
     change();
     onSelection();
   }
@@ -516,14 +516,13 @@ import {bindRange} from '/annotations/binding.mjs';
     timer = setTimeout(() => { flush().catch(() => {}); },600);
   }
   function requestForCurrent() {
-    const reference = a => ({block_id:a.block_id,start:a.start,end:a.end,quote:a.quote,role:a.role,required_for_meaning:a.required_for_meaning,evidence_function:a.evidence_function,
+    const reference = a => ({block_id:a.block_id,start:a.start,end:a.end,quote:a.quote,role:a.role,evidence_function:a.evidence_function,
       ...(a.relationship_id ? {relationship_id:a.relationship_id} : {})});
     const ranges = entry.ranges.map(reference);
     return {snapshot_id:state.snapshot_id,command_id:crypto.randomUUID(),annotation_id:entry.annotation_id,
       expected_revision:entry.revision,expected_generation:state.generation,extraction_hash:state.extraction_hash,normalization:state.normalization,
       expected_objects_revision:state.objects_revision,
       selection:{status:entry.status,object_type:entry.object_type,ranges,pending_range:entry.pending_range ? reference(entry.pending_range) : null,evidence_not_applicable:entry.evidence_not_applicable,
-        required_links:clone(entry.required_links),
         ...(entry.declined_context?.length && !entry.disposition ? {declined_context:entry.declined_context.map(row=>({block_id:row.block_id,start:row.start,end:row.end,quote:row.quote ?? literal(row)}))} : {}),
         ...(entry.disposition ? {disposition:clone(entry.disposition)} : {
         field_evidence:Object.fromEntries(Object.entries(entry.field_evidence).map(([f,e]) =>
@@ -668,7 +667,6 @@ import {bindRange} from '/annotations/binding.mjs';
   function load(id) {
     const saved = state.entries.find(e => e.annotation_id === id);
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
-    entry.required_links ||= [];
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
     check=null;deriving=false;armed=null;queued=null;asked=false;lostSelection='';

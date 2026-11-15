@@ -42,7 +42,7 @@ def anchor(view, text, *, role='core', start=0, end=None, function=None):
     block = next(b for b in view['blocks'] if text in b['text'])
     end = len(block['text']) if end is None else end
     return {'block_id':block['block_id'],'start':start,'end':end,'quote':block['text'][start:end],
-        'role':role,'required_for_meaning':role in {'condition','exception'},'evidence_function':function}
+        'role':role,'evidence_function':function}
 
 
 def command(view, *, ranges=None, status='draft'):
@@ -86,7 +86,7 @@ def test_save_pause_restart_multiple_ranges_overview_and_exact_commands(tmp_path
     final = annotation.overview(resumed,actor_id=actor,snapshot_id=sid)
     assert final['entries'][0]['status']=='ready'
     assert final['overview_hash']!=loaded['overview_hash']
-    assert final['entries'][0]['ranges'][1]['required_for_meaning']
+    assert 'required_for_meaning' not in final['entries'][0]['ranges'][1]
     assert resumed.workflow_document_store.get_envelope(sid)==before
     assert resumed.snapshot_objects(sid,include_blocked=True)==[]
     assert resumed.object_review_bindings(sid)==[]
@@ -133,7 +133,7 @@ def test_unicode_duplicate_positions_stale_witness_and_roles(tmp_path, productio
     copies=[b for b in view['blocks'] if b['text']=='Herhaalde paragraaf.']
     assert len(copies)==2 and copies[0]['block_id']!=copies[1]['block_id']
     multiple=[{'block_id':b['block_id'],'start':0,'end':len(b['text']),'quote':b['text'],
-        'role':'core','required_for_meaning':False,'evidence_function':None} for b in copies]
+        'role':'core','evidence_function':None} for b in copies]
     annotation.save(console,actor_id=actor,**command(view,ranges=multiple))
     view=annotation.overview(console,actor_id=actor,snapshot_id=sid)
     def rejected(change, code):
@@ -147,6 +147,9 @@ def test_unicode_duplicate_positions_stale_witness_and_roles(tmp_path, productio
     # #1060: only evidence together with 'not applicable' is refused; neither is the reviewer's call.
     rejected(lambda r:(r['selection'].update(status='ready',evidence_not_applicable=True),r['selection']['ranges'].append(anchor(view,'Onderzoek',role='evidence',function='supported_by'))), 'annotation_evidence_required')
     rejected(lambda r:r['selection']['ranges'][0].update(role='evidence'), 'annotation_evidence_function_required')
+    # #1060 deel 2: the essential relationship is gone; the kernel no longer accepts either of its fields.
+    rejected(lambda r:r['selection']['ranges'][0].update(required_for_meaning=False), 'annotation_anchor_invalid')
+    rejected(lambda r:r['selection'].update(required_links=[]), 'annotation_selection_invalid')
     with pytest.raises(ConsoleError,match='reviewer_not_named_on_snapshot|researcher_role_required'):
         other = console.create_account(username='outsider',password='annotation-secret',roles=('reviewer',))
         annotation.save(console,actor_id=other['account_id'],**command(view))

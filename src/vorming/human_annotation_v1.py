@@ -156,7 +156,7 @@ def _read_set(console, snapshot_id):
 
 
 def _validate(selection, blocks):
-    if not isinstance(selection, dict) or set(selection) - {'status','object_type','ranges','evidence_not_applicable','pending_range','field_evidence','recommendation_semantics','selection_version','disposition','required_links','declined_context'}:
+    if not isinstance(selection, dict) or set(selection) - {'status','object_type','ranges','evidence_not_applicable','pending_range','field_evidence','recommendation_semantics','selection_version','disposition','declined_context'}:
         fail('annotation_selection_invalid')
     status, kind = selection.get('status'), selection.get('object_type')
     disposition=selection.get('disposition')
@@ -180,7 +180,7 @@ def _validate(selection, blocks):
         fail('annotation_selection_invalid')
     result, seen = [], set()
     for anchor in ranges:
-        if not isinstance(anchor, dict) or set(anchor) - {'block_id','start','end','quote','role','required_for_meaning','evidence_function','relationship_id'}:
+        if not isinstance(anchor, dict) or set(anchor) - {'block_id','start','end','quote','role','evidence_function','relationship_id'}:
             fail('annotation_anchor_invalid')
         if not isinstance(anchor.get('block_id'),str):
             fail('annotation_anchor_invalid')
@@ -194,7 +194,7 @@ def _validate(selection, blocks):
         exact = block['text'][start:end]
         if anchor.get('quote') != exact:
             fail('annotation_anchor_mismatch')
-        if role not in ROLES or type(anchor.get('required_for_meaning', False)) is not bool:
+        if role not in ROLES:
             fail('annotation_role_invalid')
         function = anchor.get('evidence_function')
         if (role == 'evidence' and function not in EVIDENCE_FUNCTIONS) or (role != 'evidence' and function is not None):
@@ -203,8 +203,7 @@ def _validate(selection, blocks):
         if key in seen:
             fail('annotation_range_duplicate')
         seen.add(key)
-        result.append({'block_id':block['block_id'],'start':start,'end':end,'role':role,
-            'required_for_meaning': anchor.get('required_for_meaning',False), 'evidence_function':function,
+        result.append({'block_id':block['block_id'],'start':start,'end':end,'role':role,'evidence_function':function,
             'quote_sha256':hashlib.sha256(exact.encode('utf-8')).hexdigest()})
         if 'relationship_id' in anchor:
             if role=='core' or not isinstance(anchor['relationship_id'],str) or len(anchor['relationship_id'])>1024:
@@ -231,26 +230,6 @@ def _validate(selection, blocks):
              'evidence_not_applicable':selection.get('evidence_not_applicable',False)}
     if any(a['role'] in ROLES[7:] or 'relationship_id' in a for a in [*result,*([pending] if pending else [])]):
         payload['selection_version']='human-annotation-input-v2'
-    if 'required_links' in selection:
-        links=selection['required_links']
-        if not isinstance(links,list) or len(links)>256:
-            fail('annotation_relationship_invalid')
-        for link in links:
-            if (not isinstance(link,dict) or set(link)!={'relationship_id','role','evidence_function','required_for_meaning','withdrawal_reason'}
-                    or not isinstance(link['relationship_id'],str) or len(link['relationship_id'])>1024
-                    or link['role'] not in ROLES[1:] or type(link['required_for_meaning']) is not bool
-                    or link['role']=='evidence' and link['evidence_function'] not in EVIDENCE_FUNCTIONS
-                    or link['role']!='evidence' and link['evidence_function'] is not None):
-                fail('annotation_relationship_invalid')
-            reason=link['withdrawal_reason']
-            if link['required_for_meaning']:
-                if reason is not None:
-                    fail('annotation_relationship_invalid')
-                if status=='ready':
-                    fail('annotation_required_relationship_missing')
-            elif not isinstance(reason,str) or not 1<=len(reason.strip())<=1000:
-                fail('annotation_relationship_withdrawal_required')
-        payload.update(required_links=[dict(link) for link in links],selection_version='human-annotation-input-v2')
     if disposition is not None:
         payload.update(disposition=dict(disposition),selection_version='human-annotation-input-v2')
     if 'field_evidence' in selection:
@@ -339,12 +318,10 @@ def _relationship_history(previous, payload, annotation_id):
     if payload.get('selection_version'):
         for anchor in ranges:
             anchor.setdefault('relationship_id',identity(anchor))
-    links=payload.get('required_links') or []
     bound={identity(a):a for a in ranges}
-    open_links={a['relationship_id']:a for a in links}
-    if len(bound)!=len(ranges) or len(open_links)!=len(links):
+    if len(bound)!=len(ranges):
         fail('annotation_relationship_duplicate')
-    identities=[*bound.items(),*open_links.items()]
+    identities=list(bound.items())
     pending=payload.get('pending_range')
     if pending and 'relationship_id' in pending:
         identities.append((pending['relationship_id'],pending))
@@ -359,15 +336,6 @@ def _relationship_history(previous, payload, annotation_id):
                 fail('annotation_relationship_invalid')
         except (ValueError,TypeError):
             fail('annotation_relationship_invalid')
-    for key,link in open_links.items():
-        if key in bound and (link['required_for_meaning'] or bound[key]['required_for_meaning']):
-            fail('annotation_relationship_duplicate')
-    if previous and payload['status']!='withdrawn':
-        needed={identity(a) for a in previous['ranges'] if a['role']!='core' and a['required_for_meaning']}
-        needed.update(a['relationship_id'] for a in previous.get('required_links') or [] if a['required_for_meaning'])
-        retained={key for key,a in bound.items() if a['required_for_meaning']} | set(open_links)
-        if not needed<=retained:
-            fail('annotation_required_relationship_missing')
 
 
 def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_revision,
