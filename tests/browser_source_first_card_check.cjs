@@ -166,13 +166,20 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
  assert.equal(await page.evaluate(()=>document.activeElement?.closest?.('[data-source-block]')?.textContent),support);
  // Codex P2: with a statement, Escape cancels the selection, so no hidden pending selection blocks finishing.
+ // Start from a settled, checked card: nothing in flight that could hide a missing recheck.
+ await page.locator('#annotation-ready:enabled').waitFor();
+ await page.waitForFunction(()=>!/Controleren|niet opgeslagen|Opslaan…/.test(document.getElementById('annotation-simple-status').textContent+document.getElementById('annotation-status').textContent));
+ await page.waitForTimeout(1000);
  await tasks.selectText(page,block(failing),failing.slice(14));
  await block(failing).focus();await page.keyboard.press('Tab');await page.keyboard.press('Escape');
  await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
  for(let i=0;i<60 && (await current())?.pending_range;i++) await page.waitForTimeout(250);
  assert.equal((await current()).pending_range,null);
  assert.equal(await page.evaluate(()=>getSelection().toString()),'');
- await page.locator('#annotation-ready:enabled').waitFor();
+ // Codex P2: cancelling checks again at once, like '−', so finishing is offered without a manual recheck.
+ await page.waitForTimeout(1500);
+ await page.locator('#annotation-ready:enabled').waitFor({timeout:5000});
+ assert.equal(await page.locator('#annotation-simple-recheck').count(),0);
  // A statement in two pieces: 'Uitspraak' in the menu adds the next piece.
  await tasks.selectText(page,block(failing),failing.slice(14));
  assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);

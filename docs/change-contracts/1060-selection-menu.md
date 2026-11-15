@@ -19,7 +19,7 @@ William: “je moet selecteren aan de linker kant en daarna met je muis naar de 
 - **Menu bij de selectie** (`#annotation-selection-menu`, `role="toolbar"`):
   - het staat in het scrollende document, direct na het bronblok en onder de selectie, en scrolt mee;
   - Tab vanuit de bronpassage bereikt het; pijltjestoetsen gaan tussen de knoppen; Escape sluit het en zet de focus terug op de passage. Na een keuze gaat de focus ook terug naar de passage (Codex P2);
-  - het menu wegzetten (Escape, of in de bron klikken) annuleert de selectie als er al een uitspraak is. Die selectie staat nergens anders in de kaart, dus een verborgen bewaarde selectie houdt het afronden niet meer tegen (Codex P2). Zonder uitspraak blijft de selectie zichtbaar als uitspraak in de kaart, met haar eigen −;
+  - het menu wegzetten (Escape, of in de bron klikken) annuleert de selectie als er al een uitspraak is. Die selectie staat nergens anders in de kaart, dus een verborgen bewaarde selectie houdt het afronden niet meer tegen (Codex P2). Net als bij de − volgt meteen een nieuwe controle, zodat afronden direct weer kan. Zonder uitspraak blijft de selectie zichtbaar als uitspraak in de kaart, met haar eigen −;
   - de muis neemt bij het klikken de selectie niet weg;
   - op een telefoon staat het onder de selectie, zodat het niet botst met het eigen menu van de telefoon.
   - de plaats komt uit de selectie zoals de kaart die vasthoudt, niet uit de live selectie van de browser. Een bewaarde selectie (`pending_range`) krijgt na herladen haar menu terug (Codex P2);

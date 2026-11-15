@@ -301,8 +301,9 @@ import {bindRange} from '/annotations/binding.mjs';
   function dismissMenu() {
     if(!hasCore()) {menuClosed=true;renderMenu();return;}
     if(!selected && !entry.pending_range) {menuClosed=true;renderMenu();return;}
+    // Like every other edit ('−' included): save, then check again, so finishing is offered again at once.
     selected=null;entry.pending_range=null;window.getSelection().removeAllRanges();
-    change();renderMenu();
+    change();renderMenu();runCheck();
   }
   function renderMenu() {
     const show=!!selected && !menuClosed && !entry.disposition && !finalizing && !deriving;
