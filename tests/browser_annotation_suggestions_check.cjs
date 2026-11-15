@@ -81,6 +81,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await tasks.addAs(page,other,'Een zorgplan is een overzicht van afspraken.','context');
  await row('belongs').getByText('Een zorgplan is een overzicht van afspraken.',{exact:true}).waitFor();
  await reading();
+ // The row shows the choice at once; the store follows with the save. Wait for the store, not for the screen.
+ for(let i=0;i<60 && (await current())?.ranges.length!==2;i++) await page.waitForTimeout(250);
  entry=await current();
  assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote]),[['core','De huid is droog en de huid is rood.'],['context','Een zorgplan is een overzicht van afspraken.']]);
  // An ambiguous literal is not asked: it stays open for the reviewer as a signal.
