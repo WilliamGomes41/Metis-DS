@@ -28,9 +28,11 @@ def test_deploy_test_requires_main_ancestry_before_azure_or_deploy() -> None:
     assert "\n  push:" not in workflow
 
 
-def test_production_container_keeps_exact_main_sha_gate_before_build() -> None:
-    script = (ROOT / "scripts/build_azure_release_image.sh").read_text(encoding="utf-8")
-    assert 'git -C "${ROOT}" fetch --quiet origin main' in script
-    assert 'release_image_commit_must_be_full_sha' in script
-    assert 'git -C "${ROOT}" merge-base --is-ancestor "${commit}" origin/main' in script
-    assert script.index('merge-base --is-ancestor') < script.index('archive "${commit}"') < script.index('az acr build')
+def test_production_keeps_exact_main_sha_gate() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "deploy-production.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Validate exact main commit" in workflow
+    assert 'test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"' in workflow
+    assert 'git merge-base --is-ancestor "$REQUESTED_SHA" origin/main' in workflow

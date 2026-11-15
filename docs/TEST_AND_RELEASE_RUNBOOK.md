@@ -4,16 +4,19 @@
 
 `deploy-test` blijft **inactief / fail-closed** tot Azure App Service
 `vvn-metis-console-test` bestaat. De tijdelijke productie-ZIP-route uit v2.29
-is vervallen: `deploy-production` wijst iedere aanroep af zonder Azure-login,
-OIDC-rechten of deployment. Merge naar `main` deployt nooit automatisch.
+blijft voor bestaande `PYTHON|3.13`-hosting behouden totdat de eerste
+containerovergang bewezen is. De workflow controleert de actuele hosting na
+Azure-login en vóór settings of ZIP-deployment; containers, onbekende waarden
+en leesfouten blokkeren. Merge naar `main` deployt nooit automatisch.
 
-Voor productie gelden uitsluitend [AZURE_RELEASE_RUNBOOK.md](AZURE_RELEASE_RUNBOOK.md)
+Voor containerreleases gelden [AZURE_RELEASE_RUNBOOK.md](AZURE_RELEASE_RUNBOOK.md)
 en het [deploymentprotocol](agents/deployment-protocol.md): container op digest,
 een exacte geteste gemergde main-commit, rollbackpunt en GO per Azure-mutatie.
-De packaging- en testinstructies hieronder gelden alleen voor de test-ZIP;
-een geslaagde test-ZIP maakt die ZIP niet geschikt voor productie.
+De packaginginstructies hieronder gelden voor test en de begrensde legacy-ZIP.
+Een geslaagde ZIP bewijst geen container- of Docling-runtime. De eerste
+containerovergang vereist een eigen geaccepteerd rollbackplan en capaciteitsproef.
 
-Een test-ZIP-deployment vervangt applicatiecode in `wwwroot` (`--clean true`);
+Een legacy-ZIP-deployment vervangt applicatiecode in `wwwroot` (`--clean true`);
 runtime-data blijft buiten het pakket onder `/home/data` en in Blob Storage.
 git-archive-only is niet genoeg: het ZIP-artefact MUST dependencies bevatten.
 
@@ -67,9 +70,9 @@ productiecontainer of productie-identity voor dit doel.
 
 ## GitHub OIDC-inrichting — gescheiden identiteiten
 
-De bestaande omgevingsscheiding blijft gelden. De afgesloten productieworkflow
-leest geen onderstaande productievariabelen en vraagt geen token aan; deze
-wijziging wijzigt of verwijdert geen Azure-identiteit of RBAC-toekenning.
+De bestaande omgevingsscheiding blijft gelden. De tijdelijke productieworkflow
+behoudt haar production-environment, exacte-CI-/artifactcontrole en eigen
+OIDC-identiteit. Deze codewijziging maakt of wijzigt geen Azure-identiteit of RBAC.
 Voor een testdeployment mag één Entra-app niet naar beide apps kunnen deployen. Maak
 **twee** app registrations / service principals:
 
@@ -112,10 +115,11 @@ in de repository.
    verdeeld over vier zelfstandige jobs per versie. De bestaande checks
    `test (3.12)` en `test (3.13)` controleren de volledige verzameling en het
    samengevoegde bewijs. Browserproeven draaien parallel in een eigen job.
-2. `deploy-test` en de afwijzende `deploy-production` hebben **geen** `on.push`.
+2. `deploy-test` en de tijdelijke `deploy-production` hebben **geen** `on.push`.
    Merge naar `main` start geen deploy. Zolang `vvn-metis-console-test` niet
-   bestaat blijft de testworkflow fail-closed. De productieworkflow voert ook
-   met ingevulde productievariabelen geen Azure-actie uit.
+   bestaat blijft de testworkflow fail-closed. De productieworkflow weigert
+   containerhosting, onbekende runtimewaarden en leesfouten voordat zij
+   app settings wijzigt of een ZIP deployt.
 3. Alleen een geslaagde push-CI op main bouwt het deploymentpakket met
    `bash scripts/create_azure_deploy_package.sh`. Een Python 3.12-proef importeert
    applicatie en native dependencies uitsluitend uit het uitgepakte ZIP.
@@ -124,16 +128,18 @@ in de repository.
    blijft de zwaardere extra voor Product API / TF-IDF en gaat niet in het
    console-pakket.
 4. `--clean true` wist `wwwroot` en MUST NOT `/home/data` wissen.
-5. Testdeployment blijft handmatig: vul uitsluitend bij `deploy-test`
+5. Test- en legacy-ZIP-deployment blijven handmatig: vul bij `deploy-test` of
+   de begrensde `deploy-production`
    **commit_sha** (volledige SHA op main) en **ci_run_id** (het nummer uit de
-   URL `/actions/runs/<nummer>` van de geslaagde main-ci-run) in. De testworkflow eist
+   URL `/actions/runs/<nummer>` van de geslaagde main-ci-run) in. Iedere workflow eist
    een voltooide geslaagde main-push van ci.yml voor die exacte repository en
    commit. Daarna downloadt hij het pakket van die CI-poging en controleert
-   manifest, SHA-256 en de ingesloten commit vóór Azure-login. Dit ZIP-artefact
-   wordt uitsluitend voor test gebruikt; er draait geen tweede volledige
+   manifest, SHA-256 en de ingesloten commit vóór Azure-login. Daarna leest de
+   productieworkflow `linuxFxVersion`; uitsluitend `PYTHON|3.13` geeft toegang tot
+   settings en de bestaande ZIP-deployment. Er draait geen tweede volledige
    suite of pakketbouw in deployment. Verlopen/ontbrekend bewijs blokkeert;
    er wordt nooit stil naar een andere commit of nieuw gebouwd pakket uitgeweken.
-6. De testworkflow en de productiecontainerprocedure gebruiken
+6. De testworkflow, legacy-productieworkflow en productiecontainerprocedure gebruiken
    `scripts/verify_console_deployment.py`: `status=ok`,
    `service=operations-console` en `deployed_commit` gelijk aan de volledige
    verwachte SHA zijn verplicht. HTTP 200 alleen is onvoldoende.
@@ -143,7 +149,7 @@ in de repository.
 
 Een main-CI-run bewaart het pakket 30 dagen onder
 `metis-console-<sha>-attempt-<poging>`. Oudere runs zonder dit pakket zijn niet
-bruikbaar voor de testdeploymentworkflow. Een herbouw vereist opnieuw
+bruikbaar voor de test- of legacy-deploymentworkflow. Een herbouw vereist opnieuw
 geslaagde CI en pakketcontrole; verander geen manifest om bewijs te omzeilen.
 
 Bij een incidentele infrastructuurfout: **Actions → run → Re-run jobs → Re-run

@@ -53,8 +53,8 @@ def test_browser_is_independent_and_existing_required_checks_gate_all_shards():
                 assert step['with'].get('overwrite') is True, (name, step.get('name'))
 
 
-def test_test_deployment_downloads_verified_package_before_azure_without_rerunning_suite():
-    for name in ('deploy-test.yml',):
+def test_deployments_download_verified_package_before_azure_without_rerunning_suite():
+    for name in ('deploy-test.yml', 'deploy-production.yml'):
         data = workflow(name)
         trigger = data.get('on', data.get(True))
         assert {'commit_sha', 'ci_run_id'} <= set(trigger['workflow_dispatch']['inputs'])

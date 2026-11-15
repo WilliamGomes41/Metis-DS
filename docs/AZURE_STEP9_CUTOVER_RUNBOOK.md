@@ -18,11 +18,29 @@ Als één waarde afwijkt of PostgreSQL niet eenduidig uit de bestaande App Setti
 
 ## 0. Exacte geteste main-container voorbereiden
 
-Gebruik voor productie uitsluitend [AZURE_RELEASE_RUNBOOK.md](AZURE_RELEASE_RUNBOOK.md)
-en het [deploymentprotocol](agents/deployment-protocol.md): een exacte geteste,
-gemergde `main`-SHA als container-image, wisselen op digest en eerst het
-rollbackpunt vastleggen. De oude productie-ZIP-workflow is technisch afgesloten;
-dit cutoverrunbook biedt geen alternatieve deploymentroute.
+Stel eerst de huidige hosting vast met een read-only controle:
+
+```bash
+az webapp config show \
+  --subscription "$METIS_SUBSCRIPTION_ID" \
+  --resource-group "$METIS_RESOURCE_GROUP" \
+  --name "$METIS_WEBAPP" --query linuxFxVersion --output tsv
+```
+
+- `DOCKER|…`: volg [AZURE_RELEASE_RUNBOOK.md](AZURE_RELEASE_RUNBOOK.md) en het
+  [deploymentprotocol](agents/deployment-protocol.md): een exacte geteste,
+  gemergde main-SHA, wisselen op digest en eerst het rollbackpunt vastleggen.
+- `PYTHON|3.13`: **STOP met de container-cutover**. De bestaande tijdelijke
+  `deploy-production.yml` blijft voor legacy-code-updates beschikbaar en
+  controleert zelf de actuele hosting vóór iedere reeks Azure-mutaties.
+  Zij bouwt of activeert geen container. De eerste overgang vereist een eigen
+  geaccepteerd rollbackplan en capaciteitsproef; ontbrekend bewijs blijft open
+  onder [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) en
+  [#696](https://github.com/WilliamGomes41/Metis-DS/issues/696).
+- Een andere of ontbrekende waarde, of een leesfout: **STOP**, geen deployment.
+
+De definitieve ZIP-uitfasering wacht op bewijs van de eerste containerovergang.
+Dit cutoverrunbook biedt geen onbewaakt handmatig ZIP-deploycommando.
 
 Voer de image-wissel pas uit nadat de database-/rechtenvoorwaarden hieronder en
 de releasepreflight zijn bewezen. Elke Azure-mutatie vereist afzonderlijk GO.

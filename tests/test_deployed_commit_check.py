@@ -104,7 +104,7 @@ def run_route(route, origin, tmp_path):
     )
 
 
-@pytest.mark.parametrize("route", ["container", "test", "manual"])
+@pytest.mark.parametrize("route", ["production", "container", "test", "manual"])
 @pytest.mark.parametrize("commit,accepted", [(OLD, False), (EXPECTED, True)])
 def test_actual_deploy_route_checks_running_commit(route, commit, accepted, tmp_path):
     payload = {"status": "ok", "service": "operations-console", "deployed_commit": commit}
@@ -117,7 +117,7 @@ def test_actual_deploy_route_checks_running_commit(route, commit, accepted, tmp_
     )
 
 
-@pytest.mark.parametrize("route", ["container", "test", "manual"])
+@pytest.mark.parametrize("route", ["production", "container", "test", "manual"])
 @pytest.mark.parametrize("commit,accepted", [(OLD, False), (EXPECTED, True)])
 def test_deploy_route_normalizes_trailing_origin_slash(route, commit, accepted, tmp_path):
     payload = {"status": "ok", "service": "operations-console", "deployed_commit": commit}
@@ -232,7 +232,7 @@ def test_cli_rejects_invalid_health_target_without_echoing_credentials(url):
 
 
 @pytest.mark.parametrize("environment,sha_source", [
-    ("test", "inputs.commit_sha"),
+    ("production", "inputs.commit_sha"), ("test", "inputs.commit_sha"),
 ])
 def test_workflow_binds_expected_commit_to_selected_release(environment, sha_source):
     text = (ROOT / ".github/workflows" / f"deploy-{environment}.yml").read_text()

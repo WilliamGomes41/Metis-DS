@@ -72,7 +72,7 @@ def test_packaging_script_is_invoked_via_bash_and_is_executable() -> None:
     ci = _read(ROOT / '.github/workflows/ci.yml')
     assert 'bash scripts/create_azure_deploy_package.sh' in ci
     assert 'run: scripts/create_azure_deploy_package.sh' not in ci
-    for name in ("deploy-test.yml",):
+    for name in ("deploy-test.yml", "deploy-production.yml"):
         workflow = _read(ROOT / ".github" / "workflows" / name)
         assert 'actions/download-artifact@v4' in workflow
         assert 'verified_deploy_artifact.py verify' in workflow
@@ -327,21 +327,35 @@ def test_test_and_production_identities_cannot_cross() -> None:
         )
 
 
-def test_test_stays_inactive_and_cannot_target_production() -> None:
+def test_test_stays_inactive_but_production_has_manual_production_only_path() -> None:
     test_text = _read(ROOT / ".github" / "workflows" / "deploy-test.yml")
+    prod_text = _read(ROOT / ".github" / "workflows" / "deploy-production.yml")
 
     assert "AZURE_TEST_CLIENT_ID" in test_text
     assert "AZURE_PRODUCTION_CLIENT_ID" not in test_text
+    assert "AZURE_PRODUCTION_CLIENT_ID" in prod_text
+    assert "AZURE_TEST_CLIENT_ID" not in prod_text
     assert TEST_APP in test_text
     assert "AZURE_PRODUCTION_WEBAPP_NAME" not in test_text
+    assert "AZURE_TEST_WEBAPP_NAME" not in prod_text
+    assert "AZURE_PRODUCTION_WEBAPP_NAME" in prod_text
     assert "AZURE_TEST_WEBAPP_NAME" in test_text
     assert "vars.METIS_TEST_APP_READY == 'true'" in test_text
+    assert "vars.METIS_TEST_APP_READY == 'true'" not in prod_text
+    assert "assert_deploy_allowed" in prod_text
+    assert "Validate exact main commit" in prod_text
+    assert "workflow_dispatch" in prod_text
     assert "workflow_dispatch" in test_text
+    assert "branches: [main]" not in prod_text
     assert "branches: [main]" not in test_text
     assert "\n  push:" not in test_text
+    assert "\n  push:" not in prod_text
     assert "exit 1" in test_text
+    assert "az webapp deploy" in prod_text
     assert "Fail-closed until vvn-metis-console-test exists" in test_text
+    assert "Fail-closed until vvn-metis-console-test exists" not in prod_text
     assert "require_deploy_activation" in test_text
+    assert "require_deploy_activation" not in prod_text
 
     with pytest.raises(DeployIdentityError, match="test_app_missing"):
         require_deploy_activation(ready_flag="", declared_app=TEST_APP)
@@ -362,7 +376,7 @@ def test_merge_to_main_does_not_auto_deploy_while_test_app_missing() -> None:
     assert "\n  push:" not in prod_text
     assert "on:\n  push:" in ci_text or "on:\n  push:" in ci_text.replace("\r\n", "\n")
     assert "az webapp deploy" in test_text
-    assert "az webapp deploy" not in prod_text
+    assert "az webapp deploy" in prod_text
     assert "METIS_TEST_APP_READY" in test_text
     assert "vvn-metis-console-test" in test_text
     assert "if: ${{ vars.METIS_TEST_APP_READY == 'true' }}" in test_text
@@ -434,7 +448,9 @@ def test_wave_c_does_not_open_publish(tmp_path: Path, *, production_console) -> 
     assert load_g2_store()["g2_status"] == "BLOCKED"
 
 
-def test_test_deployment_binds_console_origin_to_declared_app_url() -> None:
+def test_deploy_workflows_bind_console_origin_to_declared_app_url() -> None:
     test_text = _read(ROOT / ".github" / "workflows" / "deploy-test.yml")
+    prod_text = _read(ROOT / ".github" / "workflows" / "deploy-production.yml")
 
     assert 'CONSOLE_PUBLIC_ORIGIN="${{ vars.AZURE_TEST_APP_URL }}"' in test_text
+    assert 'CONSOLE_PUBLIC_ORIGIN="${{ vars.AZURE_PRODUCTION_APP_URL }}"' in prod_text

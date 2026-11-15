@@ -1,17 +1,131 @@
-name: deploy-production (ZIP route retired)
+name: deploy-production
+
+# Protocol v2.22 wave C / owner lock 2026-09-03: production is manual.
+# No on.push. Production-only temporary release path (Protocol v2.29).
+# Test identity cannot production; production identity cannot test.
+# MUST NOT merge PR #82.
 
 on:
   workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: 'Volledige SHA van de geslaagde main-CI-run; testvereiste blijft gelden'
+        required: true
+        type: string
+      ci_run_id:
+        description: 'Run-ID van de geslaagde ci-workflow op main met het deploymentpakket'
+        required: true
+        type: string
 
-permissions: {}
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: metis-production-deployment
+  cancel-in-progress: false
 
 jobs:
-  retired:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 1
+  deploy:
+    name: Deploy ${{ inputs.commit_sha }} to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      AZURE_PRODUCTION_WEBAPP_NAME: ${{ vars.AZURE_PRODUCTION_WEBAPP_NAME }}
+      METIS_DEPLOY_ENVIRONMENT: production
+      METIS_DEPLOY_IDENTITY: metis-deploy-production
     steps:
-      - name: Reject the retired production ZIP route
-        shell: bash
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+      - name: Validate exact main commit
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
         run: |
-          echo "::error::production_zip_deploy_retired: use docs/AZURE_RELEASE_RUNBOOK.md and docs/agents/deployment-protocol.md (container image by digest)."
-          exit 1
+          test "${#REQUESTED_SHA}" -eq 40
+          test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
+          git fetch origin main --depth=1
+          git merge-base --is-ancestor "$REQUESTED_SHA" origin/main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Fail-closed production identity and target gate
+        run: |
+          python -c "from src.deploy_identity_v1 import assert_deploy_allowed; assert_deploy_allowed(environment='production', identity='${METIS_DEPLOY_IDENTITY}', target_app='${AZURE_PRODUCTION_WEBAPP_NAME}')"
+      - name: Verify successful exact main CI run
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+          REQUESTED_RUN: ${{ inputs.ci_run_id }}
+          REQUESTED_REPOSITORY: ${{ github.repository }}
+        run: >-
+          python scripts/verified_deploy_artifact.py run
+          --commit "$REQUESTED_SHA" --repository "$REQUESTED_REPOSITORY"
+          --run-id "$REQUESTED_RUN"
+      - name: Download the package from the verified CI attempt
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.proof.outputs.artifact_name }}
+          path: ${{ runner.temp }}/verified-package
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.ci_run_id }}
+      - name: Verify package hash and embedded commit before Azure
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+          REQUESTED_RUN: ${{ inputs.ci_run_id }}
+          REQUESTED_REPOSITORY: ${{ github.repository }}
+          VERIFIED_ATTEMPT: ${{ steps.proof.outputs.attempt }}
+        run: >-
+          python scripts/verified_deploy_artifact.py verify
+          --directory "$RUNNER_TEMP/verified-package"
+          --commit "$REQUESTED_SHA" --repository "$REQUESTED_REPOSITORY"
+          --run-id "$REQUESTED_RUN" --attempt "$VERIFIED_ATTEMPT"
+      - name: Sign in to Azure using the production deploy identity
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_PRODUCTION_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify legacy ZIP runtime before Azure mutations
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          runtime="$(az webapp config show --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_PRODUCTION_WEBAPP_NAME" --query linuxFxVersion --output tsv)"
+          case "$runtime" in
+            'PYTHON|3.13') echo "production_zip_runtime_verified" ;;
+            *) echo "::error::production_zip_runtime_blocked: use the container release runbook or resolve the unknown hosting state."; exit 1 ;;
+          esac
+      - name: Configure per-environment storage app settings (no secrets)
+        run: >-
+          az webapp config appsettings set
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --name "${{ vars.AZURE_PRODUCTION_WEBAPP_NAME }}"
+          --settings
+          G2_STORAGE_ACCOUNT="${{ vars.AZURE_PRODUCTION_STORAGE_ACCOUNT || 'aidataservice' }}"
+          G2_BLOB_CONTAINER="${{ vars.AZURE_PRODUCTION_BLOB_CONTAINER || 'canonical-sources' }}"
+          CONSOLE_DATA_ROOT="/home/data/metis-console"
+          CONSOLE_PUBLIC_ORIGIN="${{ vars.AZURE_PRODUCTION_APP_URL }}"
+          WEB_CONCURRENCY="1"
+          CONSOLE_INSTANCE_COUNT="1"
+      - name: Deploy application code only
+        run: >-
+          az webapp deploy
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --name "${{ vars.AZURE_PRODUCTION_WEBAPP_NAME }}"
+          --src-path "$RUNNER_TEMP/verified-package/metis-console.zip"
+          --type zip
+          --clean true
+          --async false
+      - name: Verify production health
+        env:
+          APP_URL: ${{ vars.AZURE_PRODUCTION_APP_URL }}
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+        run: >-
+          python scripts/verify_console_deployment.py
+          --health-url "${APP_URL}/health"
+          --expected-commit "$REQUESTED_SHA"
