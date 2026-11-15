@@ -298,7 +298,9 @@ import {bindRange} from '/annotations/binding.mjs';
   function renderMenu() {
     const show=!!selected && !menuClosed && !entry.disposition && !finalizing && !deriving;
     const block=show ? sourceElements.get(selected.block_id) : null,host=block?.closest('.annotation-document'),range=block ? spanRange(selected) : null;
-    if(!range || !host) {if(menu.contains(document.activeElement)) sourceElements.get(selected?.block_id)?.focus();menu.hidden=true;return;}
+    // A choice clears the selection before the menu hides: focus returns to the passage the menu stood by, so
+    // the next Tab continues from there (Codex P2).
+    if(!range || !host) {if(menu.contains(document.activeElement)) (menu.previousElementSibling?.closest('[data-source-block]') || sourceElements.get(selected?.block_id))?.focus();menu.hidden=true;return;}
     if(menu.previousSibling!==block) block.after(menu);
     const core=hasCore();
     menuButtons.core.setAttribute('aria-label',core ? 'Toevoegen aan de uitspraak, als volgend stuk' : 'Toevoegen als uitspraak');

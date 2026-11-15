@@ -156,8 +156,15 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-simple-type').waitFor();
  await page.locator('#annotation-simple-type-select').selectOption('explanation');
  await page.waitForFunction(()=>document.getElementById('annotation-simple-type-select')?.value==='explanation');
- await tasks.addAs(page,block(support),support,'evidence');
+ // Keyboard: Tab to the menu, arrows to Onderbouwing, Enter. Focus returns to the passage, not the page top.
+ await tasks.selectText(page,block(support),support);
+ await block(support).focus();await page.keyboard.press('Tab');
+ await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');
+ assert.equal(await page.evaluate(()=>document.activeElement?.dataset.add),'evidence');
+ await page.keyboard.press('Enter');
  await row('evidence').getByText(support,{exact:true}).waitFor();
+ await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
+ assert.equal(await page.evaluate(()=>document.activeElement?.closest?.('[data-source-block]')?.textContent),support);
  // A statement in two pieces: 'Uitspraak' in the menu adds the next piece.
  await tasks.selectText(page,block(failing),failing.slice(14));
  assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);
