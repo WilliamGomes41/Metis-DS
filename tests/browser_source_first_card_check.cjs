@@ -165,6 +165,14 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await row('evidence').getByText(support,{exact:true}).waitFor();
  await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
  assert.equal(await page.evaluate(()=>document.activeElement?.closest?.('[data-source-block]')?.textContent),support);
+ // Codex P2: with a statement, Escape cancels the selection, so no hidden pending selection blocks finishing.
+ await tasks.selectText(page,block(failing),failing.slice(14));
+ await block(failing).focus();await page.keyboard.press('Tab');await page.keyboard.press('Escape');
+ await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
+ for(let i=0;i<60 && (await current())?.pending_range;i++) await page.waitForTimeout(250);
+ assert.equal((await current()).pending_range,null);
+ assert.equal(await page.evaluate(()=>getSelection().toString()),'');
+ await page.locator('#annotation-ready:enabled').waitFor();
  // A statement in two pieces: 'Uitspraak' in the menu adds the next piece.
  await tasks.selectText(page,block(failing),failing.slice(14));
  assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);

@@ -275,7 +275,7 @@ import {bindRange} from '/annotations/binding.mjs';
     menu.addEventListener('mousedown',event=>event.preventDefault());
     menu.addEventListener('keydown',event=>{
       const buttons=[...menu.querySelectorAll('button:not([hidden])')],at=buttons.indexOf(document.activeElement);
-      if(event.key==='Escape') {menuClosed=true;renderMenu();sourceElements.get(selected?.block_id)?.focus();event.preventDefault();}
+      if(event.key==='Escape') {const block=menu.previousElementSibling;dismissMenu();block?.focus?.();event.preventDefault();}
       else if((event.key==='ArrowRight' || event.key==='ArrowLeft') && at>=0) {
         buttons[(at+(event.key==='ArrowRight' ? 1 : buttons.length-1))%buttons.length].focus();event.preventDefault();
       }
@@ -294,6 +294,15 @@ import {bindRange} from '/annotations/binding.mjs';
       seen+=points.length;
     }
     return null;
+  }
+  // Putting the menu away. Without a statement the selection stays visible in the card as the statement, with its
+  // own '−'. With one, the selection is shown nowhere else, so putting the menu away cancels it (Codex P2): no
+  // hidden pending selection keeps the card from being finished.
+  function dismissMenu() {
+    if(!hasCore()) {menuClosed=true;renderMenu();return;}
+    if(!selected && !entry.pending_range) {menuClosed=true;renderMenu();return;}
+    selected=null;entry.pending_range=null;window.getSelection().removeAllRanges();
+    change();renderMenu();
   }
   function renderMenu() {
     const show=!!selected && !menuClosed && !entry.disposition && !finalizing && !deriving;
@@ -514,7 +523,7 @@ import {bindRange} from '/annotations/binding.mjs';
   // take a click or tap, so the text it lies over stays selectable.
   const startSelecting=event=>{
     selectingFromSource=!!event.target.closest?.('[data-source-block]');
-    if(selectingFromSource && !menu.hidden) {menuClosed=true;renderMenu();}
+    if(selectingFromSource && !menu.hidden) dismissMenu();
   };
   document.addEventListener('mousedown',startSelecting);
   document.addEventListener('touchstart',startSelecting);
