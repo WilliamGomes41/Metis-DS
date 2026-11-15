@@ -16,37 +16,51 @@ export METIS_WEBAPP="vvn-metis-console"
 
 Als één waarde afwijkt of PostgreSQL niet eenduidig uit de bestaande App Settings kan worden afgeleid: stop. Pas geen setting aan en maak geen server aan.
 
-## 0. Exacte geteste main-ZIP plaatsen
+## 0. Exacte geteste main-container voorbereiden
 
-Voer geen GitHub Actions-deployment uit. Bouw na merge exact de geteste actuele `main`-SHA met de bestaande packagingroute. De ZIP bevat applicatiecode, operationele scripts en migraties, maar geen runtime-data.
+Stel eerst de huidige hosting vast met een read-only controle:
+
+```bash
+az webapp config show \
+  --subscription "$METIS_SUBSCRIPTION_ID" \
+  --resource-group "$METIS_RESOURCE_GROUP" \
+  --name "$METIS_WEBAPP" --query linuxFxVersion --output tsv
+```
+
+- `DOCKER|…`: volg [AZURE_RELEASE_RUNBOOK.md](AZURE_RELEASE_RUNBOOK.md) en het
+  [deploymentprotocol](agents/deployment-protocol.md): een exacte geteste,
+  gemergde main-SHA, wisselen op digest en eerst het rollbackpunt vastleggen.
+- `PYTHON|3.13`: **STOP met de container-cutover**. De bestaande tijdelijke
+  `deploy-production.yml` blijft voor legacy-code-updates beschikbaar en
+  controleert zelf de actuele hosting vóór iedere reeks Azure-mutaties.
+  Zij bouwt of activeert geen container. De eerste overgang vereist een eigen
+  geaccepteerd rollbackplan en capaciteitsproef; ontbrekend bewijs blijft open
+  onder [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695) en
+  [#696](https://github.com/WilliamGomes41/Metis-DS/issues/696).
+- Een andere of ontbrekende waarde, of een leesfout: **STOP**, geen deployment.
+
+De definitieve ZIP-uitfasering wacht op bewijs van de eerste containerovergang.
+Dit cutoverrunbook biedt geen onbewaakt handmatig ZIP-deploycommando.
+
+Voer de image-wissel pas uit nadat de database-/rechtenvoorwaarden hieronder en
+de releasepreflight zijn bewezen. Elke Azure-mutatie vereist afzonderlijk GO.
+Repository voorbereiden voor de preflight en migratieplanning:
 
 ```bash
 git fetch origin main
 git switch --detach origin/main
 METIS_MAIN_SHA="$(git rev-parse HEAD)"
-bash scripts/create_azure_deploy_package.sh "metis-console-${METIS_MAIN_SHA:0:8}-azure.zip"
-unzip -t "metis-console-${METIS_MAIN_SHA:0:8}-azure.zip"
-sha256sum "metis-console-${METIS_MAIN_SHA:0:8}-azure.zip"
 ```
 
-Controleer daarna opnieuw subscription, resource group en Web App. Alleen bij de hierboven bevestigde productie-selectie:
+Verifieer na de afzonderlijk goedgekeurde container-imagewissel de exacte SHA:
 
 ```bash
-az webapp deploy \
-  --subscription "$METIS_SUBSCRIPTION_ID" \
-  --resource-group "$METIS_RESOURCE_GROUP" \
-  --name "$METIS_WEBAPP" \
-  --src-path "metis-console-${METIS_MAIN_SHA:0:8}-azure.zip" \
-  --type zip \
-  --clean true \
-  --async false
-
 python scripts/verify_console_deployment.py \
   --health-url "https://${METIS_WEBAPP}.azurewebsites.net/health" \
   --expected-commit "$METIS_MAIN_SHA"
 ```
 
-Dezelfde controle wordt door de deployworkflows gebruikt. Alleen `status=ok`,
+Alleen `status=ok`,
 `service=operations-console` en exact de verwachte volledige SHA geven exit 0.
 Een afsluitende slash in de app-origin wordt naar één `/health` genormaliseerd.
 Een oude SHA, `not_recorded`, ontbrekende velden of een onleesbaar antwoord
@@ -55,7 +69,7 @@ iedere HTTP-call heeft maximaal tien seconden en 64 KiB antwoordruimte.
 Dit bewijst de gedeployde versie; een geautoriseerde database-/ketenproef
 blijft een afzonderlijke vrijgavevoorwaarde.
 
-ZIP-clean geldt alleen voor de App Service deploymentdirectory. `/home/data`, Blob, PostgreSQL-inhoud en App Settings vallen buiten deze stap en mogen hier niet worden gewijzigd.
+De versiecontrole wijzigt geen `/home/data`, Blob, PostgreSQL-inhoud of App Settings.
 
 ## 1. Read-only Azure-preflight
 

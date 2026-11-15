@@ -1,12 +1,12 @@
 # Deploymentprotocol voor agents
 
-Promise: elke deployment van de console volgt één route: een exacte `main`-commit als container-image, gewisseld op digest, met een vastgelegd rollbackpunt, en pas klaar na gemeten verificatie. Change class: C (agent workflow). Rewrite risk: none.
+Promise: containerreleases volgen één route: een exacte `main`-commit als image, gewisseld op digest, met een vastgelegd rollbackpunt en gemeten verificatie. Een bestaande Python-installatie behoudt de technisch begrensde legacy-route totdat de eerste containerovergang bewezen is. Change class: C (agent workflow). Rewrite risk: none.
 
 De technische stappen staan in [`docs/AZURE_RELEASE_RUNBOOK.md`](../AZURE_RELEASE_RUNBOOK.md). Dit protocol bepaalt hoe een agent die stappen aanbiedt, bewaakt en afsluit. Bij verschil wint het runbook voor de commando's en dit protocol voor de werkwijze.
 
 ## Grondregels
 
-1. **Eén route: container op digest.** Bouw met `scripts/build_azure_release_image.sh` (`az acr build`) en wissel met de afgedrukte `release_image_reference=…@sha256:…`. De ZIP-route (`deploy-production.yml`) is niet van toepassing. Wissel nooit op een tag.
+1. **Containerreleases: container op digest.** Bouw met `scripts/build_azure_release_image.sh` (`az acr build`) en wissel met de afgedrukte `release_image_reference=…@sha256:…`. De ZIP-route (`deploy-production.yml`) is technisch begrensd tot `PYTHON|3.13`; de workflow weigert containerhosting en onbekende/ontbrekende runtimewaarden vóór settings of deployment. Stel de actuele hosting eerst read-only vast. Bij `PYTHON|3.13` blijft de tijdelijke code-updateroute behouden, maar stopt de eerste containerovergang totdat een eigen rollbackplan en capaciteitsproef zijn geaccepteerd (runbook 1.1). Verwijder de legacy-route pas na die bewezen overgang. Wissel nooit op een tag.
 2. **Alleen een exacte `main`-commit.** Deploy een SHA die op `main` staat en waarvan de PR gemerged is met groene CI. Nooit een featurebranch, nooit een lokale wijziging.
 3. **GO van de projectlead per stap die Azure wijzigt:** build, migratie, app settings, image-wissel en rollback. De agent voert die stappen niet zelf uit, maar levert de commando's en leest de uitvoer.
 4. **Eén blok per stap.** Geef per bericht één commandoblok en wacht op de uitvoer. Zet het rollbackcommando nooit in hetzelfde blok als de wissel; lever het alleen apart en alleen op verzoek of bij een gefaalde verificatie.

@@ -90,6 +90,16 @@ jobs:
           client-id: ${{ vars.AZURE_PRODUCTION_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Verify legacy ZIP runtime before Azure mutations
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          runtime="$(az webapp config show --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_PRODUCTION_WEBAPP_NAME" --query linuxFxVersion --output tsv)"
+          case "$runtime" in
+            'PYTHON|3.13') echo "production_zip_runtime_verified" ;;
+            *) echo "::error::production_zip_runtime_blocked: use the container release runbook or resolve the unknown hosting state."; exit 1 ;;
+          esac
       - name: Configure per-environment storage app settings (no secrets)
         run: >-
           az webapp config appsettings set
