@@ -72,6 +72,11 @@ de native wijziging en daaropvolgende readback zijn geslaagd.
 ## Activeren en teruglezen
 
 Voer dit uit met repository-administratierechten vanuit de gereviewde branch.
+Merge eerst deze workflowverplaatsing. Zolang de oude workflow nog op main staat,
+kan `pull_request_target` daarvan nog een overgeslagen `handoff-contract` naast
+de nieuwe succesvolle PR-check produceren. Dat is op #1088 daadwerkelijk gezien.
+Controleer na de merge bij een nieuw PR-event dat alleen de PR-workflow deze
+check levert; activeer daarna pas de extra native verplichting.
 Haal de huidige regels direct vóór de wijziging op; pas nooit een oud plan toe.
 Stem de wijziging af als een andere beheerder tegelijkertijd regels bewerkt:
 de GitHub-API biedt hier geen transactionele compare-and-swap via deze tooling.
