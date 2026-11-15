@@ -170,7 +170,9 @@ def test_http_source_and_autosave_contract(tmp_path, production_console, product
     assert client.post('/login',data={'username':'annotator','password':'annotation-secret'},follow_redirects=False).status_code==303
     response = client.get('/annotations?document='+sid)
     assert response.status_code==200
-    assert 'Gebruik als kernuitspraak' in response.text and 'data-source-block' in response.text
+    assert 'id="annotation-simple-rows"' in response.text and 'data-source-block' in response.text
+    # #1060 slice 5: the card is the only input; the step form is gone from the page.
+    assert 'annotation-steps' not in response.text and 'Gebruik als kernuitspraak' not in response.text
     request = command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
     saved = client.post('/annotations/api',json=request)
     assert saved.status_code==200, saved.text
