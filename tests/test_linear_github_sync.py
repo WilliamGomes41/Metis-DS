@@ -205,7 +205,7 @@ def test_repository_workflow_uses_only_main_with_credentials_and_has_no_chat_hos
     root = Path(__file__).resolve().parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/linear-github-sync.yml").read_text())
     events = workflow.get("on", workflow.get(True))
-    assert {"schedule", "pull_request_target", "issues", "issue_comment", "workflow_dispatch", "pull_request"} <= set(events)
+    assert set(events) == {"schedule", "pull_request_target", "issues", "issue_comment", "workflow_dispatch"}
     job = workflow["jobs"]["reconcile"]
     checkout = next(s for s in job["steps"] if s.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["ref"] == "refs/heads/main"

@@ -72,7 +72,7 @@ De volgende agent leest eerst de handoff, daarna het change contract, en control
 ## Permanente bewaking buiten een chat
 
 De implementatie van de bewaking leeft in
-`.github/workflows/linear-github-sync.yml`, `scripts/linear_github_sync.py` en
+`.github/workflows/linear-github-sync.yml`, `.github/workflows/pr-handoff.yml`, `scripts/linear_github_sync.py` en
 `config/linear_github_sync.v1.json`. Activering en terugdraaien staan in
 [linear-github-sync.md](linear-github-sync.md). Een ChatGPT-taak is hoogstens
 een tijdelijke tussenvoorziening, nooit het permanente eigendom van deze regel.
