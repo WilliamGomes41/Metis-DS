@@ -33,7 +33,6 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-steps, #annotation-fields, #annotation-type, #annotation-suggest, #annotation-entry, #annotation-more, #annotation-task-1, #annotation-task-2, #annotation-task-3').count(),0);
  // Only one action exists before anything is selected: there is nothing to save yet.
  assert.deepEqual(await page.locator('#annotation-controls button:visible').allInnerTexts(),['Opslaan en bronselectie beëindigen']);
- const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
  const minus=(key,text)=>row(key).locator('.annotation-line').filter({hasText:text}).locator('button.annotation-sign');
  // 1. Selecting is the statement: the text appears, nothing to confirm or fill in.
  await tasks.selectText(page,block(item),item.slice(0,40));
@@ -43,6 +42,34 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await row('core').getByText(item,{exact:true}).waitFor();
  assert.equal(await row('core').locator('.annotation-line').count(),1);
  assert.equal(await page.locator('#annotation-simple-heading').isVisible(),false);
+ // Besluit William 2026-11-15: one way to add. The menu sits next to the selection, not in the card; without a
+ // statement it offers only the statement. The card has no '+' to add with.
+ const menu=page.locator('#annotation-selection-menu');
+ assert.deepEqual(await menu.locator('button:visible').allInnerTexts(),['Uitspraak']);
+ assert.equal(await page.locator('#annotation-controls #annotation-selection-menu').count(),0);
+ assert.equal(await page.locator('#annotation-simple-rows dt .annotation-sign').count(),0);
+ const near=await page.evaluate(()=>{const m=document.getElementById('annotation-selection-menu').getBoundingClientRect(),r=getSelection().getRangeAt(0).getClientRects();const last=[...r].at(-1);
+  return {gap:Math.round(m.top-last.bottom),inside:m.left>=document.querySelector('.annotation-document').getBoundingClientRect().left};});
+ assert(near.gap>=0 && near.gap<=16 && near.inside,JSON.stringify(near));
+ await page.screenshot({path:output+'/card-selection-menu.png',fullPage:true});
+ // On a phone the menu stays inside the document, below the selection, and the page does not scroll sideways.
+ await page.setViewportSize({width:390,height:844});
+ await tasks.selectText(page,block(item),item.slice(0,40));await tasks.selectText(page,block(item),item);
+ await menu.waitFor();
+ const phone=await page.evaluate(()=>{const m=document.getElementById('annotation-selection-menu').getBoundingClientRect(),d=document.querySelector('.annotation-document').getBoundingClientRect();
+  return {fits:m.left>=d.left && m.right<=d.right,page:document.documentElement.scrollWidth<=innerWidth};});
+ assert(phone.fits && phone.page,JSON.stringify(phone));
+ await menu.scrollIntoViewIfNeeded();await page.screenshot({path:output+'/card-selection-menu-mobile.png'});
+ await page.setViewportSize({width:1440,height:1000});
+ await row('core').getByText(item,{exact:true}).waitFor();
+ // Keyboard: Tab from the source passage reaches the menu; Escape closes it and returns to the passage.
+ await block(item).focus();await page.keyboard.press('Tab');
+ assert.equal(await page.evaluate(()=>document.activeElement?.dataset.add),'core');
+ await page.keyboard.press('Escape');
+ await menu.waitFor({state:'hidden'});
+ assert.equal(await page.evaluate(()=>document.activeElement?.dataset.sourceBlock!==undefined),true);
+ // The selection itself stays the statement.
+ await row('core').getByText(item,{exact:true}).waitFor();
  // 2. Slice 4: Metis points at the introduction the item leans on. The proposal is the exact
  // source text, marked apart in the source, and is answered with '+' or '−'.
  const proposal=row('belongs').locator('.annotation-proposal');
@@ -65,7 +92,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-ready:enabled').waitFor();
  assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
  await page.screenshot({path:output+'/card-complete.png',fullPage:true});
- // "+" and "−" share one column: add beside the row title, remove beside each text.
+ // "−" (and a proposal's "+") share one column beside each text.
  const column=await page.evaluate(()=>[...document.querySelectorAll('#annotation-simple-rows .annotation-sign')].map(b=>Math.round(b.getBoundingClientRect().right)));
  assert.equal(new Set(column).size,1,JSON.stringify(column));
  assert.equal(await page.locator('#annotation-ready').innerText(),'Opslaan en naar volgend kennisobject');
@@ -106,9 +133,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.proposal),'add');
  assert.equal((await current()).status,'draft');
  await page.screenshot({path:output+'/card-proposal-open.png',fullPage:true});
- // The worker adds text alongside Metis: '+' on the row adds any number of passages, '−' removes one.
+ // The worker adds text alongside Metis: 'Hoort erbij' in the menu adds any number of passages, '−' removes one.
  // Neither answers the proposal.
- for(const text of [support,item]) {await plus('belongs').click();await tasks.selectText(page,block(text),text);
+ for(const text of [support,item]) {await tasks.addAs(page,block(text),text,'context');
   await row('belongs').locator('.annotation-line:not(.annotation-proposal)').getByText(text,{exact:true}).waitFor();}
  await minus('belongs',item).click();
  await page.waitForFunction(item=>![...document.querySelectorAll('#annotation-simple-rows dd[data-row=belongs] .annotation-line:not(.annotation-proposal) p')].some(p=>p.textContent===item),item);
@@ -124,16 +151,39 @@ const tasks=require('./browser_annotation_tasks.cjs');
  entry=(await read()).entries.find(e=>e.ranges.some(a=>a.quote===alone));
  assert.equal(entry.status,'ready');assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote]),[['core',alone],['context',support]]);
  assert.deepEqual(entry.declined_context.map(r=>r.quote),[intro]);
- // Metis unavailable: the only question is the type. Evidence is added with '+' and removed with '−'.
- await tasks.selectText(page,block(failing),failing.slice(0,13));
- await plus('evidence').click();
+ // Metis unavailable: the only question is the type. Evidence is added with the menu and removed with '−'.
+ await tasks.addAs(page,block(failing),failing.slice(0,13),'core');
  await page.locator('#annotation-simple-type').waitFor();
  await page.locator('#annotation-simple-type-select').selectOption('explanation');
  await page.waitForFunction(()=>document.getElementById('annotation-simple-type-select')?.value==='explanation');
+ // Keyboard: Tab to the menu, arrows to Onderbouwing, Enter. Focus returns to the passage, not the page top.
  await tasks.selectText(page,block(support),support);
+ await block(support).focus();await page.keyboard.press('Tab');
+ await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');
+ assert.equal(await page.evaluate(()=>document.activeElement?.dataset.add),'evidence');
+ await page.keyboard.press('Enter');
  await row('evidence').getByText(support,{exact:true}).waitFor();
- // A statement in two pieces: '+' on "Uitspraak" adds the next piece.
- await plus('core').click();await tasks.selectText(page,block(failing),failing.slice(14));
+ await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
+ assert.equal(await page.evaluate(()=>document.activeElement?.closest?.('[data-source-block]')?.textContent),support);
+ // Codex P2: with a statement, Escape cancels the selection, so no hidden pending selection blocks finishing.
+ // Start from a settled, checked card: nothing in flight that could hide a missing recheck.
+ await page.locator('#annotation-ready:enabled').waitFor();
+ await page.waitForFunction(()=>!/Controleren|niet opgeslagen|Opslaan…/.test(document.getElementById('annotation-simple-status').textContent+document.getElementById('annotation-status').textContent));
+ await page.waitForTimeout(1000);
+ await tasks.selectText(page,block(failing),failing.slice(14));
+ await block(failing).focus();await page.keyboard.press('Tab');await page.keyboard.press('Escape');
+ await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
+ for(let i=0;i<60 && (await current())?.pending_range;i++) await page.waitForTimeout(250);
+ assert.equal((await current()).pending_range,null);
+ assert.equal(await page.evaluate(()=>getSelection().toString()),'');
+ // Codex P2: cancelling checks again at once, like '−', so finishing is offered without a manual recheck.
+ await page.waitForTimeout(1500);
+ await page.locator('#annotation-ready:enabled').waitFor({timeout:5000});
+ assert.equal(await page.locator('#annotation-simple-recheck').count(),0);
+ // A statement in two pieces: 'Uitspraak' in the menu adds the next piece.
+ await tasks.selectText(page,block(failing),failing.slice(14));
+ assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);
+ await tasks.choose(page,'core');
  await row('core').getByText(failing.slice(14),{exact:true}).waitFor();
  await page.locator('#annotation-ready:enabled').waitFor();
  assert.equal(await page.locator('#annotation-simple-type-select').inputValue(),'explanation');  // the chosen type is kept
@@ -148,6 +198,18 @@ const tasks=require('./browser_annotation_tasks.cjs');
  entry=await current();
  assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.equal('required_links' in entry,false);
  assert.equal(await page.locator('#annotation-required-links').count(),0);
+ // Codex P2: a selection saved as pending comes back after a reload with its menu, so it can still be placed.
+ await tasks.selectText(page,block(support),support);
+ for(let i=0;i<60 && (await current())?.pending_range?.quote!==support;i++) await page.waitForTimeout(250);
+ assert.equal((await current()).pending_range.quote,support);
+ await page.reload();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);
+ await tasks.choose(page,'evidence');
+ await row('evidence').getByText(support,{exact:true}).waitFor();
+ for(let i=0;i<60 && (await current())?.pending_range;i++) await page.waitForTimeout(250);
+ assert.equal((await current()).pending_range,null);
+ await minus('evidence',support).click();
+ await row('evidence').getByText(/Niets gekoppeld/).waitFor();
  // Removing the last piece of the statement removes the object: no empty draft stays behind.
  const second=new URL(page.url()).searchParams.get('annotation');
  await minus('core',failing.slice(14)).click();
