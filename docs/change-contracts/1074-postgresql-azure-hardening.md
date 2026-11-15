@@ -423,3 +423,26 @@ Bronnen: `src/workflows/workflow_postgres_migration_v1.py`,
 `src/console_asgi.py`, `src/console_performance_v1.py`,
 `docs/AZURE_STEP9_CUTOVER_RUNBOOK.md`, `docs/AZURE_RELEASE_RUNBOOK.md`,
 `docs/RUNTIME_DATA_RECOVERY.md` en de zes hierboven genoemde testmodules.
+
+## Reviewcorrectie van 15 november 2026
+
+De P1-reviewbevinding op PR #1075 is terecht: het vervangen van brede bootstrap-
+grants liet geen volledige inrichtingsroute voor `public` en `api_access` achter.
+Een workflow-PASS kon daardoor ten onrechte als voldoende cutoverbewijs worden
+gelezen. Deze correctie kiest de door de review toegestane expliciete stoproute.
+De cutover mag pas verder na een concreet beoordeeld/toegepast rechtenprofiel
+voor beide schema's en verificatie met de werkelijke runtime-identiteit. Voor
+muterende proeven is een geïsoleerde database met hetzelfde profiel vereist.
+Ontbrekend bewijs stopt cutover en image-wissel; de releasehandleiding en stap 4
+van het deploymentprotocol verwijzen nu naar dezelfde voorwaarde.
+
+Dit is een begrensde Class C-correctie aan operationele instructies, Rewrite risk:
+none, binnen uitvoeringsissue #1074. Omdat de deploymentinstructie gedrag bepaalt,
+bewaakt een gerichte contracttest de stopvoorwaarde vóór activatie en deployment.
+Geen databasegrants, productiecode, schema's of Azure-resources wijzigen. De
+automatische public-rechtencontrole uit #940 blijft een afzonderlijke opdracht.
+
+Na het samenvoegen van main was de PR-head `b4f61cc8`, maar de handoff noemde nog
+`07b34615`. De PR-overdracht wordt vóór de correctiepush op de nieuwe exacte
+head gezet en lokaal gevalideerd. Oude groene runs blijven historisch bewijs;
+alleen de nieuwe run kan de actuele verplichte checks afsluiten.
