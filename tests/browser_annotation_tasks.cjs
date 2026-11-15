@@ -19,6 +19,14 @@ async function selectText(page,source,text) {
 }
 module.exports.selectText=selectText;
 
+// Besluit William 2026-11-15: text is added in one way, with the menu next to the selection.
+async function choose(page,kind) {
+ await page.locator('#annotation-selection-menu button[data-add='+kind+']').click();
+}
+async function addAs(page,source,text,kind) {await selectText(page,source,text);await choose(page,kind);}
+module.exports.choose=choose;
+module.exports.addAs=addAs;
+
 // On a failed proof, write what the card showed, so a CI-only failure can be read from the log.
 async function describeCard(page) {
   if(!page || page.isClosed()) return;

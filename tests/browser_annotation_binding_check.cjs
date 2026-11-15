@@ -44,7 +44,6 @@ const assert=require('node:assert/strict');
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   assert.equal(await page.locator('#annotation-steps').isVisible(),false);
   const row=key=>page.locator('#annotation-simple-rows dd[data-row='+key+']');
-  const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
   await tasks.selectText(page,page.locator('[data-source-block]').filter({hasText:'Beoordeel de huid.'}),'Beoordeel de huid.');
   await row('core').getByText('Beoordeel de huid.',{exact:true}).waitFor();
   // #1067: a slow check (as in CI) keeps 'Gereed' running; the kind control must wait instead of completing that save.
@@ -54,8 +53,7 @@ const assert=require('node:assert/strict');
   await page.locator('#annotation-simple-type-select').selectOption('recommendation');
   const condition=page.locator('[data-source-block]').filter({hasText:'Alleen bij klachten.'});
   const blockId=await condition.getAttribute('data-source-block');
-  await plus('belongs').click();
-  await tasks.selectText(page,condition,'Alleen bij klachten.');
+  await tasks.addAs(page,condition,'Alleen bij klachten.','context');
   await row('belongs').getByText('Alleen bij klachten.',{exact:true}).waitFor();
   const read=()=>page.evaluate(async sid=>{const r=await fetch('/annotations/api?document='+sid);if(!r.ok)throw Error('read failed');return r.json();},sid);
   await page.waitForFunction(async sid=>((await (await fetch('/annotations/api?document='+sid)).json()).entries[0]?.ranges||[]).length===2,sid);

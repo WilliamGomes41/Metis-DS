@@ -28,7 +28,6 @@ const tasks=require('./browser_annotation_tasks.cjs');
   const block=text=>page.locator('[data-source-block]').filter({hasText:text.slice(0,20)});
   const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
   const row=key=>page.locator('#annotation-simple-rows dd[data-row='+key+']');
-  const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
   // Wait for what is stored, not for a status text (polled from Node: the page forbids eval).
   const stored=async test=>{for(let i=0;i<60;i++){const entry=(await read()).entries[0]||{};if(test(entry)) return;await page.waitForTimeout(250);}
     throw new Error('stored state never matched');};
@@ -41,7 +40,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   const annotation=new URL(page.url()).searchParams.get('annotation');
   // 1. A failed save keeps the edit visible, offers a retry and keeps the page from closing.
   await page.route('**/annotations/api',route=>route.request().method()==='POST' ? route.abort() : route.continue());
-  await plus('evidence').click();await tasks.selectText(page,block(support),support);
+  await tasks.addAs(page,block(support),support,'evidence');
   await page.locator('#annotation-retry').waitFor();
   await row('evidence').getByText(support,{exact:true}).waitFor();
   assert.match(await page.locator('#annotation-status').innerText(),/^Opslaan mislukt\. /);
@@ -55,8 +54,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   const other=await context.newPage();
   await other.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   await other.locator('#annotation-editor-inputs:enabled').waitFor();
-  await other.locator('#annotation-simple-rows dt[data-row=belongs] button.annotation-sign').click();
-  await tasks.selectText(other,other.locator('[data-source-block]').filter({hasText:extra.slice(0,20)}),extra);
+  await tasks.addAs(other,other.locator('[data-source-block]').filter({hasText:extra.slice(0,20)}),extra,'context');
   await other.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   await other.close();
   await page.locator('#annotation-simple-rows dd[data-row=evidence] .annotation-line').filter({hasText:support}).locator('button.annotation-sign').click();
