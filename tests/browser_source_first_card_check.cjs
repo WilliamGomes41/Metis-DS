@@ -176,6 +176,18 @@ const tasks=require('./browser_annotation_tasks.cjs');
  entry=await current();
  assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.equal('required_links' in entry,false);
  assert.equal(await page.locator('#annotation-required-links').count(),0);
+ // Codex P2: a selection saved as pending comes back after a reload with its menu, so it can still be placed.
+ await tasks.selectText(page,block(support),support);
+ for(let i=0;i<60 && (await current())?.pending_range?.quote!==support;i++) await page.waitForTimeout(250);
+ assert.equal((await current()).pending_range.quote,support);
+ await page.reload();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);
+ await tasks.choose(page,'evidence');
+ await row('evidence').getByText(support,{exact:true}).waitFor();
+ for(let i=0;i<60 && (await current())?.pending_range;i++) await page.waitForTimeout(250);
+ assert.equal((await current()).pending_range,null);
+ await minus('evidence',support).click();
+ await row('evidence').getByText(/Niets gekoppeld/).waitFor();
  // Removing the last piece of the statement removes the object: no empty draft stays behind.
  const second=new URL(page.url()).searchParams.get('annotation');
  await minus('core',failing.slice(14)).click();

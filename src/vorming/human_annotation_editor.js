@@ -31,9 +31,10 @@ import {bindRange} from '/annotations/binding.mjs';
   let entry, selected=null, dirty=0, committed=0, timer, running=null, retryRequest=null, retryVersion=0, failed=false;
   let selectingFromSource=false, lostSelection='';
   let check=null, checking=false, finalizing=false, saving=false, deriving=false, rebuilding=false;
-  // A selection made while Metis reads waits in 'queued'; the menu at the selection is placed at 'menuAt'.
+  // A selection made while Metis reads waits in 'queued'. The menu stands at the selection; 'menuClosed' says the
+  // worker closed it for this selection.
   // #1060 slice 4: a proposal is answered with + or −, never by ignoring it; 'asked' says saving met an open one.
-  let queued=null, asked=false, menuAt=null, menuClosed=false;
+  let queued=null, asked=false, menuClosed=false;
   // Besluit William 2026-11-14: switching the kind back restores Metis' proposal for that kind, for this statement.
   const kindMemory={};
 
@@ -280,11 +281,24 @@ import {bindRange} from '/annotations/binding.mjs';
       }
     });
   }
+  // The menu is placed from the selection as the card holds it, not from the browser's live selection, so a
+  // selection restored from a save (pending_range) gets its menu back after a reload (Codex P2).
+  function spanRange(span) {
+    const node=sourceElements.get(span.block_id);if(!node) return null;
+    const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT),range=document.createRange();
+    let seen=0,text,started=false;
+    while((text=walker.nextNode())) {
+      const points=Array.from(text.data),units=at=>points.slice(0,at).join('').length;
+      if(!started && span.start<=seen+points.length) {range.setStart(text,units(span.start-seen));started=true;}
+      if(started && span.end<=seen+points.length) {range.setEnd(text,units(span.end-seen));return range;}
+      seen+=points.length;
+    }
+    return null;
+  }
   function renderMenu() {
-    const show=!!selected && !!menuAt && !menuClosed && !entry.disposition && !finalizing && !deriving;
-    if(!show) {if(menu.contains(document.activeElement)) sourceElements.get(menuAt?.block_id)?.focus();menu.hidden=true;return;}
-    const block=sourceElements.get(menuAt.block_id),host=block?.closest('.annotation-document');
-    if(!block || !host) {menu.hidden=true;return;}
+    const show=!!selected && !menuClosed && !entry.disposition && !finalizing && !deriving;
+    const block=show ? sourceElements.get(selected.block_id) : null,host=block?.closest('.annotation-document'),range=block ? spanRange(selected) : null;
+    if(!range || !host) {if(menu.contains(document.activeElement)) sourceElements.get(selected?.block_id)?.focus();menu.hidden=true;return;}
     if(menu.previousSibling!==block) block.after(menu);
     const core=hasCore();
     menuButtons.core.setAttribute('aria-label',core ? 'Toevoegen aan de uitspraak, als volgend stuk' : 'Toevoegen als uitspraak');
@@ -293,16 +307,10 @@ import {bindRange} from '/annotations/binding.mjs';
     menuButtons.evidence.setAttribute('aria-label','Toevoegen aan Onderbouwing');
     menu.hidden=false;
     // Below the selection: a phone shows its own menu above it.
-    const width=menu.offsetWidth,room=host.clientWidth-width-8;
-    menu.style.top=(menuAt.bottom+6)+'px';menu.style.left=Math.max(8,Math.min(menuAt.left,room))+'px';
-  }
-  function placeMenu(range,block) {
-    const host=block.closest('.annotation-document');
     const rects=[...range.getClientRects()].filter(r=>r.width || r.height),last=rects.at(-1) || range.getBoundingClientRect();
-    if(!host) {menuAt=null;return;}
-    const box=host.getBoundingClientRect();
-    menuAt={block_id:block.dataset.sourceBlock,bottom:last.bottom-box.top+host.scrollTop,left:(rects[0] || last).left-box.left+host.scrollLeft};
-    menuClosed=false;
+    const box=host.getBoundingClientRect(),room=host.clientWidth-menu.offsetWidth-8;
+    menu.style.top=(last.bottom-box.top+host.scrollTop+6)+'px';
+    menu.style.left=Math.max(8,Math.min((rects[0] || last).left-box.left+host.scrollLeft,room))+'px';
   }
   function renderRows() {
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
@@ -495,13 +503,19 @@ import {bindRange} from '/annotations/binding.mjs';
     const value={block_id:first.dataset.sourceBlock,start:Array.from(prefix.toString()).length,end:Array.from(endPrefix.toString()).length,quote:range.toString()};
     // A key that does not change the selection (Escape, Tab back) does not reopen a menu the worker closed.
     if(event.type==='keyup' && selected && ['block_id','start','end'].every(key=>selected[key]===value[key])) return;
-    placeMenu(range,first);
+    menuClosed=false;
     captureSelection(value);
   }
   document.addEventListener('mouseup',rememberSelection);
   document.addEventListener('touchend',rememberSelection);
-  document.addEventListener('mousedown',event => { selectingFromSource=!!event.target.closest?.('[data-source-block]'); });
-  document.addEventListener('touchstart',event => { selectingFromSource=!!event.target.closest?.('[data-source-block]'); });
+  // Starting a new selection in the source puts the menu away; it returns at the new selection. Only its buttons
+  // take a click or tap, so the text it lies over stays selectable.
+  const startSelecting=event=>{
+    selectingFromSource=!!event.target.closest?.('[data-source-block]');
+    if(selectingFromSource && !menu.hidden) {menuClosed=true;renderMenu();}
+  };
+  document.addEventListener('mousedown',startSelecting);
+  document.addEventListener('touchstart',startSelecting);
   document.addEventListener('keyup',rememberSelection);
   for (const node of sourceElements.values()) node.addEventListener('keydown',event => moveSourceSelection(event,node));
   function moveSourceSelection(event,node) {
@@ -714,7 +728,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;deriving=false;queued=null;asked=false;lostSelection='';menuAt=null;
+    check=null;deriving=false;queued=null;asked=false;lostSelection='';menuClosed=false;
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     if (selected) el('to-source').href='#'+selected.block_id;
