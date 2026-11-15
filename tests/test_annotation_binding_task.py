@@ -1,4 +1,11 @@
-"""Local command construction protects existing source fields and essential duties."""
+"""Local command construction protects existing source fields and relationship identity.
+
+The card links nothing as essential; the dead repair path for essential links is gone (#1060, slice 5).
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from pathlib import Path
 import subprocess
 
