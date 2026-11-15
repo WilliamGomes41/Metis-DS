@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: De annotatiewerkplek bestaat alleen nog uit de kaart. Het verborgen stappenformulier is weg: opmaak, script en CSS. De kaart werkt voor de medewerker precies zoals voorheen: rijen, + en −, soort, uitleg, voorstellen, opslaan, opnieuw bouwen, bronmarkeringen en toetsenbord. Opgeslagen annotaties, de kernel en het schema veranderen niet.
-Proof: Alle 21 browserproeven slagen op de herschreven kaart, zonder aanpassing van hun stappen. `browser_source_first_card_check.cjs` eist nu dat de onderdelen van het stappenformulier niet meer bestaan in plaats van alleen onzichtbaar te zijn. De Python-tests rond annotatie, de annotatiepagina's en de karakterisering slagen.
+Proof: Alle 21 browserproeven slagen op de herschreven kaart, zonder aanpassing van hun stappen. `browser_source_first_card_check.cjs` eist nu dat de onderdelen van het stappenformulier niet meer bestaan in plaats van alleen onzichtbaar te zijn. De Python-tests rond annotatie, de annotatiepagina's en de karakterisering slagen (257). `test_http_source_and_autosave_contract` controleert nu de kaart en dat het formulier weg is, in plaats van de knoptekst ‘Gebruik als kernuitspraak’ van het oude formulier.
 Touches lifecycle invariants: no
 Rewrite risk: none
 
