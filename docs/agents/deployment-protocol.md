@@ -22,7 +22,7 @@ Elke stap heeft een stopcriterium. Faalt het, dan stopt de route; de agent meldt
 | 1 | Rollbackpunt vastleggen (runbook 1.1) | de waarde begint met `DOCKER|` en staat genoteerd |
 | 2 | App settings preflight (runbook 1.2) | `release_settings_preflight.py` exit 0 |
 | 3 | Geen lopende verwerking (runbook 1.3) | geen poging in uitvoering |
-| 4 | Migraties en rechten (runbook 1.5) met `--runtime-role vvn-metis-console` | `verify` geeft `PASS`, geen `BLOCKED` |
+| 4 | Migraties en rechten (runbook 1.5) met `--runtime-role vvn-metis-console` | `verify` geeft `PASS`, geen `BLOCKED`; ook het rechtenprofiel voor `public` en `api_access` is toegepast en geverifieerd met de runtime-identiteit; ontbrekend bewijs = STOP |
 | 5 | Image bouwen (runbook 2): eerst `--dry-run`, dan echt | `release_image_reference=…@sha256:…` afgedrukt |
 | 6 | Wisselen op digest (runbook 3) | het commando slaagt |
 | 7 | Verifiëren (zie hieronder) | alle vier de controles slagen |

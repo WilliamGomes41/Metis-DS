@@ -1,0 +1,190 @@
+{
+  "status": "PASS",
+  "categories": {
+    "scope/belofte": {
+      "status": "required",
+      "reason": "scope/belofte: required \u2014 iedere wijziging heeft een belofte; noem die in tests/PR-rapport",
+      "paths": [
+        ".agents/skills/database-architect/LICENSE.txt",
+        ".agents/skills/database-architect/README.md",
+        ".agents/skills/database-architect/SKILL.md",
+        "config/linear_github_sync.v1.json",
+        "docs/AZURE_RELEASE_RUNBOOK.md",
+        "docs/AZURE_STEP9_CUTOVER_RUNBOOK.md",
+        "docs/change-contracts/1074-postgresql-azure-hardening.md",
+        "evidence/postgresql-preimplementation/baseline.log",
+        "evidence/postgresql-preimplementation/baseline.xml",
+        "evidence/postgresql-preimplementation/probes.json",
+        "evidence/postgresql-preimplementation/probes.py",
+        "evidence/postgresql-preimplementation/run_baseline.py",
+        "evidence/postgresql-preimplementation/summary.json",
+        "scripts/apply_workflow_postgres_migrations.py",
+        "src/azure_postgres_credential_v1.py",
+        "src/publication/canonical_publication_postgres_v1.py",
+        "src/settings/api_access_v1.py",
+        "src/workflows/workflow_documents_postgres_v1.py",
+        "src/workflows/workflow_identity_postgres_v1.py",
+        "src/workflows/workflow_postgres_migration_v1.py",
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_postgres_migration_v1.py",
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ]
+    },
+    "opslag": {
+      "status": "n.v.t.",
+      "reason": "opslag: n.v.t. \u2014 geen opslag-/review-persistitiepaden in de wijziging",
+      "paths": [],
+      "required_evidence": [
+        "concurrent",
+        "stale"
+      ],
+      "evidence": [
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_postgres_migration_v1.py",
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ]
+    },
+    "beschikbaarheid": {
+      "status": "n.v.t.",
+      "reason": "beschikbaarheid: n.v.t. \u2014 geen ingest-/zware-verwerkingspaden in de wijziging",
+      "paths": [],
+      "required_evidence": [],
+      "evidence": []
+    },
+    "toegang": {
+      "status": "n.v.t.",
+      "reason": "toegang: n.v.t. \u2014 geen routes-/auth-/URL-ingestpaden in de wijziging",
+      "paths": [],
+      "required_evidence": [],
+      "evidence": []
+    },
+    "kwaliteit": {
+      "status": "n.v.t.",
+      "reason": "kwaliteit: n.v.t. \u2014 geen kwaliteits-/gatepaden in de wijziging",
+      "paths": [],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_postgres_migration_v1.py"
+      ]
+    },
+    "metrics": {
+      "status": "n.v.t.",
+      "reason": "metrics: n.v.t. \u2014 geen metrics-modules in de wijziging",
+      "paths": [],
+      "required_evidence": [
+        "teller",
+        "noemer",
+        "score-must-drop"
+      ],
+      "evidence": []
+    },
+    "slop": {
+      "status": "required",
+      "reason": "slop: required \u2014 iedere wijziging MUST slop (PROTOCOL-paste, HANDOFF, extra stuurlaag) vermijden",
+      "paths": [
+        ".agents/skills/database-architect/LICENSE.txt",
+        ".agents/skills/database-architect/README.md",
+        ".agents/skills/database-architect/SKILL.md",
+        "config/linear_github_sync.v1.json",
+        "docs/AZURE_RELEASE_RUNBOOK.md",
+        "docs/AZURE_STEP9_CUTOVER_RUNBOOK.md",
+        "docs/change-contracts/1074-postgresql-azure-hardening.md",
+        "evidence/postgresql-preimplementation/baseline.log",
+        "evidence/postgresql-preimplementation/baseline.xml",
+        "evidence/postgresql-preimplementation/probes.json",
+        "evidence/postgresql-preimplementation/probes.py",
+        "evidence/postgresql-preimplementation/run_baseline.py",
+        "evidence/postgresql-preimplementation/summary.json",
+        "scripts/apply_workflow_postgres_migrations.py",
+        "src/azure_postgres_credential_v1.py",
+        "src/publication/canonical_publication_postgres_v1.py",
+        "src/settings/api_access_v1.py",
+        "src/workflows/workflow_documents_postgres_v1.py",
+        "src/workflows/workflow_identity_postgres_v1.py",
+        "src/workflows/workflow_postgres_migration_v1.py",
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_postgres_migration_v1.py",
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ]
+    },
+    "releasebewijs": {
+      "status": "required",
+      "reason": "releasebewijs: required \u2014 iedere wijziging MUST releasebewijs (testmarker/evidence path) dragen",
+      "paths": [
+        ".agents/skills/database-architect/LICENSE.txt",
+        ".agents/skills/database-architect/README.md",
+        ".agents/skills/database-architect/SKILL.md",
+        "config/linear_github_sync.v1.json",
+        "docs/AZURE_RELEASE_RUNBOOK.md",
+        "docs/AZURE_STEP9_CUTOVER_RUNBOOK.md",
+        "docs/change-contracts/1074-postgresql-azure-hardening.md",
+        "evidence/postgresql-preimplementation/baseline.log",
+        "evidence/postgresql-preimplementation/baseline.xml",
+        "evidence/postgresql-preimplementation/probes.json",
+        "evidence/postgresql-preimplementation/probes.py",
+        "evidence/postgresql-preimplementation/run_baseline.py",
+        "evidence/postgresql-preimplementation/summary.json",
+        "scripts/apply_workflow_postgres_migrations.py",
+        "src/azure_postgres_credential_v1.py",
+        "src/publication/canonical_publication_postgres_v1.py",
+        "src/settings/api_access_v1.py",
+        "src/workflows/workflow_documents_postgres_v1.py",
+        "src/workflows/workflow_identity_postgres_v1.py",
+        "src/workflows/workflow_postgres_migration_v1.py",
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_postgres_migration_v1.py",
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ],
+      "required_evidence": [],
+      "evidence": [
+        "tests/test_azure_postgres_tls_v1.py",
+        "tests/test_workflow_postgres_migration_v1.py",
+        "tests/test_workflow_runtime_privileges_v1.py"
+      ]
+    }
+  },
+  "report": {
+    "belofte": "Automate Metis ontwikkel- en releasecontrole: changed paths mark skill categories required|n.v.t.; CI fails when required lacks evidence.",
+    "wijziging": "paths=.agents/skills/database-architect/LICENSE.txt, .agents/skills/database-architect/README.md, .agents/skills/database-architect/SKILL.md, config/linear_github_sync.v1.json, docs/AZURE_RELEASE_RUNBOOK.md, docs/AZURE_STEP9_CUTOVER_RUNBOOK.md, docs/change-contracts/1074-postgresql-azure-hardening.md, evidence/postgresql-preimplementation/baseline.log, evidence/postgresql-preimplementation/baseline.xml, evidence/postgresql-preimplementation/probes.json, evidence/postgresql-preimplementation/probes.py, evidence/postgresql-preimplementation/run_baseline.py, evidence/postgresql-preimplementation/summary.json, scripts/apply_workflow_postgres_migrations.py, src/azure_postgres_credential_v1.py, src/publication/canonical_publication_postgres_v1.py, src/settings/api_access_v1.py, src/workflows/workflow_documents_postgres_v1.py, src/workflows/workflow_identity_postgres_v1.py, src/workflows/workflow_postgres_migration_v1.py, tests/test_azure_postgres_tls_v1.py, tests/test_workflow_postgres_migration_v1.py, tests/test_workflow_runtime_privileges_v1.py; required=scope/belofte, slop, releasebewijs; n.v.t.=opslag, beschikbaarheid, toegang, kwaliteit, metrics",
+    "bewijs": "PASS: every required category has a test marker/evidence path",
+    "onzekerheid": "Path mapping is src/-prefix tooling, not a semantic diff of _save_objects. Product categories 2\u20136 stay n.v.t. until a product PR hits those paths. Evidence counts only when the marked test file is in the evaluated diff. Markers/comments are metadata pointing to concrete checks; they are not live-release evidence. Auditor verdict is not in this job.",
+    "advies": "Keep repository_preflight.py and this mapping in .github/workflows/ci.yml. A product PR that touches opslag/toegang/ingest/metrics MUST add the matching test marker plus concurrent/stale or teller/noemer/score-must-drop evidence."
+  },
+  "errors": [],
+  "checked_paths": [
+    ".agents/skills/database-architect/LICENSE.txt",
+    ".agents/skills/database-architect/README.md",
+    ".agents/skills/database-architect/SKILL.md",
+    "config/linear_github_sync.v1.json",
+    "docs/AZURE_RELEASE_RUNBOOK.md",
+    "docs/AZURE_STEP9_CUTOVER_RUNBOOK.md",
+    "docs/change-contracts/1074-postgresql-azure-hardening.md",
+    "evidence/postgresql-preimplementation/baseline.log",
+    "evidence/postgresql-preimplementation/baseline.xml",
+    "evidence/postgresql-preimplementation/probes.json",
+    "evidence/postgresql-preimplementation/probes.py",
+    "evidence/postgresql-preimplementation/run_baseline.py",
+    "evidence/postgresql-preimplementation/summary.json",
+    "scripts/apply_workflow_postgres_migrations.py",
+    "src/azure_postgres_credential_v1.py",
+    "src/publication/canonical_publication_postgres_v1.py",
+    "src/settings/api_access_v1.py",
+    "src/workflows/workflow_documents_postgres_v1.py",
+    "src/workflows/workflow_identity_postgres_v1.py",
+    "src/workflows/workflow_postgres_migration_v1.py",
+    "tests/test_azure_postgres_tls_v1.py",
+    "tests/test_workflow_postgres_migration_v1.py",
+    "tests/test_workflow_runtime_privileges_v1.py"
+  ],
+  "live_release_evidence": false
+}

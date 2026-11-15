@@ -1,0 +1,14 @@
+{
+  "failed_run": 43640711340,
+  "root_cause": "TLS test fixture fixed PostgreSQL binary paths do not cover Ubuntu26 runner PostgreSQL18",
+  "scope": "test infrastructure only; no production code change",
+  "tls_tests": 40,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "postgres_data_ci_major": 16,
+  "runner_tls_server_major": 18,
+  "local_tls_server_major": 17,
+  "test_file_sha256": "679ed394d2c6608ab50f1f794f9011f64ed732c74ea69bdfa8f3deb10653472e",
+  "new_ci": "pending push"
+}

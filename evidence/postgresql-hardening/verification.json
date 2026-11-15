@@ -1,0 +1,22 @@
+{
+  "code_sha": "a5490f3e895be679d329c306bed6f960d59aa36a",
+  "postgres_version": "17.11",
+  "python": "3.13.5",
+  "hardening": {
+    "tests": 90,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "mutation": {
+    "change": "ignore strict refusal findings in an isolated checkout",
+    "test": "test_strict_check_rejects_forbidden_update_from_every_reachable_role[direct]",
+    "expected_exit_code": 1,
+    "observed_exit_code": 1,
+    "failure": "PASS instead of BLOCKED"
+  },
+  "quality_review": "GOOD WITHIN SCOPE after fixing transaction-local timeout restoration",
+  "full_suite": "running; four existing CI partitions on isolated PG17 servers",
+  "postgres16": "pending GitHub CI",
+  "azure": "not accessed"
+}

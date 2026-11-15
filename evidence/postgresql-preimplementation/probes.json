@@ -1,0 +1,48 @@
+[
+  {
+    "probe": "excess_privilege_not_detected",
+    "current_verifier": "PASS",
+    "unauthorized_by_design_update_succeeded": true
+  },
+  {
+    "probe": "targeted_revoke_preserves_minimum",
+    "current_verifier": "PASS",
+    "update_denied": true,
+    "row_unchanged": true
+  },
+  {
+    "probe": "direct_revoke_does_not_remove_inherited_grant",
+    "effective_update": true
+  },
+  {
+    "probe": "public_grant_counts_as_effective_privilege",
+    "effective_update": true
+  },
+  {
+    "probe": "bounded_ddl_lock_and_retry",
+    "sqlstate": "55P03",
+    "timeout_seconds": 0.302,
+    "failed_attempt_left_no_column": true,
+    "retry_succeeded": true,
+    "setting_did_not_leak": true
+  },
+  {
+    "probe": "concurrent_index_requires_separate_execution",
+    "transaction_rejected": true,
+    "autocommit_succeeded": true
+  },
+  {
+    "probe": "tls_correct_hostname",
+    "verify_full_succeeded": true,
+    "ssl_active": true
+  },
+  {
+    "probe": "tls_wrong_hostname",
+    "verify_full_rejected": true
+  },
+  {
+    "probe": "tls_require_wrong_hostname",
+    "connection_succeeded": true,
+    "ssl_active": true
+  }
+]

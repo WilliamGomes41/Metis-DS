@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from azure.identity import DefaultAzureCredential
 
+from src.azure_postgres_credential_v1 import azure_postgres_tls_options
 from src.publication.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE
 
 
@@ -252,7 +254,7 @@ def connect_entra(*, host: str, database: str, user: str, credential: Any | None
             dbname=database,
             user=user,
             password=token,
-            sslmode="require",
+            **azure_postgres_tls_options(),
             connect_timeout=10,
             row_factory=dict_row,
         )
@@ -325,7 +327,8 @@ def observe_schema(connection: Any) -> dict[str, Any]:
 
 
 def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool = False,
-                               compact_cards: bool = False, test_document_deletion: bool = False) -> dict[str, Any]:
+                               compact_cards: bool = False, test_document_deletion: bool = False,
+                               strict: bool = False) -> dict[str, Any]:
     """Report missing runtime grants and the targeted GRANT lines; never grants anything."""
     if not role.strip():
         raise WorkflowMigrationError("workflow_runtime_role_required")
@@ -396,10 +399,66 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
                 if lacking:
                     missing.extend(relation+':'+p for p in lacking)
                     grants.append(f'GRANT {", ".join(lacking)} ON {relation} TO "{role}";')
+        strict_report = _observe_runtime_authority(connection, role, tables) if strict else {}
     except Exception as exc:
         raise WorkflowMigrationError("workflow_runtime_privilege_observation_failed") from exc
-    return {"status": "PASS" if not missing and not absent else "BLOCKED", "runtime_role": role,
-            "missing_relations": absent, "missing_privileges": missing, "grants": grants}
+    unsafe = strict_report.get('excess_privileges') or strict_report.get('unsafe_role_attributes')
+    return {"status": "PASS" if not missing and not absent and not unsafe else "BLOCKED", "runtime_role": role,
+            "missing_relations": absent, "missing_privileges": missing, "grants": grants, **strict_report}
+
+
+def _observe_runtime_authority(connection: Any, role: str, tables: dict[str, str]) -> dict[str, Any]:
+    """Inspect one reviewed prohibition and role authority; not a full ACL audit.
+
+    Minimum privilege expectations are deliberately not maxima. PostgreSQL
+    evaluates effective rights (including PUBLIC and inheritance); inspecting
+    reachable SET ROLE targets also covers non-inherited membership paths.
+    """
+    reachable = connection.execute(
+        "SELECT oid,rolname,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolreplication FROM pg_roles "
+        "WHERE rolname=%s OR pg_has_role(%s,oid,'SET') ORDER BY rolname", (role, role)
+    ).fetchall()
+    excess: list[dict[str, str]] = []
+    unsafe: list[dict[str, str]] = []
+    relation = 'workflow.publication_refusals'
+    for candidate in reachable:
+        name = str(candidate['rolname'])
+        for column, attribute in [('rolsuper', 'SUPERUSER'), ('rolbypassrls', 'BYPASSRLS'),
+                                  ('rolcreaterole', 'CREATEROLE'), ('rolcreatedb', 'CREATEDB'),
+                                  ('rolreplication', 'REPLICATION')]:
+            if candidate[column]:
+                unsafe.append({'role': name, 'attribute': attribute})
+        memberships = connection.execute(
+            "SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid=m.roleid "
+            "WHERE m.member=%s AND m.admin_option ORDER BY r.rolname", (candidate['oid'],)
+        ).fetchall()
+        unsafe.extend({'role': name, 'attribute': 'ROLE_ADMIN', 'target_role': str(row['rolname'])}
+                      for row in memberships)
+        if connection.execute("SELECT has_schema_privilege(%s,'workflow','CREATE') AS ok", (name,)).fetchone()['ok']:
+            unsafe.append({'role': name, 'attribute': 'SCHEMA_CREATE', 'schema': 'workflow'})
+        if tables.get('publication_refusals') == 'r' and connection.execute(
+            "SELECT has_table_privilege(%s,%s,'UPDATE') OR "
+            "has_any_column_privilege(%s,%s,'UPDATE') AS ok", (name, relation, name, relation)
+        ).fetchone()['ok']:
+            excess.append({'role': name, 'relation': relation, 'privilege': 'UPDATE',
+                           'source': 'effective' if name == role else 'reachable_set_role'})
+        # Ownership conveys DDL authority and can bypass an otherwise narrow ACL.
+        # USAGE catches inherited ownership membership, including nested roles.
+        owners = connection.execute(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+            "WHERE n.nspname='workflow' AND c.relkind IN ('r','p','S','v','m','f') "
+            "AND pg_has_role(%s,c.relowner,'USAGE') ORDER BY c.relname", (name,)
+        ).fetchall()
+        unsafe.extend({'role': name, 'attribute': 'RELATION_OWNER',
+                       'relation': 'workflow.' + str(row['relname'])} for row in owners)
+    return {
+        'inspection_scope': [relation + ':UPDATE', 'workflow:role_authority'],
+        'least_privilege_complete': False,
+        'unassessed_relations': sorted('workflow.' + table for table, kind in tables.items() if kind == 'r'),
+        'excess_privileges': excess,
+        'unsafe_role_attributes': unsafe,
+        'observed_at': datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def apply_migrations(
@@ -407,7 +466,10 @@ def apply_migrations(
     *,
     paths: tuple[Path, ...],
     expected_digest: str,
+    lock_timeout_ms: int = 5000,
 ) -> dict[str, Any]:
+    if type(lock_timeout_ms) is not int or not 0 < lock_timeout_ms <= 2147483647:
+        raise WorkflowMigrationError('workflow_migration_lock_timeout_invalid')
     actual_digest = migration_digest(paths)
     if expected_digest != actual_digest:
         raise WorkflowMigrationError("workflow_migration_digest_mismatch")
@@ -415,7 +477,13 @@ def apply_migrations(
     try:
         for path in paths:
             with connection.transaction():
+                previous_timeout = connection.execute('SHOW lock_timeout').fetchone()['lock_timeout']
+                connection.execute("SELECT set_config('lock_timeout', %s, true)", (f'{lock_timeout_ms}ms',))
                 connection.execute(path.read_text(encoding="utf-8"))
+                # A caller-owned transaction makes this block a savepoint.
+                # RELEASE preserves SET LOCAL, so restore it explicitly on success.
+                # Failure rolls it back with the transaction/savepoint itself.
+                connection.execute("SELECT set_config('lock_timeout', %s, true)", (previous_timeout,))
             applied.append(path.name)
     except Exception as exc:
         raise WorkflowMigrationError(
