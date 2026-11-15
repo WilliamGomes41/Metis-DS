@@ -141,9 +141,42 @@ Laat de Entra-databasebeheerder vervolgens alleen de gerichte runtime-rechten in
 ```sql
 GRANT CONNECT ON DATABASE metis TO "vvn-metis-console";
 GRANT USAGE ON SCHEMA public, workflow TO "vvn-metis-console";
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public, workflow TO "vvn-metis-console";
-GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public, workflow TO "vvn-metis-console";
 ```
+
+Gebruik daarna de bestaande `verify --runtime-role vvn-metis-console`-controle
+en laat de beheerder de gerapporteerde gerichte `grants` beoordelen en uitvoeren.
+De controle betreft benodigde workflowrechten; beoordeel de bestaande noodzakelijke
+canonical/public- en API-access-rechten afzonderlijk. Geef geen algemene
+UPDATE/DELETE op alle tabellen: onder meer `publication_refusals` verbiedt UPDATE.
+Een beperktere GRANT trekt eerder toegekende rechten niet in.
+
+### STOP: rechten buiten workflow nog niet bewezen
+
+**Een workflow-PASS is geen toestemming om de cutover voort te zetten.**
+Vóór stap 4 en vóór iedere activatie moeten ook de noodzakelijke rechten op
+`public` en `api_access` zijn toegepast en geverifieerd. Dit geldt in het
+bijzonder voor een nieuwe database of een nieuwe runtime-rol: CONNECT en
+schema-USAGE geven op zichzelf geen toegang tot tabellen of sequences.
+
+Doorgaan mag alleen met beide bewijsstukken in het cutoververslag:
+
+1. Een door de databasebeheerder beoordeeld **rechtenprofiel**, met concrete
+   GRANT-regels per benodigde tabel en sequence in `public` en `api_access`,
+   de doel-database en de werkelijk gebruikte runtime-identiteit. De beheerder
+   bevestigt dat dit profiel is toegepast; ook de benodigde schema-USAGE telt mee.
+2. Verificatie met die runtime-identiteit dat het profiel alle noodzakelijke
+   lees- en schrijfbewerkingen toestaat. Gebruik een geïsoleerde database met
+   hetzelfde schema en rechtenprofiel voor muterende proeven. Bewijs ten minste
+   de canonical/public-opstart- en publicatiepaden en de API-access-paden; alleen
+   een geslaagde controle als databasebeheerder is geen bewijs voor de runtime-rol.
+
+**Ontbreekt het rechtenprofiel of het verificatiebewijs: STOP.** Pas geen
+workflowflag aan en voer geen image-wissel uit. Het hier beschreven script
+controleert die volledige non-workflow-scope niet. Het vervolg voor automatische
+canonical/public-controle staat in [#940](https://github.com/WilliamGomes41/Metis-DS/issues/940);
+dat issue is geen vervanging voor uitgevoerd bewijs en omvat `api_access` niet.
+Leg bij een bestaande installatie het al toegepaste profiel en zijn verificatie
+vast; de voorbeelden hieronder trekken geen bestaande grants in.
 
 Is de database al ingericht vóór migratie 018, dan MOET de beheerder na 018 ook deze rechten toekennen (DELETE alleen voor het expliciete retentiecommando; geen UPDATE, de tabel is append-only):
 
@@ -154,6 +187,26 @@ GRANT USAGE, SELECT ON SEQUENCE workflow.publication_refusals_refusal_id_seq TO 
 ```
 
 Vervang `metis` alleen door de reeds bevestigde bestaande databasenaam. Geef geen eigenaarschap, DDL-recht of brede serverrol aan de runtime-identity.
+
+Met `verify --runtime-role vvn-metis-console --strict-runtime-privileges` controleer
+je aanvullend het verbod op UPDATE (ook kolomrechten) op `publication_refusals`
+en gevaarlijke workflowrolbevoegdheden. De rapportagescope is expliciet; dit is
+geen volledige least-privilege-audit. Herstel overtollige rechten alleen na
+inspectie van PUBLIC, overerving en bereikbare SET ROLE-rollen; de controle trekt
+zelf niets in. Controleer de effectieve rechten daarna opnieuw.
+
+De migratierunner begrenst lockwachten standaard op 5000 ms per statement, binnen
+de bestaande bestandstransactie. `--lock-timeout-ms` accepteert een positieve
+waarde; een fout stopt zonder automatische retry. Onderzoek de blokkade vóór
+herhaling. Een expliciete outer transactie blijft eigendom van de aanroeper;
+de runner herstelt daar ook na succes de eerdere lock-timeout.
+
+Azure-verbindingen vereisen TLS-serveridentiteitscontrole (`verify-full`). Gebruik
+de CA-bundel van het deploymentimage of een leesbaar PEM-bestand via
+`PGSSLROOTCERT`. Een onbruikbaar expliciet bestand geeft een fout, zonder fallback.
+Controleer dit vanuit het werkelijke image vóór een release. Azure-DSN-detectie
+herkent expliciete Azure-hostnames en PGHOST; verborgen service-file-hosts en
+private DNS-aliassen vereisen afzonderlijke configuratiecontrole.
 
 ## 4. Bestaande `/home/data` exact migreren
 

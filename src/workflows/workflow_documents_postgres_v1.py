@@ -15,6 +15,7 @@ from typing import Any, Mapping
 
 from azure.identity import DefaultAzureCredential
 
+from src.azure_postgres_credential_v1 import azure_postgres_tls_options, postgres_dsn_tls_options
 from src.publication.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE, PostgresCanonicalConfig
 from src.documents.topic_identity_v1 import topic_identity
 
@@ -109,7 +110,8 @@ class PostgresWorkflowDocumentStore:
             raise WorkflowDocumentStoreError("psycopg_unavailable") from exc
         try:
             if self.config.dsn:
-                return connect_postgres(psycopg, self.config.dsn, row_factory=dict_row, connect_timeout=10)
+                return connect_postgres(psycopg, self.config.dsn, row_factory=dict_row,
+                                        connect_timeout=10, **postgres_dsn_tls_options(self.config.dsn))
             credential = self._credential or DefaultAzureCredential()
             token = credential.get_token(AZURE_POSTGRES_SCOPE).token
             return connect_postgres(psycopg,
@@ -117,7 +119,7 @@ class PostgresWorkflowDocumentStore:
                 dbname=self.config.database,
                 user=self.config.user,
                 password=token,
-                sslmode="require",
+                **azure_postgres_tls_options(),
                 connect_timeout=10,
                 row_factory=dict_row,
             )

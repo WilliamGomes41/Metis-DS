@@ -99,6 +99,30 @@ def test_deployment_protocol_is_mandatory_and_keeps_the_container_route() -> Non
         assert evidence in protocol
 
 
+def test_non_workflow_rights_are_a_stop_gate_before_cutover_and_deployment() -> None:
+    cutover = (ROOT / 'docs/AZURE_STEP9_CUTOVER_RUNBOOK.md').read_text(encoding='utf-8')
+    gate_title = '### STOP: rechten buiten workflow nog niet bewezen'
+    gate = cutover.split(gate_title, 1)[1].split('## 4.', 1)[0]
+    assert cutover.index(gate_title) < cutover.index('## 4.')
+    for requirement in (
+        'workflow-PASS is geen toestemming', '`public`', '`api_access`',
+        'rechtenprofiel', 'GRANT-regels', 'runtime-identiteit',
+        'lees- en schrijfbewerkingen', 'geïsoleerde database',
+        'Ontbreekt het rechtenprofiel of het verificatiebewijs: STOP',
+        'Pas geen\nworkflowflag aan en voer geen image-wissel uit',
+    ):
+        assert requirement in gate
+
+    release = (ROOT / 'docs/AZURE_RELEASE_RUNBOOK.md').read_text(encoding='utf-8')
+    stop = 'STOP bij ontbrekend non-workflow-rechtenbewijs'
+    assert release.index(stop) < release.index('## 2. Image bouwen')
+    assert 'AZURE_STEP9_CUTOVER_RUNBOOK.md#stop-rechten-buiten-workflow-nog-niet-bewezen' in release
+
+    protocol = (ROOT / 'docs/agents/deployment-protocol.md').read_text(encoding='utf-8')
+    step = next(line for line in protocol.splitlines() if line.startswith('| 4 |'))
+    assert all(value in step for value in ('`public`', '`api_access`', 'runtime-identiteit', 'STOP'))
+
+
 def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:
     contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
     for obligation in (

@@ -30,12 +30,20 @@ def main() -> int:
     parser.add_argument("--confirm-target", help="Exact HOST/DATABASE; required for apply")
     parser.add_argument("--confirm-digest", help="Digest printed by plan; required for apply")
     parser.add_argument("--runtime-role", help="verify: also check the runtime identity's grants (e.g. vvn-metis-console)")
+    parser.add_argument('--strict-runtime-privileges', action='store_true',
+                        help='verify: also reject UPDATE on publication_refusals and unsafe workflow role authority; not a full ACL audit')
+    parser.add_argument('--lock-timeout-ms', type=int, default=5000,
+                        help='apply: positive per-statement lock wait limit in milliseconds (default: 5000)')
     parser.add_argument("--view-check", action="store_true", help="verify: the view check is enabled, so require view_checks grants")
     parser.add_argument("--compact-cards", action="store_true",
                         help="verify: CONSOLE_REVIEW_CARD_READS=compact, so require the migration 027 tables")
     parser.add_argument("--test-document-deletion", action="store_true",
                         help="verify: test document removal is enabled, so require its DELETE grants")
     args = parser.parse_args()
+    if args.strict_runtime_privileges and (args.command != 'verify' or not args.runtime_role):
+        parser.error('--strict-runtime-privileges requires verify and --runtime-role')
+    if not 0 < args.lock_timeout_ms <= 2147483647:
+        parser.error('--lock-timeout-ms must be between 1 and 2147483647')
     paths = migration_paths(ROOT)
     digest = migration_digest(paths)
     plan = {
@@ -59,7 +67,8 @@ def main() -> int:
                 if args.runtime_role:
                     privileges = observe_runtime_privileges(connection, args.runtime_role, view_check=args.view_check,
                                                             compact_cards=args.compact_cards,
-                                                            test_document_deletion=args.test_document_deletion)
+                                                            test_document_deletion=args.test_document_deletion,
+                                                            strict=args.strict_runtime_privileges)
                     result["runtime_privileges"] = privileges
                     if privileges["status"] != "PASS":
                         result["status"] = "BLOCKED"
@@ -69,7 +78,8 @@ def main() -> int:
                     raise WorkflowMigrationError("workflow_migration_target_confirmation_mismatch")
                 if not args.confirm_digest:
                     raise WorkflowMigrationError("workflow_migration_digest_confirmation_required")
-                result = apply_migrations(connection, paths=paths, expected_digest=args.confirm_digest)
+                result = apply_migrations(connection, paths=paths, expected_digest=args.confirm_digest,
+                                          lock_timeout_ms=args.lock_timeout_ms)
     except WorkflowMigrationError as exc:
         print(json.dumps({"status": "BLOCKED", "error": str(exc)}, sort_keys=True, indent=2))
         return 2
