@@ -52,9 +52,24 @@ Rules:
 - do not introduce a new durable authority, lifecycle state, architecture layer, or framework to solve a local product problem;
 - if implementation reveals that a Class A truth must change, STOP and reclassify before continuing.
 
+#### Class B program-design gate
+
+Before implementing a Class B change that alters shared extraction, review, retrieval, semantic, persistence, or cross-layer behavior, the agent MUST trace the existing execution path and state:
+
+- the existing mechanism and authority;
+- the intended behavioral change;
+- the affected functions, types, and call path;
+- which state may mutate and which state must remain unchanged;
+- behavior that must remain unchanged;
+- the smallest observable proof of the change.
+
+The agent MUST map the requested behavior onto the existing program structure before editing production code. If the current mechanism, ownership boundary, or call path is not established, investigate first instead of patching. This gate is a lightweight design check for Class B work and MUST NOT be expanded into lifecycle-grade paperwork when lifecycle semantics are unchanged.
+
 #### Stateful Class B domain-first overlay
 
 Apply this overlay only when a Class B change creates or mutates durable domain state. Do not apply it to stateless reads, presentation-only behavior, navigation, copy, or other work with no durable state transition.
+
+This document owns the criteria and escalation rule.
 
 Before defining or implementing the vertical slice, the issue or implementation plan MUST state:
 

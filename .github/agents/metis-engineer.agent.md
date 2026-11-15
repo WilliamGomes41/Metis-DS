@@ -60,14 +60,9 @@ Execution contract:
 - Treat green CI as necessary but not sufficient for a high-risk rewrite; the rewrite surface itself must be challenged.
 - If a required lifecycle or rewrite-risk decision is absent, stop and report it. Do not fill the gap with a reasonable assumption.
 
-Before opening the pull request, run the repository's normal verification sequence:
-
-- `python scripts/repository_preflight.py`
-- `python scripts/release_control_preflight.py --base origin/main`
-- `python -m compileall -q src`
-- `python scripts/check_architecture_boundaries.py`
-- `python -m pytest -q tests/test_architecture_invariants.py`
-- `pytest -q`
+Before opening the pull request, run the repository's
+[normal verification sequence](../../AGENTS.md#verify), including
+`python scripts/check_architecture_boundaries.py` and the relevant behavioral tests.
 
 If a required check cannot run, report that explicitly and do not claim completion.
 

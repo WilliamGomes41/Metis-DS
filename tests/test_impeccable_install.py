@@ -29,9 +29,10 @@ def test_impeccable_snapshot_is_complete_and_matches_pinned_hashes():
 
 def test_frontend_trigger_and_provider_entrypoints_resolve_to_canonical_skill():
     agents = (ROOT / "AGENTS.md").read_text()
-    section = agents.split("### Frontend design — Impeccable (mandatory)", 1)[1].split("\n### ", 1)[0]
-    assert "agents MUST read and apply" in section
-    assert "without\nrequiring the user to name the skill" in section
+    section = next(line for line in agents.splitlines() if line.startswith('| [Impeccable]'))
+    assert "Agents MUST read and apply" in section
+    assert "every frontend creation or change" in section
+    assert "without the user naming it" in section
     assert ".agents/skills/impeccable/SKILL.md" in section
     assert "docs/agents/impeccable.md" in section
     for provider in (".claude", ".cursor"):

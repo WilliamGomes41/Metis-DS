@@ -21,6 +21,16 @@ The initial revision is `5108b719a7aa484ef1a9781f587c7bbeac793f92`.
 These are selective, unmodified snapshots, not a Git submodule or a live remote
 plugin installation. A new checkout works offline without the plugin repo.
 
+## External Stitch plugin
+
+Stitch is een extern geïnstalleerde plugin, geen kopie in Metis. Iedere
+ontwikkelaar of agentomgeving installeert de plugin vanuit de fork; zie
+[de installatie-instructies](https://github.com/WilliamGomes41/stitch-skills/blob/main/FORK.md).
+Ontwerpen genereren vereist daarnaast een werkende Stitch MCP-/accountverbinding.
+Als plugin of verbinding ontbreekt, meld dat en ga verder met het uitvoerbare
+werk volgens Impeccable; claim geen Stitch-generatie. Bewaar secrets en private
+bronteksten buiten GitHub en gebruik synthetische data voor externe prototypes.
+
 ## Selection and authority
 
 | Skill | Use | Relationship to existing Metis methods |

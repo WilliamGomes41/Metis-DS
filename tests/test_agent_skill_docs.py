@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import shlex
 
 import yaml
 
@@ -13,22 +14,55 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_skill_selection_links_stitch_fork_without_loosening_existing_triggers() -> None:
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    guide = agents.split("### Keuzewijzer: wanneer welke skill\n", 1)[1].split("\n### ", 1)[0]
+    guide = agents.split("## Skills\n", 1)[1]
     rows = {line.split("|")[1].strip(): line for line in guide.splitlines() if line.startswith("| [")}
-    assert len(rows) == 5
-    assert "Verplicht bij iedere frontend" in next(v for k, v in rows.items() if "Impeccable" in k)
-    assert "expliciete vraag" in next(v for k, v in rows.items() if "pstack" in k)
-    assert "Alleen bij een expliciete opdracht" in next(v for k, v in rows.items() if "Matt Pocock" in k)
+    assert "MUST read and apply" in next(v for k, v in rows.items() if "Impeccable" in k)
+    assert "Explicit requests" in next(v for k, v in rows.items() if "pstack" in k)
+    assert "Only on an explicit request" in next(v for k, v in rows.items() if "Matt Pocock" in k)
     stitch = next(v for k, v in rows.items() if "Stitch" in k)
     assert "https://github.com/WilliamGomes41/stitch-skills" in stitch
-    assert "vóór implementatie" in stitch
-    assert "Impeccable blijft de verplichte" in stitch
-    assert "geen kopie in Metis" in guide
-    assert "Stitch MCP-/accountverbinding" in guide
-    assert "claim geen Stitch-generatie" in guide
-    assert "synthetische data" in guide
+    assert "before implementing" in stitch
+    assert "docs/agents/shared-skills.md#external-stitch-plugin" in stitch
+    assert "Emil Kowalski" in guide
+    assert "read-only" in next(v for k, v in rows.items() if "Emil Kowalski" in k)
+    shared = (ROOT / "docs/agents/shared-skills.md").read_text()
+    external = shared.split("## External Stitch plugin\n", 1)[1].split("\n## ", 1)[0]
+    for boundary in ("geen kopie in Metis", "Stitch MCP-/accountverbinding",
+                     "claim geen Stitch-generatie", "synthetische data"):
+        assert boundary in external
     for relative in re.findall(r"\]\((?!https://)([^)]+)\)", guide):
-        assert (ROOT / relative).is_file(), relative
+        assert (ROOT / relative.split('#', 1)[0]).is_file(), relative
+
+
+def test_root_navigation_and_verification_commands_resolve_to_real_targets() -> None:
+    agents = (ROOT / "AGENTS.md").read_text()
+    for relative in re.findall(r"\]\((?!https://)([^)]+)\)", agents):
+        path, _, anchor = relative.partition('#')
+        target = ROOT / path
+        assert target.is_file(), relative
+        if anchor:
+            headings = re.findall(r"^#+ (.+)$", target.read_text(), re.M)
+            slugs = {re.sub(r'[^\w\s-]', '', h.lower()).replace(' ', '-') for h in headings}
+            assert anchor in slugs, relative
+    commands = agents.split('```sh\n', 1)[1].split('```', 1)[0].splitlines()
+    scripts = set()
+    for command in commands:
+        if not command.strip():
+            continue
+        args = shlex.split(command)
+        assert args[0] == 'python'
+        if args[1] == '-m':
+            assert args[2] in {'compileall', 'pytest'}
+            for arg in args[3:]:
+                if arg.startswith('tests/'):
+                    assert (ROOT / arg).is_file(), arg
+        else:
+            assert (ROOT / args[1]).is_file(), command
+            scripts.add(args[1])
+    assert {'scripts/repository_preflight.py', 'scripts/release_control_preflight.py',
+            'scripts/check_architecture_boundaries.py'} <= scripts
+    assert 'bash scripts/test_postgres.sh' in agents
+    assert (ROOT / 'scripts/test_postgres.sh').is_file()
 
 
 def test_statechart_preparation_preserves_authority_and_requires_executable_proof() -> None:
@@ -184,9 +218,12 @@ def test_handoff_yaml_contains_required_context_and_allows_no_decision() -> None
 
 def test_class_b_program_design_gate_requires_existing_path_before_code() -> None:
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    owner = 'docs/agents/continuous-development.md'
+    assert owner + '#class-b-program-design-gate' in agents
+    model = (ROOT / owner).read_text(encoding='utf-8')
 
     required_contract = (
-        "### Class B program-design gate",
+        "#### Class B program-design gate",
         "trace the existing execution path",
         "the existing mechanism and authority",
         "the affected functions, types, and call path",
@@ -197,7 +234,7 @@ def test_class_b_program_design_gate_requires_existing_path_before_code() -> Non
         "MUST NOT be expanded into lifecycle-grade paperwork",
     )
     for phrase in required_contract:
-        assert phrase in agents
+        assert phrase in model
 
 
 def test_dispatcher_is_discoverable_and_preserves_selection_boundaries() -> None:
@@ -234,7 +271,10 @@ def test_dispatcher_examples_use_current_names_and_explicit_only_boundaries() ->
     assert not obsolete.intersection(re.findall(r"`([^`]+)`", examples))
 def test_agents_requires_one_deterministic_candidate_creator_before_review():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    section = agents.split("### Hard invariant: one deterministic candidate creator before human review", 1)[1].split("\n### ", 1)[0]
+    owner = 'docs/agents/abstraction-boundaries.md'
+    assert owner in agents and 'single-candidate-creator rule' in agents
+    contract = (ROOT / owner).read_text(encoding='utf-8')
+    section = contract.split("## Hard invariant: one deterministic candidate creator before human review", 1)[1].split("\n## ", 1)[0]
     for obligation in (
         "deterministic materialisation MUST be the sole KnowledgeCandidate creator",
         "src/vorming/knowledge_materialisation_v1.py::materialise_knowledge_candidates",
