@@ -100,7 +100,7 @@ def test_source_accounting_proposal_is_not_a_candidate(tmp_path,production_conso
             annotation.save(console,actor_id=actor,**ready)
 
 
-@pytest.mark.parametrize('change',['legacy','drop_fields'])
+@pytest.mark.parametrize('change',['legacy','drop_fields','retired_links','retired_flag','retired_pending_flag'])
 def test_native_guard_rejects_older_or_bypassing_writer(tmp_path,production_console,change):
     import psycopg
     from src.integrity_kernel import stable_hash
@@ -115,8 +115,15 @@ def test_native_guard_rejects_older_or_bypassing_writer(tmp_path,production_cons
     expected='annotation_client_contract_stale'
     if change=='legacy':
         del bad['selection_version']
-    else:
+    elif change=='drop_fields':
         del bad['field_evidence']
+    # #1060 deel 2 (Codex P1): the pre-change application still sends the retired fields during cutover.
+    elif change=='retired_links':
+        bad['required_links']=[]
+    elif change=='retired_flag':
+        bad['ranges'][1]['required_for_meaning']=False
+    else:
+        bad['pending_range']={**bad['ranges'][1],'required_for_meaning':False}
     with pytest.raises(psycopg.errors.RaiseException,match=expected):
         with console.workflow_document_store._connect() as con:
             con.execute('INSERT INTO workflow.annotation_versions(snapshot_id,annotation_id,revision,status,author_id,payload,payload_hash) VALUES(%s,%s,2,%s,%s,%s::jsonb,%s)',
