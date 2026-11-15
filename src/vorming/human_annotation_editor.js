@@ -1,7 +1,8 @@
 /* Source references only. Canonical text and object identity belong to the kernel. */
 import {bindRange} from '/annotations/binding.mjs';
-// #1060 slice 5: the card is the only way to annotate. The worker selects the statement, adds with '+' what
-// belongs to it and its evidence, and removes with '−'. Metis derives the meaning; the reviewer confirms it.
+// #1060 slice 5: the card is the only way to annotate. The worker selects source text and chooses, in the menu
+// next to the selection, where it goes: the statement, what belongs to it, or its evidence. '−' in the card
+// removes. Metis derives the meaning; the reviewer confirms it. (Besluit William 2026-11-15: one way to add.)
 (() => {
   'use strict';
   const state = JSON.parse(document.getElementById('annotation-data').textContent);
@@ -30,9 +31,9 @@ import {bindRange} from '/annotations/binding.mjs';
   let entry, selected=null, dirty=0, committed=0, timer, running=null, retryRequest=null, retryVersion=0, failed=false;
   let selectingFromSource=false, lostSelection='';
   let check=null, checking=false, finalizing=false, saving=false, deriving=false, rebuilding=false;
-  // '+' on a row arms it for the next selection; a selection made while Metis reads waits in 'queued'.
+  // A selection made while Metis reads waits in 'queued'; the menu at the selection is placed at 'menuAt'.
   // #1060 slice 4: a proposal is answered with + or −, never by ignoring it; 'asked' says saving met an open one.
-  let armed=null, queued=null, asked=false;
+  let queued=null, asked=false, menuAt=null, menuClosed=false;
   // Besluit William 2026-11-14: switching the kind back restores Metis' proposal for that kind, for this statement.
   const kindMemory={};
 
@@ -118,20 +119,18 @@ import {bindRange} from '/annotations/binding.mjs';
     if(kind==='evidence') entry.evidence_not_applicable=false;
     bindAs(kind==='evidence' ? 'evidence' : 'context');await runCheck();
   }
-  // '+' on a row: use the current selection, or wait for the next one.
-  function arm(kind) {
+  // The menu next to the selection: the selection goes where the worker chooses. Without a statement it can only
+  // become the statement; with one, 'Uitspraak' adds the next piece of it.
+  function add(kind) {
     (async()=>{
-      if(finalizing || deriving) return;
-      if(!hasCore()) {if(!selected) return;armed=kind;await useAs('core');renderCard();return;}
-      if(selected) {armed=null;await useAs(kind);return;}
-      armed=armed===kind ? null : kind;renderCard();
+      if(finalizing || deriving || !selected) return;
+      await useAs(hasCore() ? kind : 'core');
     })().catch(()=>{});
   }
   function onSelection() {
     // A selection alone is already the statement: check it so Metis can propose what belongs to it.
-    if(!hasCore()) {renderCard();if(!armed) runCheck();return;}
-    if(!armed) {renderCard();return;}
-    const kind=armed;armed=null;useAs(kind).catch(()=>{});
+    renderCard();
+    if(!hasCore()) runCheck();
   }
   function removeRange(anchor) {
     const index=entry.ranges.indexOf(anchor);if(index<0) return;
@@ -162,11 +161,11 @@ import {bindRange} from '/annotations/binding.mjs';
     const rest=anchor ? entry.ranges.filter(a=>a.role==='core' && a!==anchor) : [];
     if(!rest.length && !built()) {discardObject().catch(()=>{});return;}
     entry.ranges=entry.ranges.filter(a=>anchor ? a!==anchor : a.role!=='core');entry.object_type=null;
-    entry.field_evidence=null;resetFields();armed=null;change();render();
+    entry.field_evidence=null;resetFields();change();render();
     if(hasCore()) derive().catch(()=>{});
   }
   async function discardObject() {
-    armed=null;queued=null;
+    queued=null;
     try {
       // Withdraw what is stored as it now is; a refused edit (such as a duplicate) is not sent first.
       if(entry.revision) {entry.status='withdrawn';dirty+=1;await flush();}
@@ -245,7 +244,6 @@ import {bindRange} from '/annotations/binding.mjs';
     // A selected statement alone is a complete object: saving commits it first.
     // A saved object that lost its statement must get one back before leaving.
     const provisional=!hasCore() && !!selected,busy=finalizing || checking || deriving,object=built();
-    el('to-controls').textContent=selected ? 'Aanwijzing koppelen' : 'Naar huidige annotatie';
     el('ready').hidden=!!object || !hasCore() && !provisional;
     el('ready').disabled=busy || !(provisional || complete);
     el('finish').hidden=!!object;
@@ -258,6 +256,53 @@ import {bindRange} from '/annotations/binding.mjs';
       el('rebuild').disabled=finalizing || checking || deriving || rebuilding || changedSinceBuild() && (!hasCore() || !complete);
     }
     renderRows();
+    renderMenu();
+  }
+  // ---- The menu at the selection. It sits in the scrolling document next to the selected text, so it scrolls with
+  // it; it comes right after the source block, so Tab reaches it from a keyboard selection.
+  const menu=document.createElement('span'),menuButtons={};
+  {
+    menu.id='annotation-selection-menu';menu.className='annotation-selection-menu';menu.setAttribute('role','toolbar');
+    menu.setAttribute('aria-label','Selectie toevoegen aan');menu.hidden=true;
+    const label=document.createElement('span');label.className='annotation-selection-label';label.textContent='Toevoegen aan';label.setAttribute('aria-hidden','true');
+    menu.append(label);
+    for(const [kind,text] of [['core','Uitspraak'],['context','Hoort erbij'],['evidence','Onderbouwing']]) {
+      const button=document.createElement('button');button.type='button';button.dataset.add=kind;button.textContent=text;
+      button.addEventListener('click',()=>add(kind));menuButtons[kind]=button;menu.append(button);
+    }
+    // Pressing a choice must not take the selection away before it is used.
+    menu.addEventListener('mousedown',event=>event.preventDefault());
+    menu.addEventListener('keydown',event=>{
+      const buttons=[...menu.querySelectorAll('button:not([hidden])')],at=buttons.indexOf(document.activeElement);
+      if(event.key==='Escape') {menuClosed=true;renderMenu();sourceElements.get(selected?.block_id)?.focus();event.preventDefault();}
+      else if((event.key==='ArrowRight' || event.key==='ArrowLeft') && at>=0) {
+        buttons[(at+(event.key==='ArrowRight' ? 1 : buttons.length-1))%buttons.length].focus();event.preventDefault();
+      }
+    });
+  }
+  function renderMenu() {
+    const show=!!selected && !!menuAt && !menuClosed && !entry.disposition && !finalizing && !deriving;
+    if(!show) {if(menu.contains(document.activeElement)) sourceElements.get(menuAt?.block_id)?.focus();menu.hidden=true;return;}
+    const block=sourceElements.get(menuAt.block_id),host=block?.closest('.annotation-document');
+    if(!block || !host) {menu.hidden=true;return;}
+    if(menu.previousSibling!==block) block.after(menu);
+    const core=hasCore();
+    menuButtons.core.setAttribute('aria-label',core ? 'Toevoegen aan de uitspraak, als volgend stuk' : 'Toevoegen als uitspraak');
+    menuButtons.context.hidden=menuButtons.evidence.hidden=!core;
+    menuButtons.context.setAttribute('aria-label','Toevoegen aan Hoort erbij');
+    menuButtons.evidence.setAttribute('aria-label','Toevoegen aan Onderbouwing');
+    menu.hidden=false;
+    // Below the selection: a phone shows its own menu above it.
+    const width=menu.offsetWidth,room=host.clientWidth-width-8;
+    menu.style.top=(menuAt.bottom+6)+'px';menu.style.left=Math.max(8,Math.min(menuAt.left,room))+'px';
+  }
+  function placeMenu(range,block) {
+    const host=block.closest('.annotation-document');
+    const rects=[...range.getClientRects()].filter(r=>r.width || r.height),last=rects.at(-1) || range.getBoundingClientRect();
+    if(!host) {menuAt=null;return;}
+    const box=host.getBoundingClientRect();
+    menuAt={block_id:block.dataset.sourceBlock,bottom:last.bottom-box.top+host.scrollTop,left:(rects[0] || last).left-box.left+host.scrollLeft};
+    menuClosed=false;
   }
   function renderRows() {
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
@@ -288,7 +333,7 @@ import {bindRange} from '/annotations/binding.mjs';
       });
       name.append(button);dd.append(box);
     };
-    const row=(key,label,build,add=null)=>{
+    const row=(key,label,build)=>{
       const kind=key==='type',dt=kind ? typeDt : document.createElement('dt'),dd=kind ? typeDd : document.createElement('dd');
       const name=document.createElement('span'),text=document.createElement('span');
       if(kind) {dt.replaceChildren();for(const child of [...dd.childNodes]) if(child!==kindBox) child.remove();}
@@ -296,7 +341,6 @@ import {bindRange} from '/annotations/binding.mjs';
       text.textContent=label;name.className='annotation-row-name';name.append(text);dt.append(name);
       if(HELP[key]) explain(name,dd,key,label);
       if(kind && kindBox.parentNode===dd) for(const child of [...dd.childNodes]) if(child!==kindBox) dd.insertBefore(child,kindBox);
-      if(add) sign(dt,'+',add.label,add.run,add.pressed);
       build(dd);
       if(kind) {if(!dt.isConnected) rows.append(dt,dd);beforeType=null;}
       else if(beforeType) {rows.insertBefore(dt,beforeType);rows.insertBefore(dd,beforeType);}
@@ -313,9 +357,8 @@ import {bindRange} from '/annotations/binding.mjs';
     if(core.length || provisional) row('core','Uitspraak',dd=>{
       if(provisional) line(dd,selected.quote,'Selectie weghalen',()=>removeStatement());
       for(const a of core) line(dd,a.quote,'Weghalen uit de uitspraak: '+a.quote,()=>removeStatement(a));
-      if(armed==='core') hint(dd,'Selecteer het volgende stuk van de uitspraak in de bron.');
       if(signals.some(item=>broken.has(item.code))) hint(dd,'Dit lijkt een afgebroken zin. Is de hele zin geselecteerd?');
-    },core.length ? {label:'Nog een stuk van de uitspraak toevoegen',run:()=>arm('core'),pressed:armed==='core'} : null);
+    });
     // #1067: the kind of statement is a row like the others: Metis proposes it, anyone working in the card corrects it.
     if(showType) row('type','Soort',dd=>{
       // The control stays mounted (see typeDd), so a choice in progress keeps its focus.
@@ -336,20 +379,18 @@ import {bindRange} from '/annotations/binding.mjs';
           div.append(text,signs);dd.append(div);
         }
         if(asked && proposals.length) hint(dd,'Beantwoord eerst het voorstel: + voegt de tekst toe, − wijst het af.');
-        if(armed==='context') hint(dd,'Selecteer de tekst in de bron.');
-        else if(!belongs.length && !proposals.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
-      },{label:'Tekst toevoegen aan Hoort erbij',run:()=>arm('context'),pressed:armed==='context'});
+        if(!belongs.length && !proposals.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
+      });
       row('evidence','Onderbouwing',dd=>{
         for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
         // An earlier explicit choice stays visible and removable; the card no longer asks for it.
         if(!evidence.length && entry.evidence_not_applicable) line(dd,'Vastgelegd als niet van toepassing.','Keuze weghalen: niet van toepassing',()=>{setNoEvidence(false).catch(()=>{});});
-        if(armed==='evidence') hint(dd,'Selecteer de onderbouwing in de bron.');
-        if(!evidence.length && !entry.evidence_not_applicable && armed!=='evidence') hint(dd,'Niets gekoppeld. Staat de onderbouwing in de bron? Voeg haar toe met +.');
-      },{label:'Tekst toevoegen aan Onderbouwing',run:()=>arm('evidence'),pressed:armed==='evidence'});
+        if(!evidence.length && !entry.evidence_not_applicable) hint(dd,'Niets gekoppeld. Staat de onderbouwing in de bron? Selecteer haar en kies Onderbouwing.');
+      });
     }
     const own=finding=>finding.code==='annotation_core_required' && !entry.object_type || finding.code==='annotation_context_proposal_open';
     el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : !selected && lostSelection ||
-      (core.length && selected && !armed ? 'Klik op + bij de regel waar de geselecteerde tekst bij hoort.' : !core.length ? '' :
+      (core.length && selected ? 'Kies bij je selectie waar de tekst bij hoort.' : !core.length ? '' :
        done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' : checking ? 'Controleren…' : '');
     const notes=el('simple-notes');notes.replaceChildren();
     // A check that failed or never ran must not strand a complete object: offer the retry here.
@@ -426,8 +467,8 @@ import {bindRange} from '/annotations/binding.mjs';
     if(deriving) {queued=value;renderCard();return;}
     selected=value;lostSelection='';
     el('to-source').href='#'+value.block_id;
-    const role=!hasCore() ? 'core' : armed==='evidence' ? 'evidence' : 'context';
-    entry.pending_range={...selected,role,evidence_function:role==='evidence' ? 'supported_by' : null};
+    const role=!hasCore() ? 'core' : 'context';
+    entry.pending_range={...selected,role,evidence_function:null};
     change();
     onSelection();
   }
@@ -451,7 +492,11 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     const prefix = document.createRange(); prefix.selectNodeContents(first); prefix.setEnd(range.startContainer,range.startOffset);
     const endPrefix = document.createRange(); endPrefix.selectNodeContents(first); endPrefix.setEnd(range.endContainer,range.endOffset);
-    captureSelection({block_id:first.dataset.sourceBlock,start:Array.from(prefix.toString()).length,end:Array.from(endPrefix.toString()).length,quote:range.toString()});
+    const value={block_id:first.dataset.sourceBlock,start:Array.from(prefix.toString()).length,end:Array.from(endPrefix.toString()).length,quote:range.toString()};
+    // A key that does not change the selection (Escape, Tab back) does not reopen a menu the worker closed.
+    if(event.type==='keyup' && selected && ['block_id','start','end'].every(key=>selected[key]===value[key])) return;
+    placeMenu(range,first);
+    captureSelection(value);
   }
   document.addEventListener('mouseup',rememberSelection);
   document.addEventListener('touchend',rememberSelection);
@@ -669,7 +714,7 @@ import {bindRange} from '/annotations/binding.mjs';
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
-    check=null;deriving=false;armed=null;queued=null;asked=false;lostSelection='';
+    check=null;deriving=false;queued=null;asked=false;lostSelection='';menuAt=null;
     el('suggestion-note').textContent='';
     selected = entry.pending_range ? clone(entry.pending_range) : null;
     if (selected) el('to-source').href='#'+selected.block_id;
