@@ -73,11 +73,18 @@ def workflow_command(environment):
 
 def manual_command():
     text = (ROOT / "docs/AZURE_STEP9_CUTOVER_RUNBOOK.md").read_text()
-    return re.search(r"```bash\n(az webapp deploy .*?)\n```", text, re.DOTALL)[1]
+    return re.search(r"```bash\n(python scripts/verify_console_deployment\.py .*?)\n```", text, re.DOTALL)[1]
+
+
+def container_command():
+    text = (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").read_text()
+    command = re.search(r"```bash\n(python scripts/verify_console_deployment\.py[^\n]+)\n```", text)[1]
+    return command.replace('<url>', '${APP_URL}').replace('<sha>', '${REQUESTED_SHA}')
 
 
 def run_route(route, origin, tmp_path):
-    command = manual_command() if route == "manual" else workflow_command(route)
+    command = (manual_command() if route == "manual" else
+               container_command() if route == "container" else workflow_command(route))
     # Substitute only the deployment address and bound startup waiting for this
     # test. The actual checked-in run command and HTTP client still execute.
     command = command.replace('https://${METIS_WEBAPP}.azurewebsites.net', origin)
@@ -97,7 +104,7 @@ def run_route(route, origin, tmp_path):
     )
 
 
-@pytest.mark.parametrize("route", ["production", "test", "manual"])
+@pytest.mark.parametrize("route", ["container", "test", "manual"])
 @pytest.mark.parametrize("commit,accepted", [(OLD, False), (EXPECTED, True)])
 def test_actual_deploy_route_checks_running_commit(route, commit, accepted, tmp_path):
     payload = {"status": "ok", "service": "operations-console", "deployed_commit": commit}
@@ -110,7 +117,7 @@ def test_actual_deploy_route_checks_running_commit(route, commit, accepted, tmp_
     )
 
 
-@pytest.mark.parametrize("route", ["production", "test", "manual"])
+@pytest.mark.parametrize("route", ["container", "test", "manual"])
 @pytest.mark.parametrize("commit,accepted", [(OLD, False), (EXPECTED, True)])
 def test_deploy_route_normalizes_trailing_origin_slash(route, commit, accepted, tmp_path):
     payload = {"status": "ok", "service": "operations-console", "deployed_commit": commit}
@@ -225,7 +232,7 @@ def test_cli_rejects_invalid_health_target_without_echoing_credentials(url):
 
 
 @pytest.mark.parametrize("environment,sha_source", [
-    ("production", "inputs.commit_sha"), ("test", "inputs.commit_sha"),
+    ("test", "inputs.commit_sha"),
 ])
 def test_workflow_binds_expected_commit_to_selected_release(environment, sha_source):
     text = (ROOT / ".github/workflows" / f"deploy-{environment}.yml").read_text()

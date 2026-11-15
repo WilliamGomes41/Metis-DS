@@ -1,6 +1,6 @@
 # Azure-release van de console (Docling-image)
 
-Dit runbook beschrijft hoe een exacte `main`-commit als container-image naar Azure gaat. Het is dezelfde route als in `docs/change-contracts/zorgmaatje.md`: `az acr build` met `Dockerfile.docling --target runtime` en daarna de app wisselen via de digest. De ZIP-route (`deploy-production.yml`) levert geen Docling-runtime en is hier niet van toepassing.
+Dit runbook beschrijft hoe een exacte `main`-commit als container-image naar Azure gaat. Het is dezelfde route als in `docs/change-contracts/zorgmaatje.md`: `az acr build` met `Dockerfile.docling --target runtime` en daarna de app wisselen via de digest. De ZIP-route (`deploy-production.yml`) levert geen Docling-runtime en is technisch afgesloten: een aanroep faalt zonder Azure-login of deployment.
 
 Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeurt alleen met GO van William.
 

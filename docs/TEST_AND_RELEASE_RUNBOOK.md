@@ -2,12 +2,18 @@
 
 ## Doel
 
-Golf C herstelt de PR #82-fouten. `deploy-test` blijft **inactief / fail-closed**
-tot Azure App Service `vvn-metis-console-test` bestaat. Op grond van Protocol
-v2.29 MAG `deploy-production` tijdelijk handmatig zonder test-app worden
-gestart. Merge naar `main` deployt nooit automatisch.
+`deploy-test` blijft **inactief / fail-closed** tot Azure App Service
+`vvn-metis-console-test` bestaat. De tijdelijke productie-ZIP-route uit v2.29
+is vervallen: `deploy-production` wijst iedere aanroep af zonder Azure-login,
+OIDC-rechten of deployment. Merge naar `main` deployt nooit automatisch.
 
-Een deployment vervangt applicatiecode in `wwwroot` (`--clean true`);
+Voor productie gelden uitsluitend [AZURE_RELEASE_RUNBOOK.md](AZURE_RELEASE_RUNBOOK.md)
+en het [deploymentprotocol](agents/deployment-protocol.md): container op digest,
+een exacte geteste gemergde main-commit, rollbackpunt en GO per Azure-mutatie.
+De packaging- en testinstructies hieronder gelden alleen voor de test-ZIP;
+een geslaagde test-ZIP maakt die ZIP niet geschikt voor productie.
+
+Een test-ZIP-deployment vervangt applicatiecode in `wwwroot` (`--clean true`);
 runtime-data blijft buiten het pakket onder `/home/data` en in Blob Storage.
 git-archive-only is niet genoeg: het ZIP-artefact MUST dependencies bevatten.
 
@@ -61,7 +67,10 @@ productiecontainer of productie-identity voor dit doel.
 
 ## GitHub OIDC-inrichting — gescheiden identiteiten
 
-Eén Entra-app is niet genoeg als die naar beide apps kan deployen. Maak
+De bestaande omgevingsscheiding blijft gelden. De afgesloten productieworkflow
+leest geen onderstaande productievariabelen en vraagt geen token aan; deze
+wijziging wijzigt of verwijdert geen Azure-identiteit of RBAC-toekenning.
+Voor een testdeployment mag één Entra-app niet naar beide apps kunnen deployen. Maak
 **twee** app registrations / service principals:
 
 | Identiteit | GitHub-subject | Azure-recht |
@@ -103,9 +112,10 @@ in de repository.
    verdeeld over vier zelfstandige jobs per versie. De bestaande checks
    `test (3.12)` en `test (3.13)` controleren de volledige verzameling en het
    samengevoegde bewijs. Browserproeven draaien parallel in een eigen job.
-2. `deploy-test` en `deploy-production` hebben **geen** `on.push`. Merge naar
-   `main` start geen deploy. Zolang `vvn-metis-console-test` niet bestaat blijft
-   de testworkflow fail-closed. Productie kan tijdelijk handmatig via v2.29.
+2. `deploy-test` en de afwijzende `deploy-production` hebben **geen** `on.push`.
+   Merge naar `main` start geen deploy. Zolang `vvn-metis-console-test` niet
+   bestaat blijft de testworkflow fail-closed. De productieworkflow voert ook
+   met ingevulde productievariabelen geen Azure-actie uit.
 3. Alleen een geslaagde push-CI op main bouwt het deploymentpakket met
    `bash scripts/create_azure_deploy_package.sh`. Een Python 3.12-proef importeert
    applicatie en native dependencies uitsluitend uit het uitgepakte ZIP.
@@ -114,17 +124,16 @@ in de repository.
    blijft de zwaardere extra voor Product API / TF-IDF en gaat niet in het
    console-pakket.
 4. `--clean true` wist `wwwroot` en MUST NOT `/home/data` wissen.
-5. Deployment blijft handmatig: vul bij `deploy-test` of `deploy-production`
+5. Testdeployment blijft handmatig: vul uitsluitend bij `deploy-test`
    **commit_sha** (volledige SHA op main) en **ci_run_id** (het nummer uit de
-   URL `/actions/runs/<nummer>` van de geslaagde main-ci-run) in. Productie
-   behoudt protection/approval en de production-identiteit. De workflow eist
+   URL `/actions/runs/<nummer>` van de geslaagde main-ci-run) in. De testworkflow eist
    een voltooide geslaagde main-push van ci.yml voor die exacte repository en
    commit. Daarna downloadt hij het pakket van die CI-poging en controleert
-   manifest, SHA-256 en de ingesloten commit vóór Azure-login. Dezelfde ZIP
-   wordt voor test en productie gebruikt; er draait geen tweede volledige
+   manifest, SHA-256 en de ingesloten commit vóór Azure-login. Dit ZIP-artefact
+   wordt uitsluitend voor test gebruikt; er draait geen tweede volledige
    suite of pakketbouw in deployment. Verlopen/ontbrekend bewijs blokkeert;
    er wordt nooit stil naar een andere commit of nieuw gebouwd pakket uitgeweken.
-6. Beide workflows en de handmatige ZIP-route gebruiken
+6. De testworkflow en de productiecontainerprocedure gebruiken
    `scripts/verify_console_deployment.py`: `status=ok`,
    `service=operations-console` en `deployed_commit` gelijk aan de volledige
    verwachte SHA zijn verplicht. HTTP 200 alleen is onvoldoende.
@@ -134,7 +143,7 @@ in de repository.
 
 Een main-CI-run bewaart het pakket 30 dagen onder
 `metis-console-<sha>-attempt-<poging>`. Oudere runs zonder dit pakket zijn niet
-bruikbaar voor de nieuwe deploymentworkflow. Een herbouw vereist opnieuw
+bruikbaar voor de testdeploymentworkflow. Een herbouw vereist opnieuw
 geslaagde CI en pakketcontrole; verander geen manifest om bewijs te omzeilen.
 
 Bij een incidentele infrastructuurfout: **Actions → run → Re-run jobs → Re-run

@@ -6,7 +6,7 @@ De technische stappen staan in [`docs/AZURE_RELEASE_RUNBOOK.md`](../AZURE_RELEAS
 
 ## Grondregels
 
-1. **Eén route: container op digest.** Bouw met `scripts/build_azure_release_image.sh` (`az acr build`) en wissel met de afgedrukte `release_image_reference=…@sha256:…`. De ZIP-route (`deploy-production.yml`) is niet van toepassing. Wissel nooit op een tag.
+1. **Eén route: container op digest.** Bouw met `scripts/build_azure_release_image.sh` (`az acr build`) en wissel met de afgedrukte `release_image_reference=…@sha256:…`. De ZIP-route (`deploy-production.yml`) is technisch afgesloten en kan geen Azure-actie uitvoeren. Wissel nooit op een tag.
 2. **Alleen een exacte `main`-commit.** Deploy een SHA die op `main` staat en waarvan de PR gemerged is met groene CI. Nooit een featurebranch, nooit een lokale wijziging.
 3. **GO van de projectlead per stap die Azure wijzigt:** build, migratie, app settings, image-wissel en rollback. De agent voert die stappen niet zelf uit, maar levert de commando's en leest de uitvoer.
 4. **Eén blok per stap.** Geef per bericht één commandoblok en wacht op de uitvoer. Zet het rollbackcommando nooit in hetzelfde blok als de wissel; lever het alleen apart en alleen op verzoek of bij een gefaalde verificatie.

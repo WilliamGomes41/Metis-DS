@@ -75,7 +75,7 @@ def test_deployment_protocol_is_mandatory_and_keeps_the_container_route() -> Non
     for rule in (
         "scripts/build_azure_release_image.sh",
         "@sha256:",
-        "De ZIP-route (`deploy-production.yml`) is niet van toepassing",
+        "De ZIP-route (`deploy-production.yml`) is technisch afgesloten",
         "Wissel nooit op een tag",
         "Alleen een exacte `main`-commit",
         "GO van de projectlead per stap die Azure wijzigt",
