@@ -43,3 +43,18 @@ De soorten komen uit de paginadata (`state.kinds`) in plaats van uit de verborge
 - De kernelregel voor essentiële verbanden (opnieuw aanwijzen of reden geven). Nieuwe kaartdata kan die niet meer raken. Het opruimen daarvan is een aparte wijziging in kernel en database (Class A) en volgt als voorstel.
 - Een annotatie uit het stappenformulier met een essentieel verband kan in de kaart niet meer worden hersteld. Besluit William: zo'n document wordt verwijderd en opnieuw ingeleverd.
 - De praktijkproef blijft voorwaarde voor productie-uitrol (#1060).
+
+## Vervolg: dood herstelpad in `binding.mjs` (besluit William, 15 november 2026)
+
+“Haal voor nu alleen dode code omdat ik de consequentie van deel twee nog niet weet.”
+
+- **Weg:** het herstelpad in `bindRange`. Het gaat om `repairingLink` (`restoring`) en de keuze ‘essentieel’ (`essential`). De kaart gaf daar altijd `null` en `false` mee. Gekoppelde stukken krijgen `required_for_meaning: false`, zoals de kaart al deed.
+- **Blijft, want niet dood:**
+  - `required_links` in het opslagcommando. De kaart stuurt `[]` mee. De sleutel bepaalt mee welke versiemarkering een annotatie krijgt (`human-annotation-input-v2`), en die moet bij elke opslag gelijk blijven.
+  - De kernelcontroles op `withdrawal_reason` en `annotation_required_relationship_missing`. Die raken oude data.
+  - Het veld `required_for_meaning`. Dat gaat mee in de context en de hash van een gebouwd kennisobject.
+
+  Deze drie hangen samen met deel 2 en blijven staan tot de gevolgen bekend zijn.
+- **Bewijs:**
+  - `tests/annotation_binding_task_check.mjs` controleert dat de kaart niets als essentieel koppelt.
+  - Alle 21 browserproeven en de annotatietests slagen.

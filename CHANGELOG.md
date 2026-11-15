@@ -8,7 +8,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 - Issue #972: next-passage navigation with unprepared review cards captures current authorized objects, bindings and source without loading historical formation/processing archives. Queue qualification, selected-passage checks and complete explicit document assessment keep their existing owners. No GET preparation or production data conversion.
 
 ### Removed
-- Het verborgen stappenformulier van de annotatiewerkplek is weg: opmaak, script en CSS. De kaart is de enige invoer en werkt zoals voorheen; wat het script uit verborgen formuliervelden las, is gewone toestand geworden. Opgeslagen annotaties, de kernel en het schema zijn ongewijzigd. Het herstel van oude essentiële verbanden, dat in de kaart al onbereikbaar was, vervalt (#1060, slice 5).
+- Het verborgen stappenformulier van de annotatiewerkplek is weg: opmaak, script en CSS. De kaart is de enige invoer en werkt zoals voorheen; wat het script uit verborgen formuliervelden las, is gewone toestand geworden. Opgeslagen annotaties, de kernel en het schema zijn ongewijzigd. Het herstel van oude essentiële verbanden, dat in de kaart al onbereikbaar was, vervalt, ook in `bindRange` (#1060, slice 5).
 
 ### Fixed
 - Een document met reviewconfiguratie v1 die twee goedkeuringen vraagt (`two_others`, of `one_other` met vierogenvink) liep vast: de publicatie wachtte op de tweede persoon, maar die kreeg geen reviewtaak. De inname leidt nu ook voor zo'n v1-keuze het reviewbeleid af, zodat de tweede persoon na de eerste goedkeuring wordt gevraagd. Een v1-keuze met één goedkeuring is ongewijzigd; al ingenomen v1-documenten vragen een aparte migratie (#1072).

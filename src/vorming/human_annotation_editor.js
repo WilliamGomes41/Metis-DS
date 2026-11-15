@@ -104,8 +104,8 @@ import {bindRange} from '/annotations/binding.mjs';
   // ---- Binding: the selection becomes the statement, or text that belongs to it, or its evidence.
   function bindAs(role) {
     try {
-      // What the card links belongs; '−' simply removes it. Nothing is essential, evidence supports the statement.
-      entry=bindRange(entry,selected,{role,essential:role==='core' ? null : false,repairingLink:null,evidenceFunction:'supported_by'},fieldContract).entry;
+      // What the card links belongs; '−' simply removes it. Evidence supports the statement.
+      entry=bindRange(entry,selected,{role,evidenceFunction:'supported_by'},fieldContract).entry;
       if(role==='core') resetFields();
     } catch(error) {status(error.message);return;}
     window.getSelection().removeAllRanges();
@@ -151,7 +151,7 @@ import {bindRange} from '/annotations/binding.mjs';
     // The selection is the statement; answering the proposal commits it first.
     if(!hasCore() && selected) {await useAs('core');if(!hasCore()) return;}
     if(add) {
-      try {entry=bindRange(entry,proposal,{role:'list_introduction',essential:false,repairingLink:null,evidenceFunction:null},fieldContract).entry;}
+      try {entry=bindRange(entry,proposal,{role:'list_introduction',evidenceFunction:null},fieldContract).entry;}
       catch(error) {status(error.message);return;}
     } else decline(proposal);
     change();render();runCheck();
