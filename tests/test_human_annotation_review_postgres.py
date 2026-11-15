@@ -66,7 +66,7 @@ def save_second_claim(console, actor, sid):
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core, anchor(view, 'Onderzoek', role='evidence', function='supported_by')], status='ready')
     request['selection'].update(object_type='explanation', evidence_not_applicable=False,
-                                field_evidence=fields, required_links=[])
+                                field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
     return request
 
@@ -650,7 +650,7 @@ def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(pr
         fields.update(type_evidence_spans={'core':True},support_span={'core':True})
         request = command(view, ranges=[core,condition,anchor(view,'Onderzoek',role='evidence',function='supported_by'),
             anchor(view,'De beoordeling',role='context')], status='ready')
-        request['selection'].update(object_type='explanation', evidence_not_applicable=False,field_evidence=fields,required_links=[])
+        request['selection'].update(object_type='explanation', evidence_not_applicable=False,field_evidence=fields)
         saved = client.post('/annotations/api', json=request)
         assert saved.status_code == 200, saved.text
     resumed = restart_production(console)

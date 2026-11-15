@@ -63,4 +63,6 @@ def test_human_build_does_not_use_legacy_envelope_helper_and_keeps_object_hash(m
 
     monkeypatch.setattr(legacy, "document_spec", retired_helper)
     result = build_objects(seal, [entry], fragments=fragments)
-    assert stable_hash(result) == "876dd40c5ccbadabc35559fd15ab51f49e32b131bb261bb63472fa892261c859"
+    # #1060 deel 2: the built context no longer carries required_for_meaning. Against main (876dd40c…) only the
+    # derived hashes differ (content/canonical/context/binding/payload/semantic_spec); ids, text and content are equal.
+    assert stable_hash(result) == "69ef388183fddf5539d5a87203def5ff00fc43bbe9ba6f2d060dd6d73a5d63d0"

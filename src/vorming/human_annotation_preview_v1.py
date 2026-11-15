@@ -80,8 +80,6 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
         codes.append('annotation_not_ready')
     if payload.get('pending_range') is not None:
         codes.append('annotation_pending_range')
-    if any(link['required_for_meaning'] for link in payload.get('required_links') or []):
-        codes.append('annotation_required_relationship_missing')
     core = [_span(anchor) for anchor in payload['ranges'] if anchor['role'] == 'core']
     disposition = payload.get('disposition')
     if disposition is None:
@@ -160,7 +158,7 @@ def inspect_document(entries, *, fragments):
         owners = core_owners.get(tuple((a['block_id'], a['start'], a['end']) for a in core), [])
         if disposition is None and len(owners) > 1:
             # Keep the established document finding order.
-            index = sum(code in {'annotation_not_ready','annotation_pending_range','annotation_required_relationship_missing'} for code in codes)
+            index = sum(code in {'annotation_not_ready','annotation_pending_range'} for code in codes)
             codes.insert(index, 'annotation_core_duplicate')
         elif disposition is not None and payload['status'] == 'ready':
             assessments.extend({'span': span, **disposition} for span in core)

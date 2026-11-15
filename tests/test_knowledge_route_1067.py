@@ -97,7 +97,7 @@ def test_document_check_route_follows_the_real_build(tmp_path, production_consol
     from src.vorming.source_bound_fields_v3 import FIELDS
     fields = {key: {'span': None, 'missing_reason': 'uncertain'} for key in FIELDS}
     fields.update(type_evidence_spans={'core': True}, **{TYPE_CORE_FIELDS['explanation']: {'core': True}})
-    request['selection'].update(object_type='explanation', field_evidence=fields, required_links=[])
+    request['selection'].update(object_type='explanation', field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username': 'route', 'password': 'route-secret-1067'})

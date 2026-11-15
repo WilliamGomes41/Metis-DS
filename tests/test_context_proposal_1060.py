@@ -77,7 +77,7 @@ def smetten(tmp_path, production_console):
 
     def save(ranges=(), *, declined=None, status='ready', previous=None):
         request = command(view, ranges=[anchor(view, 'Bij diabetes'), *ranges], status=status)
-        request['selection'].update(object_type='explanation', field_evidence=fields, required_links=[])
+        request['selection'].update(object_type='explanation', field_evidence=fields)
         if declined is not None:
             request['selection']['declined_context'] = declined
         if previous:

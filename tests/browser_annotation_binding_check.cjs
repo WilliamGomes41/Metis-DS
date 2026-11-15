@@ -62,7 +62,7 @@ const assert=require('node:assert/strict');
   const entry=(await read()).entries[0];
   const added=entry.ranges.find(r=>r.role==='context');
   assert.deepEqual({block_id:added.block_id,start:added.start,end:added.end},{block_id:blockId,start:0,end:Array.from('Alleen bij klachten.').length});
-  assert.equal(added.required_for_meaning,false);
+  assert.equal('required_for_meaning' in added,false);
   assert.equal(entry.pending_range,null);
   // The statement is recorded as the evidence of its own type on every save.
   assert.deepEqual(entry.field_evidence.recommendation_evidence_span,{core:true});

@@ -65,7 +65,7 @@ def bound_values(record, *, text, proposed_type, context=()):
 
 
 def bind_context(ranges, *, fragments):
-    """Keep role/function/essentiality on each entry-specific relationship."""
+    """Keep role and function on each entry-specific relationship."""
     from src.vorming.source_bound_fields_v2 import resolve_context_literal
     from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
     blocks=_read_source_blocks(fragments,include_headings=True)
@@ -76,15 +76,13 @@ def bind_context(ranges, *, fragments):
         role=ROLE_MAP.get(anchor['role'])
         if role is None:
             raise ValueError('annotation_role_invalid')
-        if type(anchor['required_for_meaning']) is not bool or (
-            anchor['role']=='evidence' and anchor['evidence_function'] not in {'supported_by','explains'}
+        if (anchor['role']=='evidence' and anchor['evidence_function'] not in {'supported_by','explains'}
             or anchor['role']!='evidence' and anchor['evidence_function'] is not None):
             raise ValueError('annotation_relationship_invalid')
         raw={'role':role,'span':{k:anchor[k] for k in ('block_id','start','end')},'unresolved_reason':None}
         resolved=resolve_context_literal(raw['span'],fragments=fragments,blocks=blocks)
         result.append({**raw,**resolved,'annotation_role':anchor['role'],
                        'relationship_id':anchor['relationship_id'],
-                       'required_for_meaning':anchor['required_for_meaning'],
                        'evidence_function':anchor['evidence_function']})
     return result
 
@@ -136,7 +134,6 @@ def bind_candidate(candidate, decision, *, fragments):
     candidate['source_bound_context']=context
     candidate['metadata']={REFERENCE_KEY:{**deepcopy(reference),
         'ranges':deepcopy(decision['annotation_ranges']),
-        'required_links':deepcopy(decision.get('required_links') or []),
         'evidence_not_applicable':decision['evidence_not_applicable']}}
     candidate['semantic_passage'].update(formation_mode=MODE,annotation_ref=deepcopy(reference))
     if decision.get('recommendation_semantics') is not None:
