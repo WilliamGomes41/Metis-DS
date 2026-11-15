@@ -76,9 +76,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-entry').isVisible(),false);
  let entry=(await read()).entries.find(e=>e.annotation_id===first);
  assert.equal(entry.status,'ready');assert.equal(entry.object_type,'explanation');assert.equal(entry.evidence_not_applicable,false);
- assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,a.required_for_meaning]),[['core',item,false],['list_introduction',intro,false]]);
+ assert.deepEqual(entry.ranges.map(a=>[a.role,a.quote,'required_for_meaning' in a]),[['core',item,false],['list_introduction',intro,false]]);
  assert.deepEqual(entry.field_evidence.supported_object,{span:null,missing_reason:'not_stated'});
- assert.deepEqual(entry.required_links,[]);
+ assert.equal('required_links' in entry,false);
  // A failed check leaves a visible retry in the card instead of two dead buttons.
  await block(item).locator('mark[data-annotation]').first().click();
  await row('belongs').getByText(intro,{exact:true}).waitFor();
@@ -146,7 +146,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await row('evidence').getByText(/Niets gekoppeld/).waitFor();
  await page.locator('#annotation-ready:enabled').waitFor();
  entry=await current();
- assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.deepEqual(entry.required_links,[]);
+ assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.equal('required_links' in entry,false);
  assert.equal(await page.locator('#annotation-required-links').count(),0);
  // Removing the last piece of the statement removes the object: no empty draft stays behind.
  const second=new URL(page.url()).searchParams.get('annotation');

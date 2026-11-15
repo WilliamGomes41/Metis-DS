@@ -8,6 +8,7 @@ All notable technical changes to V&VN Data Services are recorded here.
 - Issue #972: next-passage navigation with unprepared review cards captures current authorized objects, bindings and source without loading historical formation/processing archives. Queue qualification, selected-passage checks and complete explicit document assessment keep their existing owners. No GET preparation or production data conversion.
 
 ### Removed
+- Het essentiële verband is weg uit annotaties: het veld `required_for_meaning`, de sleutel `required_links` met de terugnamereden, de kernelregel `annotation_required_relationship_missing` en de databasecontrole daarop (migratie 042), en het label ‘essentieel’ in het overzicht. Een gekoppeld stuk tekst weghalen is een gewone correctie. Het opslagcommando weigert beide oude velden. Al gebouwde kennisobjecten passen niet meer bij hun broncontext (`source_bound_context_stale`) en moeten opnieuw worden gebouwd; het ene bestaande document wordt verwijderd en opnieuw ingeleverd (#1060, deel 2).
 - Het verborgen stappenformulier van de annotatiewerkplek is weg: opmaak, script en CSS. De kaart is de enige invoer en werkt zoals voorheen; wat het script uit verborgen formuliervelden las, is gewone toestand geworden. Opgeslagen annotaties, de kernel en het schema zijn ongewijzigd. Het herstel van oude essentiële verbanden, dat in de kaart al onbereikbaar was, vervalt, ook in `bindRange` (#1060, slice 5).
 
 ### Fixed

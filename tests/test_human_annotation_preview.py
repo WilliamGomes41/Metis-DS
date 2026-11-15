@@ -27,7 +27,7 @@ def stored():
     payload = {'status': 'ready', 'object_type': 'explanation', 'ranges': ranges,
                'pending_range': None, 'evidence_not_applicable': False,
                'selection_version': 'human-annotation-input-v2',
-               'field_evidence': decision['field_evidence'], 'required_links': []}
+               'field_evidence': decision['field_evidence']}
     return fragments, {'annotation_id': decision['human_annotation']['annotation_id'], 'revision': 1,
                        'payload': payload, 'payload_hash': stable_hash(payload)}
 
@@ -61,16 +61,11 @@ def test_unaccounted_repeated_text_has_distinct_exact_source_locations():
     assert result['findings'] == [{'annotation_id': None, 'code': 'annotation_source_unaccounted'}]
 
 
-def test_draft_and_open_essential_relationship_return_to_original_annotation():
+def test_a_draft_returns_to_original_annotation():
     fragments, entry = stored()
-    payload = entry['payload']
-    condition = payload['ranges'].pop(1)
-    payload['status'] = 'draft'
-    payload['required_links'] = [{key: condition[key] for key in
-                                  ('relationship_id', 'role', 'evidence_function', 'required_for_meaning')}]
-    payload['required_links'][0]['withdrawal_reason'] = None
+    entry['payload']['status'] = 'draft'
     result = inspect(entry, fragments)
-    assert {'annotation_id': entry['annotation_id'], 'code': 'annotation_required_relationship_missing'} in result['findings']
+    assert {'annotation_id': entry['annotation_id'], 'code': 'annotation_not_ready'} in result['findings']
     assert result['unaccounted_ranges']  # A draft does not account for its core.
 
 
@@ -166,7 +161,7 @@ def test_preview_reads_persisted_versions_after_restart_without_writing_objects(
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core], status='ready')
     request['selection'].update(object_type='explanation', evidence_not_applicable=True,
-                                field_evidence=fields, required_links=[])
+                                field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
     resumed = restart_production(console)
     with resumed.workflow_document_store._connect() as con:

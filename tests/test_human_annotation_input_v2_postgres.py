@@ -1,4 +1,4 @@
-"""Exact meaning selections and essential duties use the durable input owner.
+"""Exact meaning selections use the durable input owner; a linked relationship carries no essential duty (#1060 deel 2).
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale recovery
@@ -40,7 +40,6 @@ def test_exact_fields_resume_without_quotes_or_candidates(tmp_path,production_co
     console,actor,_,sid,view,_=source(production_console,tmp_path)
     request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
     request['selection']['field_evidence']=field_input(view)
-    request['selection']['required_links']=[]
     saved=annotation.save(console,actor_id=actor,**request)
     assert annotation.save(restart_production(console),actor_id=actor,**request)==saved
     loaded=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['entries'][0]
@@ -53,7 +52,7 @@ def test_exact_fields_resume_without_quotes_or_candidates(tmp_path,production_co
     annotation.validate_stored_selection(payload,fragments=annotation._read_set(console,sid)[1],annotation_id=request['annotation_id'])
     assert 'quote' not in payload['field_evidence']['recommended_action']
     stale=next_command(request,saved)
-    del stale['selection']['field_evidence'];del stale['selection']['required_links']
+    del stale['selection']['field_evidence']
     with pytest.raises(ConsoleError,match='annotation_client_contract_stale'):
         annotation.save(console,actor_id=actor,**stale)
     same_version=next_command(request,saved)
@@ -70,43 +69,19 @@ def test_exact_fields_resume_without_quotes_or_candidates(tmp_path,production_co
         annotation.save(console,actor_id=actor,**marker)
 
 
-def test_essential_relationship_cannot_disappear_and_can_be_reanchored_or_discharged(tmp_path,production_console):
+def test_a_linked_relationship_can_be_removed_without_a_duty(tmp_path,production_console):
+    """#1060 deel 2: removing linked text is an ordinary correction. Kernel and native guard both accept it."""
     console,actor,_,sid,view,_=source(production_console,tmp_path)
-    request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
-    request['selection'].update(required_links=[],evidence_not_applicable=True)
+    request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')],status='ready')
+    request['selection'].update(field_evidence=field_input(view))
     result=annotation.save(console,actor_id=actor,**request)
-    condition=request['selection']['ranges'][1]
-    key=annotation.relationship_id(request['annotation_id'],condition)
     removed=next_command(request,result);removed['selection']['ranges'].pop()
-    with pytest.raises(ConsoleError,match='annotation_required_relationship_missing'):
-        annotation.save(console,actor_id=actor,**removed)
-    open_link={'relationship_id':key,'role':'condition','evidence_function':None,'required_for_meaning':True,'withdrawal_reason':None}
-    removed['selection']['required_links']=[open_link]
     result=annotation.save(console,actor_id=actor,**removed)
-    ready=next_command(removed,result);ready['selection']['status']='ready'
-    with pytest.raises(ConsoleError,match='annotation_required_relationship_missing'):
-        annotation.save(console,actor_id=actor,**ready)
-    pending=next_command(removed,result)
-    pending['selection']['pending_range']={**condition,'relationship_id':key}
-    result=annotation.save(console,actor_id=actor,**pending)
-    paused=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['entries'][0]
-    assert paused['pending_range']['relationship_id']==paused['required_links'][0]['relationship_id']
-    repaired=next_command(removed,result)
-    repaired['selection']['ranges'].append({**condition,'start':len('Alleen '),'quote':'bij klachten.','relationship_id':key})
-    repaired['selection']['required_links']=[];repaired['selection']['status']='ready'
-    result=annotation.save(restart_production(console),actor_id=actor,**repaired)
     assert result['status']=='ready'
-    # Merely unchecking essentiality is also a loss of the recorded duty.
-    downgrade=next_command(repaired,result)
-    downgrade['selection']['ranges'][1]['required_for_meaning']=False
-    with pytest.raises(ConsoleError,match='annotation_required_relationship_missing'):
-        annotation.save(console,actor_id=actor,**downgrade)
-    downgrade['selection']['required_links']=[{**open_link,'required_for_meaning':False,'withdrawal_reason':'Deze koppeling was per vergissing essentieel gemarkeerd.'}]
-    result=annotation.save(console,actor_id=actor,**downgrade)
     loaded=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['entries'][0]
-    assert loaded['required_links'][0]['withdrawal_reason']==downgrade['selection']['required_links'][0]['withdrawal_reason']
+    assert [a['role'] for a in loaded['ranges']]==['core'] and 'required_links' not in loaded
     with console.workflow_document_store._connect() as con:
-        assert con.execute('SELECT count(*) AS n FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['n']==5
+        assert con.execute('SELECT count(*) AS n FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['n']==2
 
 
 @pytest.mark.parametrize('role,reason,status',[('metadata','document_metadata','ready'),('structure','document_structure','ready'),('unresolved','uncertain_source_role','draft')])
@@ -125,33 +100,30 @@ def test_source_accounting_proposal_is_not_a_candidate(tmp_path,production_conso
             annotation.save(console,actor_id=actor,**ready)
 
 
-@pytest.mark.parametrize('change',['legacy','drop','downgrade','open_ready','reanchor_wrong_id','drop_fields'])
+@pytest.mark.parametrize('change',['legacy','drop_fields','retired_links','retired_flag','retired_pending_flag'])
 def test_native_guard_rejects_older_or_bypassing_writer(tmp_path,production_console,change):
     import psycopg
     from src.integrity_kernel import stable_hash
     from src.workflows.workflow_documents_postgres_v1 import _json_text
     console,actor,_,sid,view,_=source(production_console,tmp_path)
     request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
-    request['selection'].update(required_links=[],field_evidence=field_input(view))
+    request['selection'].update(field_evidence=field_input(view))
     annotation.save(console,actor_id=actor,**request)
     with console.workflow_document_store._connect() as con:
         payload=con.execute('SELECT payload FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['payload']
     bad=deepcopy(payload)
-    expected='annotation_required_relationship_missing'
+    expected='annotation_client_contract_stale'
     if change=='legacy':
-        del bad['selection_version'];del bad['required_links']
-        expected='annotation_client_contract_stale'
+        del bad['selection_version']
     elif change=='drop_fields':
         del bad['field_evidence']
-        expected='annotation_client_contract_stale'
-    elif change=='drop': bad['ranges'].pop()
-    elif change=='downgrade': bad['ranges'][1]['required_for_meaning']=False
-    elif change=='open_ready':
-        condition=bad['ranges'].pop();bad['status']='ready'
-        bad['required_links']=[{k:condition[k] for k in ('relationship_id','role','evidence_function','required_for_meaning')} | {'withdrawal_reason':None}]
+    # #1060 deel 2 (Codex P1): the pre-change application still sends the retired fields during cutover.
+    elif change=='retired_links':
+        bad['required_links']=[]
+    elif change=='retired_flag':
+        bad['ranges'][1]['required_for_meaning']=False
     else:
-        bad['ranges'][1]['start']=1
-        bad['ranges'][1]['relationship_id']=annotation.relationship_id(request['annotation_id'],bad['ranges'][1])
+        bad['pending_range']={**bad['ranges'][1],'required_for_meaning':False}
     with pytest.raises(psycopg.errors.RaiseException,match=expected):
         with console.workflow_document_store._connect() as con:
             con.execute('INSERT INTO workflow.annotation_versions(snapshot_id,annotation_id,revision,status,author_id,payload,payload_hash) VALUES(%s,%s,2,%s,%s,%s::jsonb,%s)',
@@ -159,17 +131,15 @@ def test_native_guard_rejects_older_or_bypassing_writer(tmp_path,production_cons
     assert annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['generation']==1
 
 
-def test_concurrent_field_and_essential_corrections_keep_one_committed_revision(tmp_path,production_console):
+def test_concurrent_field_and_relationship_corrections_keep_one_committed_revision(tmp_path,production_console):
     from concurrent.futures import ThreadPoolExecutor
     console,actor,_,sid,view,_=source(production_console,tmp_path)
     request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
-    request['selection'].update(required_links=[],field_evidence=field_input(view))
+    request['selection'].update(field_evidence=field_input(view))
     result=annotation.save(console,actor_id=actor,**request)
     a=next_command(request,result);b=next_command(request,result)
     a['selection']['field_evidence']['recommended_action']={'span':None,'missing_reason':'not_stated'}
-    condition=b['selection']['ranges'].pop()
-    b['selection']['required_links']=[{'relationship_id':annotation.relationship_id(request['annotation_id'],condition),
-        'role':'condition','evidence_function':None,'required_for_meaning':True,'withdrawal_reason':None}]
+    b['selection']['ranges'].pop()
     other=restart_production(console)
     def send(pair):
         kernel,body=pair
@@ -183,11 +153,11 @@ def test_concurrent_field_and_essential_corrections_keep_one_committed_revision(
     assert annotation.save(restart_production(console),actor_id=actor,**winner)==receipt
     loaded=annotation.overview(console,actor_id=actor,snapshot_id=sid)
     assert loaded['generation']==2
-    if winner is b: assert loaded['entries'][0]['required_links'][0]['required_for_meaning']
-    else: assert loaded['entries'][0]['ranges'][1]['required_for_meaning']
+    if winner is b: assert [a['role'] for a in loaded['entries'][0]['ranges']]==['core']
+    else: assert loaded['entries'][0]['field_evidence']['recommended_action']['missing_reason']=='not_stated'
 
 
-def test_v2_history_backup_restore_and_self_consistent_relation_loss_refused(tmp_path,production_console):
+def test_v2_history_backup_restore_and_self_consistent_contract_downgrade_refused(tmp_path,production_console):
     from src.integrity_kernel import stable_hash
     from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
@@ -196,7 +166,7 @@ def test_v2_history_backup_restore_and_self_consistent_relation_loss_refused(tmp
     from tests.production_support import production_application
     console,actor,_,sid,view,_=source(production_console,tmp_path)
     request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
-    request['selection'].update(field_evidence=field_input(view),required_links=[])
+    request['selection'].update(field_evidence=field_input(view))
     first=annotation.save(console,actor_id=actor,**request)
     annotation.save(console,actor_id=actor,**next_command(request,first))
     adapter=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config))
@@ -213,7 +183,8 @@ def test_v2_history_backup_restore_and_self_consistent_relation_loss_refused(tmp
     corrupted=deepcopy(state)
     tables=corrupted['formation_recovery']['tables']
     row=next(r for r in tables['annotation_versions'] if r['revision']==2)
-    row['payload']['ranges'].pop();row['payload_hash']=stable_hash(row['payload'])
+    # A self-consistent revision that drops the field evidence is an older client's write; restore refuses it.
+    del row['payload']['field_evidence'];row['payload_hash']=stable_hash(row['payload'])
     receipt=next(r for r in tables['annotation_commands'] if r['result']['revision']==2)
     receipt['request_hash']=stable_hash({'actor_id':actor,'annotation_id':request['annotation_id'],
         'expected_revision':1,'expected_generation':1,'extraction_hash':request['extraction_hash'],

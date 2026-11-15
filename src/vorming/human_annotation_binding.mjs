@@ -1,12 +1,10 @@
 /* Builds one existing save command; durable validation stays in the kernel. */
-// #1060 slice 5: the card links nothing as essential and repairs no essential link, so the binding
-// does neither. The stored field required_for_meaning stays (false) until its consequences are known.
 export function bindRange(current, selected, options, contract) {
   if (!selected) throw new Error('Wijs eerst tekst in één bronblok aan.');
   const entry = JSON.parse(JSON.stringify(current));
   const role = options.role;
   const anchor = {block_id:selected.block_id,start:selected.start,end:selected.end};
-  const added = {...anchor,quote:selected.quote,role,required_for_meaning:false,
+  const added = {...anchor,quote:selected.quote,role,
     evidence_function:role === 'evidence' ? options.evidenceFunction : null};
   if (role !== 'core') added.relationship_id = 'link-v1:'+JSON.stringify([entry.annotation_id,role,anchor.block_id,anchor.start,anchor.end]);
   const field = !entry.disposition && contract.context_bindings[role];

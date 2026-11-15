@@ -49,8 +49,7 @@ def _document(production_console, tmp_path, *, option, four_eyes):
                          'missing_reason': None, 'quote': text}
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core], status='ready')
-    request['selection'].update(object_type='explanation', evidence_not_applicable=True, field_evidence=fields,
-                                required_links=[])
+    request['selection'].update(object_type='explanation', evidence_not_applicable=True, field_evidence=fields)
     annotation.save(console, actor_id=uploader, **request)
     execute_build(console, uploader, sid)
     oid = next(o['object_id'] for o in console.snapshot_objects(sid) if (o.get('metadata') or {}).get('human_annotation'))

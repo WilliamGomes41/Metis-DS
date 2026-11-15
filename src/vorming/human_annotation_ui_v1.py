@@ -56,8 +56,6 @@ ERRORS = {
     'source_bound_fields_invalid':'De onderdelen van de uitspraak zijn niet volledig aangeleverd. Open de annotatie opnieuw.',
     'source_bound_field_invalid':'Wijs voor dit onderdeel de exacte brontekst aan.',
     'recommendation_semantics_invalid':'Controleer de richting en sterkte bij deze aanbeveling en wijs het bijbehorende bronbewijs aan.',
-    'annotation_required_relationship_missing':'Een essentieel verband ontbreekt. Wijs de bijbehorende tekst opnieuw aan of leg expliciet vast waarom de verplichting vervalt.',
-    'annotation_relationship_withdrawal_required':'Licht toe waarom dit essentiële verband niet langer nodig is.',
     'annotation_context_proposal_open':'Metis stelt tekst voor die bij deze uitspraak hoort. Voeg het voorstel in de kaart toe met + of wijs het af met −.',
     'annotation_declined_context_invalid':'Een afgewezen voorstel past niet bij deze bron. Open de opgeslagen annotatie opnieuw.',
 }
@@ -278,15 +276,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             for entry in state['entries']:
                 if entry['status']=='withdrawn':
                     continue
-                spans = ''.join('<li><strong>'+escape(LABELS[a['role']])+ (' — verklaart' if a['evidence_function']=='explains' else ' — onderbouwt' if a['evidence_function']=='supported_by' else '')+('</strong> (essentieel)' if a['required_for_meaning'] else '</strong>')+
+                spans = ''.join('<li><strong>'+escape(LABELS[a['role']])+ (' — verklaart' if a['evidence_function']=='explains' else ' — onderbouwt' if a['evidence_function']=='supported_by' else '')+'</strong>'+
                     ': '+escape(a['quote'])+' <a href="'+escape(back+'#'+a['block_id'],quote=True)+'">Open in bron</a></li>' for a in entry['ranges'])
                 missing = 'Selectie nog niet gereed.' if entry['status']!='ready' else ''
                 if entry.get('pending_range'):
                     missing += ' Er staat nog een niet-gekoppelde aanwijzing klaar: '+entry['pending_range']['quote']
-                duties = ''.join('<li>'+escape(LABELS[link['role']])+': '+
-                    ('essentieel verband ontbreekt' if link['required_for_meaning'] else
-                     'verplichting teruggenomen: '+escape(link['withdrawal_reason']))+'</li>'
-                    for link in entry.get('required_links',[]))
                 fields = []
                 by_id = {b['block_id']:b for b in state['blocks']}
                 for field,evidence in (entry.get('field_evidence') or {}).items():
@@ -297,7 +291,6 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     fields.append('<li>'+escape(FIELD_LABELS[field])+': '+escape(literal)+'</li>')
                 heading=('Brongebruik: '+SOURCE_LABELS.get(entry['disposition']['reason'],'Functie nog kiezen')) if entry.get('disposition') else TYPES.get(entry['object_type'],'Type nog kiezen')
                 items.append('<article class="object"><h3>'+escape(heading)+'</h3><p>'+escape(missing)+'</p><ul>'+spans+'</ul>'+
-                    ('<p>Relatieverplichtingen</p><ul>'+duties+'</ul>' if duties else '')+
                     ('<p>Aangewezen betekenisvelden</p><ul>'+''.join(fields)+'</ul>' if fields else '')+
                     ('<p>Onderbouwing: expliciet niet van toepassing.</p>' if entry['evidence_not_applicable'] else '')+
                     '<a href="'+escape(back+'&annotation='+entry['annotation_id'],quote=True)+'">Deze annotatie aanpassen</a></article>')
@@ -429,10 +422,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             if block is None or not 0<=start<end<=len(block['text']) or not command_id:
                 raise ConsoleError('annotation_command_invalid')
             from uuid import NAMESPACE_URL, uuid5
-            selection = {'status':'ready','object_type':None,'evidence_not_applicable':False,'required_links':[],
+            selection = {'status':'ready','object_type':None,'evidence_not_applicable':False,
                 'disposition':{'role':role,'reason':reason},
                 'ranges':[{'block_id':block['block_id'],'start':start,'end':end,'quote':block['text'][start:end],
-                           'role':'core','required_for_meaning':False,'evidence_function':None}]}
+                           'role':'core','evidence_function':None}]}
             await asyncio.to_thread(domain.save, console, actor_id=actor['account_id'], snapshot_id=document,
                 command_id=command_id, annotation_id=str(uuid5(NAMESPACE_URL, 'metis-source-role:'+document+':'+command_id)),
                 expected_revision=0, expected_generation=generation, extraction_hash=view['extraction_hash'],

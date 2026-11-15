@@ -40,7 +40,7 @@ De soorten komen uit de paginadata (`state.kinds`) in plaats van uit de verborge
 
 ## Niet in deze wijziging
 
-- De kernelregel voor essentiële verbanden (opnieuw aanwijzen of reden geven). Nieuwe kaartdata kan die niet meer raken. Het opruimen daarvan is een aparte wijziging in kernel en database (Class A) en volgt als voorstel.
+- De kernelregel voor essentiële verbanden (opnieuw aanwijzen of reden geven). Nieuwe kaartdata kan die niet meer raken. Het opruimen daarvan is een aparte wijziging in kernel en database (Class A): `1060-deel2-retire-essential-relationship.md`.
 - Een annotatie uit het stappenformulier met een essentieel verband kan in de kaart niet meer worden hersteld. Besluit William: zo'n document wordt verwijderd en opnieuw ingeleverd.
 - De praktijkproef blijft voorwaarde voor productie-uitrol (#1060).
 

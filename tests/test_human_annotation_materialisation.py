@@ -26,7 +26,7 @@ def inputs():
     fields.update(subject_span={'span':{**spans[0],'end':len('De huid')},'missing_reason':None},
         predicate_span={'span':{**spans[0],'start':len('De huid '),'end':len('De huid is droog')},'missing_reason':None},
         type_evidence_spans={'core':True},factual_claim_span={'core':True})
-    ranges=[{**s,'role':r,'required_for_meaning':r=='condition','evidence_function':'supported_by' if r=='evidence' else None}
+    ranges=[{**s,'role':r,'evidence_function':'supported_by' if r=='evidence' else None}
             for s,r in zip([spans[0],*({'block_id':b['block_id'],'start':0,'end':len(b['text'])} for b in blocks[1:])],['core','condition','evidence'])]
     from src.vorming.human_annotation_v1 import relationship_id
     annotation_id=str(uuid4())
@@ -54,7 +54,7 @@ def test_human_claim_keeps_source_context_and_functions_without_second_candidate
     assert obj['metadata']['semantic_passage']['selection_origin']==ORIGIN
     assert 'model' not in obj['metadata']['semantic_passage']
     context=obj['metadata']['source_bound_context']['entries']
-    assert context[0]['role']=='condition' and context[0]['required_for_meaning'] is True
+    assert context[0]['role']=='condition' and 'required_for_meaning' not in context[0]
     assert context[1]['evidence_function']=='supported_by'
     validate_object_fields(obj,fragments)
     before=(obj['object_id'],deepcopy(obj['content']),deepcopy(obj['provenance']))
@@ -77,5 +77,17 @@ def test_materialiser_rejects_human_free_text_and_mismatched_core():
         canonical(fragments,bad)
     obj=canonical(fragments,decision)
     obj['metadata']['source_bound_context']['entries'][0]['text']='Andere voorwaarde.'
+    with pytest.raises(ValueError,match='source_bound_context_stale'):
+        validate_object_fields(obj,fragments)
+
+
+def test_an_object_built_with_the_essential_flag_is_stale():
+    """#1060 deel 2, legacy data: an object built before the essential relationship was retired carries the
+    flag in its context. The context no longer rebuilds that way, so the object is refused, never reinterpreted."""
+    fragments,decision=inputs()
+    obj=canonical(fragments,decision)
+    validate_object_fields(obj,fragments)
+    for entry in obj['metadata']['source_bound_context']['entries']:
+        entry['required_for_meaning']=False
     with pytest.raises(ValueError,match='source_bound_context_stale'):
         validate_object_fields(obj,fragments)
