@@ -10,6 +10,28 @@ For bug repairs, normally select `diagnosing-bugs` and `risk-proportional-verifi
 
 The dispatcher selects working methods; it grants no execution, deployment, messaging, or merge permission and does not replace this repository's development or lifecycle contracts. If a required skill is unavailable, report the limitation and continue independent work without claiming that skill was applied.
 
+### Keuzewijzer: wanneer welke skill
+
+| Skill / collectie | Wanneer gebruiken | Rol in Metis |
+| --- | --- | --- |
+| [Impeccable](.agents/skills/impeccable/SKILL.md) | Verplicht bij iedere frontendcreatie of -wijziging: schermen, layout, CSS, UX-tekst, toegankelijkheid en responsive gedrag. | Basiswerkwijze voor UI-kwaliteit; volg de [Metis-integratie](docs/agents/impeccable.md). |
+| [pstack (Poteto)](docs/agents/shared-skills.md) | Bij een expliciete vraag naar de werking (`how`), onderbouwing (`why`), impact (`blast-radius`) of een beslisspoor (`show-me-your-work`). Gebruik `principle-explain-the-number` vóór rapportage of gebruik van gemeten cijfers. | Gerichte analyse en bewijs; hergebruik bestaande traces en verificatie. De genoemde expliciet aan te roepen skills starten niet automatisch. |
+| [Emil Kowalski](docs/agents/emil-design-skills.md) | Als een UI-wijziging interactiedetail raakt (`emil-design-eng`), ongunstige data moet doorstaan (`break-ui`) of telefoongedrag raakt (`mobile-native`). Gebruik `find-animation-opportunities` voor een alleen-lezen onderzoek naar zinvolle beweging. | Aanvulling op Impeccable voor de betreffende interactie; geen verplicht animatie- of frameworkgebruik. |
+| [Stitch-skills](https://github.com/WilliamGomes41/stitch-skills) | Bij nieuwe schermen of een groter UI-herontwerp, om vóór implementatie ontwerpvarianten te maken en te vergelijken. | Gebruik de eigen fork als pluginbron, leg de gekozen richting vast en vertaal die naar de bestaande HTML/CSS-stack. Impeccable blijft de verplichte UI-werkwijze. |
+| [Matt Pocock — improve-codebase-architecture](.agents/skills/improve-codebase-architecture/SKILL.md) | Alleen bij een expliciete opdracht om de codebasearchitectuur te onderzoeken of vereenvoudigingskansen te vinden. | Onderzoek samenhang, modulegrenzen en testbaarheid; presenteer kandidaten. Start geen ongevraagde architectuurscan of refactor. |
+
+Kies alleen de skills die de concrete taak raken; voer niet standaard alle vijf
+uit. Lees de geselecteerde skill vóór gebruik. De tabel verandert geen bestaande
+aanroepgrenzen of domein-, review- en deploymentafspraken.
+
+Stitch is een extern geïnstalleerde plugin, geen kopie in Metis. Iedere
+ontwikkelaar of agentomgeving installeert de plugin vanuit de fork; zie
+[de installatie-instructies](https://github.com/WilliamGomes41/stitch-skills/blob/main/FORK.md).
+Ontwerpen genereren vereist daarnaast een werkende Stitch MCP-/accountverbinding.
+Als plugin of verbinding ontbreekt, meld dat en ga verder met het uitvoerbare
+werk volgens Impeccable; claim geen Stitch-generatie. Bewaar secrets en private
+bronteksten buiten GitHub en gebruik synthetische data voor externe prototypes.
+
 ### Frontend design — Impeccable (mandatory)
 
 For every task that creates or changes frontend, agents MUST read and apply

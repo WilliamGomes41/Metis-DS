@@ -11,6 +11,26 @@ ROOT = Path(__file__).resolve().parents[1]
 # release-control-evidence: releasebewijs
 
 
+def test_skill_selection_links_stitch_fork_without_loosening_existing_triggers() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    guide = agents.split("### Keuzewijzer: wanneer welke skill\n", 1)[1].split("\n### ", 1)[0]
+    rows = {line.split("|")[1].strip(): line for line in guide.splitlines() if line.startswith("| [")}
+    assert len(rows) == 5
+    assert "Verplicht bij iedere frontend" in next(v for k, v in rows.items() if "Impeccable" in k)
+    assert "expliciete vraag" in next(v for k, v in rows.items() if "pstack" in k)
+    assert "Alleen bij een expliciete opdracht" in next(v for k, v in rows.items() if "Matt Pocock" in k)
+    stitch = next(v for k, v in rows.items() if "Stitch" in k)
+    assert "https://github.com/WilliamGomes41/stitch-skills" in stitch
+    assert "vóór implementatie" in stitch
+    assert "Impeccable blijft de verplichte" in stitch
+    assert "geen kopie in Metis" in guide
+    assert "Stitch MCP-/accountverbinding" in guide
+    assert "claim geen Stitch-generatie" in guide
+    assert "synthetische data" in guide
+    for relative in re.findall(r"\]\((?!https://)([^)]+)\)", guide):
+        assert (ROOT / relative).is_file(), relative
+
+
 def test_statechart_preparation_preserves_authority_and_requires_executable_proof() -> None:
     contract = (ROOT / "docs/agents/statechart-integration.md").read_text(encoding="utf-8")
     purpose = contract.split("## Purpose and boundaries\n", 1)[1].split("\n## ", 1)[0]
