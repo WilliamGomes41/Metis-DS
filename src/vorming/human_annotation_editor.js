@@ -311,6 +311,9 @@ import {bindRange} from '/annotations/binding.mjs';
     // A choice clears the selection before the menu hides: focus returns to the passage the menu stood by, so
     // the next Tab continues from there (Codex P2).
     if(!range || !host) {if(menu.contains(document.activeElement)) (menu.previousElementSibling?.closest('[data-source-block]') || sourceElements.get(selected?.block_id))?.focus();menu.hidden=true;return;}
+    // A selection restored inside folded source (the table of contents) opens it, as revealSource() does (Codex P2).
+    const folded=block.closest('details');
+    if(folded && !folded.open) folded.open=true;
     if(menu.previousSibling!==block) block.after(menu);
     const core=hasCore();
     menuButtons.core.setAttribute('aria-label',core ? 'Toevoegen aan de uitspraak, als volgend stuk' : 'Toevoegen als uitspraak');
