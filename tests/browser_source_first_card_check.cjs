@@ -29,7 +29,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // Empty card: one instruction, no steps, no form, no competing actions.
  assert.equal(await page.locator('#annotation-steps').isVisible(),false);
  assert.equal(await page.locator('#annotation-simple-heading').innerText(),'Selecteer de uitspraak in de bron');
- assert.equal(await page.locator('#annotation-fields, #annotation-type, #annotation-suggest, #annotation-entry').filter({visible:true}).count(),0);
+ // #1060 slice 5: the step form is gone, not hidden.
+ assert.equal(await page.locator('#annotation-steps, #annotation-fields, #annotation-type, #annotation-suggest, #annotation-entry, #annotation-more, #annotation-task-1, #annotation-task-2, #annotation-task-3').count(),0);
  // Only one action exists before anything is selected: there is nothing to save yet.
  assert.deepEqual(await page.locator('#annotation-controls button:visible').allInnerTexts(),['Opslaan en bronselectie beëindigen']);
  const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
@@ -146,8 +147,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('#annotation-ready:enabled').waitFor();
  entry=await current();
  assert.deepEqual(entry.ranges.map(a=>a.role),['core','core']);assert.deepEqual(entry.required_links,[]);
- await page.locator('#annotation-required-links').waitFor({state:'attached'});
- assert.equal(await page.locator('#annotation-required-links *').count(),0);
+ assert.equal(await page.locator('#annotation-required-links').count(),0);
  // Removing the last piece of the statement removes the object: no empty draft stays behind.
  const second=new URL(page.url()).searchParams.get('annotation');
  await minus('core',failing.slice(14)).click();
