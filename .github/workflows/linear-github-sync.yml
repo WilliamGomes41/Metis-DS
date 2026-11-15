@@ -1,8 +1,6 @@
 name: GitHub Linear sync
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, edited]
   pull_request_target:
     types: [opened, synchronize, reopened, edited, closed, ready_for_review]
   issues:
@@ -19,23 +17,6 @@ permissions:
   pull-requests: read
 
 jobs:
-  handoff-contract:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - run: python -m pip install pytest==9.0.2 PyYAML==6.0.3
-      - name: Prove sync boundaries
-        run: python -m pytest --noconftest -q tests/test_linear_github_sync.py
-      - name: Require exact-head handoff
-        run: python scripts/linear_github_sync.py --validate-event "$GITHUB_EVENT_PATH"
-
   # PR, issue and comment events only ask main to run the serialized reconcile.
   # A concurrency group keeps one pending run and cancels the older pending one.
   # Run from the event itself, that cancellation showed as a failed check on the

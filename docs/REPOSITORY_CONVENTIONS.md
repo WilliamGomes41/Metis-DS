@@ -47,3 +47,8 @@ Protocol, schema and clinical knowledge versions remain independently versioned 
 The authoritative remote is [WilliamGomes41/Metis-DS](https://github.com/WilliamGomes41/Metis-DS), with `main` as its default branch.
 
 Changes go through feature branches and pull requests. Gate G1 requires successful CI checks `test (3.12)` and `test (3.13)`, a pull request before merging, rejection of force-pushes and protection against branch deletion. Check the current repository ruleset when verifying enforcement; a historical MVP visibility exception is not evidence of current visibility, deployment or gate status.
+
+The strengthening plan, snapshot validator and live activation procedure for
+`handoff-contract` and resolved review threads are in
+[#1087 — native merge policy](change-contracts/1087-native-merge-policy.md).
+Only a fresh native ruleset readback proves these settings are active.
