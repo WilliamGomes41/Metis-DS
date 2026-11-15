@@ -1,12 +1,10 @@
-# V&VN Data Services — Protocol v4.3.2
+# V&VN Data Services — Protocol v4.3.1
 
 **Status:** Vigerend — enige actuele protocolnorm
 
-**Versie:** 4.3.2
+**Versie:** 4.3.1
 
-**Datum:** 2026-11-15 (v4.3.1: 2026-11-01; v4.3.0: 2026-10-22; v4.2.0: 2026-10-18; v4.1.0: 2026-10-18; v4.0.0: 2026-09-27)
-
-**Wijziging 4.3.2:** verduidelijking van kennisobject als versiegebonden bronrepresentatie, samenhangende betekeniscontext en het onderscheid tussen identiteit, review, beheer en beantwoording (§4.2). Bestaande bevoegdheden en publicatie-/withdrawalregels blijven ongewijzigd; individuele publicatie/intrekking wordt afzonderlijk besloten en geïmplementeerd in [#991](https://github.com/WilliamGomes41/Metis-DS/issues/991).
+**Datum:** 2026-11-01 (v4.3.0: 2026-10-22; v4.2.0: 2026-10-18; v4.1.0: 2026-10-18; v4.0.0: 2026-09-27)
 
 **Wijziging 4.3.1:** afstemming met bestaande code en het vier-ogenbesluit van 2026-10-23 (§6.3), idempotente herhaling van publicatie (§7.3), de huidige consolebenaming (§11.1), verplichte PostgreSQL-workflowautoriteit (§13) en expliciete bewijsgrenzen (§§1, 5.4, 14, 15). Codeverwijzingen, bewijsgrenzen en resterende afwijkingen staan in [de afstemmingsnotitie](docs/audit/protocol-code-alignment-2026-11-01.md).
 
@@ -331,4 +329,4 @@ Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden
 
 De ongewijzigde V3-stand vóór deze wijziging is bewaard onder `docs/history/protocol-v3/`. De stand van Protocol v4.0.0 vóór de wijziging naar 4.1.0 is bewaard onder `docs/history/protocol-v4.0/`. De stand van Protocol v4.1.0 vóór de wijziging naar 4.2.0 is bewaard onder `docs/history/protocol-v4.1/`. De stand van Protocol v4.2.0 vóór de wijziging naar 4.3.0 is bewaard onder `docs/history/protocol-v4.2/`. Versienummers in bestaande releases en historische fixtures worden nooit achteraf herschreven; nieuwe releases registreren de geldende publicatieprotocolversie.
 
-De tekst van Protocol v4.3.0 vóór de afstemming naar v4.3.1 op 2026-11-01 is bytegelijk bewaard in [de v4.3-snapshot](docs/history/protocol-v4.3/PROTOCOL_BEFORE_ALIGNMENT_2026-11-01.md). De ongewijzigde Protocol v4.3.1-stand vóór de verduidelijking naar v4.3.2 is bewaard in [de snapshot van 2026-11-15](docs/history/protocol-v4.3/PROTOCOL_BEFORE_DEFINITION_CLARIFICATION_2026-11-15.md).
+De tekst van Protocol v4.3.0 vóór de afstemming naar v4.3.1 op 2026-11-01 is bytegelijk bewaard in [de v4.3-snapshot](docs/history/protocol-v4.3/PROTOCOL_BEFORE_ALIGNMENT_2026-11-01.md).
