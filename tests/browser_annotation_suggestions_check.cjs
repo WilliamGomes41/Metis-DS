@@ -56,7 +56,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await coreHelp.getAttribute('aria-controls'),'annotation-help-core');
  assert.equal(await coreHelp.evaluate(button=>button===document.activeElement),true);
  await guidance.getByText('Eén zin kan twee uitspraken bevatten',{exact:false}).waitFor();
- await guidance.getByText('Onzeker betekent niet automatisch Geen uitspraak.',{exact:false}).waitFor();
+ await guidance.getByText('Twijfel is geen reden om het weg te laten.',{exact:false}).waitFor();
  await page.getByRole('button',{name:'Uitleg bij Onderbouwing',exact:true}).click();
  await page.locator('#annotation-help-evidence').getByText('238 deelnemers',{exact:false}).waitFor();
  await page.evaluate(()=>window.scrollTo(0,0));
