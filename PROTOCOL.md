@@ -73,7 +73,11 @@ Een passage die de toelatingspoort niet haalt is niet automatisch `excluded_with
 
 ### 4.2 Kennisobject
 
-Een bruikbaar kennisobject is één complete, zelfstandig begrijpelijke betekeniseenheid die volledig uit de bron kan worden verantwoord.
+Een kennisobject is een identificeerbare, versiegebonden representatie van één afgebakende betekeniseenheid die volledig uit de vastgelegde bron kan worden verantwoord.
+
+Een kennisobject is **zelfstandig begrijpelijk** wanneer de volledige brongebonden betekenis kan worden gereconstrueerd. Noodzakelijke context, waaronder doelgroep, voorwaarden, uitzonderingen en modaliteit, staat in de exacte objectversie zelf of is via expliciete, bevestigde, geldige en versiegebonden relaties verbonden. De aanwezigheid van alleen een relatieverwijzing zonder controleerbaar contextbewijs volstaat niet. Kan de noodzakelijke betekeniscontext niet worden gereconstrueerd of veilig worden meegeleverd, dan mag het object niet als zelfstandig toepasbare kennis worden uitgeleverd.
+
+**Zelfstandige identiteit en beoordeling** betekenen dat de exacte objectversie afzonderlijk herkenbaar en reviewbaar is. Dit is niet hetzelfde als onafhankelijke betekenis, zelfstandig beheer na publicatie of het zelfstandig beantwoorden van een praktijkvraag. De geldende publicatie-, vervangings- en intrekkingshandelingen volgen uitsluitend uit §7 en het lifecyclecontract; de definitie zelf verleent geen publicatie- of intrekkingsrecht. Bij retrieval kan een object onderdeel zijn van een samenhangende verzameling; de afnemende toepassing formuleert eventuele antwoorden binnen de grenzen van de beschikbare, gepubliceerde kennis en de geldende retrieve-and-abstain-grens (§11.2).
 
 Een object mag niet uitsluitend bestaan uit een nummer, label, kopwoord, navigatiechrome, losse stempel, grammaticaal of inhoudelijk onaf fragment, of een duplicaat dat alleen door herhaalde bronmarkup ontstaat.
 
