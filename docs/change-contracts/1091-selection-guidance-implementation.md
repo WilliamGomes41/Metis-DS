@@ -80,8 +80,10 @@ protocolcontroles en zes architectuurcontroles zijn aanvullend geslaagd
   het ontbrekende `psql`-zoekpad is hersteld.
 - Bekende omgevingsfout in de brede suite: de TLS-proef kan de lokale testserver
   niet starten met `SSL is not supported by this build`. Geïsoleerd
-  gereproduceerd; een PostgreSQL-build met OpenSSL is gestart onder
-  `/workspace/metis-test-tools/pg16-tls`. Nog geen geslaagde TLS-proef geclaimd.
+  gereproduceerd en hersteld met een PostgreSQL-build met OpenSSL onder
+  `/workspace/metis-test-tools/pg16-tls`. De afzonderlijke TLS-proef is daarna
+  geslaagd: 1 passed ([JUnit](../../evidence/1091/tls.xml)). De reeds lopende
+  brede run behoudt haar oorspronkelijke omgevingsfout; die run is geen PASS.
 
 Volgende stap: vier suite-uitkomsten beoordelen en combineren met
 `scripts/ci_test_shards.py merge`, daarna inhoudelijke review en de vergelijkende
