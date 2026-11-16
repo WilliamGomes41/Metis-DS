@@ -33,6 +33,8 @@ def test_metis_engineer_agent_is_explicit_and_fail_closed() -> None:
     assert "Work on exactly one issue per run" in profile
     assert "Do not deploy" in profile
     assert "merge your own pull request" in profile.lower()
+    assert '[normal verification sequence](../../AGENTS.md#verify)' in profile
+    assert '## Verify' in agents
 
     # Check the behavioral contract rather than one editorial sentence.
     assert "vertical slice" in profile.lower()

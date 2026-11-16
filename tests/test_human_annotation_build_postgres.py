@@ -44,7 +44,7 @@ def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=
     fields.update(type_evidence_spans={'core': True}, support_span={'core': True})
     request = command(view, ranges=[core], status='ready')
     request['selection'].update(object_type='explanation', evidence_not_applicable=True,
-                                field_evidence=fields, required_links=[])
+                                field_evidence=fields)
     if context_function:
         request['selection']['ranges'] += [anchor(view,'Alleen',role='condition'),
             anchor(view,'Onderzoek',role='evidence',function=context_function),
@@ -321,7 +321,7 @@ def test_multiple_core_ranges_across_paragraphs_build_one_claim_with_essential_c
                          'missing_reason':None,'quote':text}
     fields.update(type_evidence_spans={'core':True},support_span={'core':True})
     request = command(view, ranges=[first,last,condition], status='ready')
-    request['selection'].update(object_type='explanation', evidence_not_applicable=True, field_evidence=fields, required_links=[])
+    request['selection'].update(object_type='explanation', evidence_not_applicable=True, field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
     receipt = build.finalize(console, actor_id=actor, **closing(build.overview(console, actor_id=actor, snapshot_id=sid)))
     from src.vorming.worker_handover_v1 import native_attempt
@@ -329,7 +329,8 @@ def test_multiple_core_ranges_across_paragraphs_build_one_claim_with_essential_c
     claims = [obj for obj in console.snapshot_objects(sid) if (obj.get('metadata') or {}).get('human_annotation')]
     assert len(claims) == 1 and claims[0]['content']['clean_text'] == 'De kwetsbare huid verklaart de pijn.'
     assert len(claims[0]['metadata']['semantic_passage']['spans']) == 2
-    assert claims[0]['metadata']['source_bound_context']['entries'][0]['required_for_meaning'] is True
+    # #1060 deel 2: the built context carries no essential flag any more.
+    assert 'required_for_meaning' not in claims[0]['metadata']['source_bound_context']['entries'][0]
     assert claims[0]['metadata']['source_bound_context']['entries'][0]['text'] == 'Alleen bij klachten.'
     resumed = restart_production(console)
     from src.workflows.formation_task_store_v1 import FormationTaskStore

@@ -9,7 +9,7 @@ const assert=require('node:assert/strict');
  const m=await(await fetch(base+'/browser-manifest')).json();
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
  try{
-  const page=await browser.newPage({viewport:{width:1440,height:1000}});
+  const page=await browser.newPage({viewport:{width:1440,height:1000}});globalThis.metisProofPage=page;
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base+'/login');
   await page.locator('[name=username]').fill(m.username);
@@ -44,23 +44,23 @@ const assert=require('node:assert/strict');
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   assert.equal(await page.locator('#annotation-steps').isVisible(),false);
   const row=key=>page.locator('#annotation-simple-rows dd[data-row='+key+']');
-  const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
   await tasks.selectText(page,page.locator('[data-source-block]').filter({hasText:'Beoordeel de huid.'}),'Beoordeel de huid.');
   await row('core').getByText('Beoordeel de huid.',{exact:true}).waitFor();
+  // #1067: a slow check (as in CI) keeps 'Gereed' running; the kind control must wait instead of completing that save.
+  await page.route('**/annotations/check**',async route=>{await new Promise(r=>setTimeout(r,1500));await route.continue();});
   await page.locator('#annotation-ready:enabled').click();
   await page.locator('#annotation-simple-type').waitFor();
   await page.locator('#annotation-simple-type-select').selectOption('recommendation');
   const condition=page.locator('[data-source-block]').filter({hasText:'Alleen bij klachten.'});
   const blockId=await condition.getAttribute('data-source-block');
-  await plus('belongs').click();
-  await tasks.selectText(page,condition,'Alleen bij klachten.');
+  await tasks.addAs(page,condition,'Alleen bij klachten.','context');
   await row('belongs').getByText('Alleen bij klachten.',{exact:true}).waitFor();
   const read=()=>page.evaluate(async sid=>{const r=await fetch('/annotations/api?document='+sid);if(!r.ok)throw Error('read failed');return r.json();},sid);
   await page.waitForFunction(async sid=>((await (await fetch('/annotations/api?document='+sid)).json()).entries[0]?.ranges||[]).length===2,sid);
   const entry=(await read()).entries[0];
   const added=entry.ranges.find(r=>r.role==='context');
   assert.deepEqual({block_id:added.block_id,start:added.start,end:added.end},{block_id:blockId,start:0,end:Array.from('Alleen bij klachten.').length});
-  assert.equal(added.required_for_meaning,false);
+  assert.equal('required_for_meaning' in added,false);
   assert.equal(entry.pending_range,null);
   // The statement is recorded as the evidence of its own type on every save.
   assert.deepEqual(entry.field_evidence.recommendation_evidence_span,{core:true});
@@ -70,5 +70,6 @@ const assert=require('node:assert/strict');
   await page.screenshot({path:output+'/binding-mobile.png',fullPage:true});
   assert.deepEqual(errors,[]);
   fs.writeFileSync(output+'/binding-result.json',JSON.stringify({slowModuleSafe:true,contextStoredExactly:true,typeEvidenceIsTheStatement:true,pageErrors:errors}));
- }finally{await browser.close();}
+ }catch(error){await tasks.describeCard(globalThis.metisProofPage);throw error;}
+ finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

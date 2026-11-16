@@ -10,7 +10,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
  try{
   let context=await browser.newContext({viewport:{width:1440,height:1000}});
-  let page=await context.newPage();const errors=[];
+  let page=await context.newPage();const errors=[];globalThis.metisProofPage=page;
   async function login(){
    page.on('pageerror',e=>errors.push(e.message));
    await page.goto(base+'/login');await page.locator('[name=username]').fill(manifest.username);await page.locator('[name=password]').fill(manifest.password);
@@ -28,7 +28,6 @@ const tasks=require('./browser_annotation_tasks.cjs');
   const block=text=>page.locator('[data-source-block]').filter({hasText:text.slice(0,20)});
   const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
   const row=key=>page.locator('#annotation-simple-rows dd[data-row='+key+']');
-  const plus=key=>page.locator('#annotation-simple-rows dt[data-row='+key+'] button.annotation-sign');
   // Wait for what is stored, not for a status text (polled from Node: the page forbids eval).
   const stored=async test=>{for(let i=0;i<60;i++){const entry=(await read()).entries[0]||{};if(test(entry)) return;await page.waitForTimeout(250);}
     throw new Error('stored state never matched');};
@@ -41,7 +40,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   const annotation=new URL(page.url()).searchParams.get('annotation');
   // 1. A failed save keeps the edit visible, offers a retry and keeps the page from closing.
   await page.route('**/annotations/api',route=>route.request().method()==='POST' ? route.abort() : route.continue());
-  await plus('evidence').click();await tasks.selectText(page,block(support),support);
+  await tasks.addAs(page,block(support),support,'evidence');
   await page.locator('#annotation-retry').waitFor();
   await row('evidence').getByText(support,{exact:true}).waitFor();
   assert.match(await page.locator('#annotation-status').innerText(),/^Opslaan mislukt\. /);
@@ -55,8 +54,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   const other=await context.newPage();
   await other.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   await other.locator('#annotation-editor-inputs:enabled').waitFor();
-  await other.locator('#annotation-simple-rows dt[data-row=belongs] button.annotation-sign').click();
-  await tasks.selectText(other,other.locator('[data-source-block]').filter({hasText:extra.slice(0,20)}),extra);
+  await tasks.addAs(other,other.locator('[data-source-block]').filter({hasText:extra.slice(0,20)}),extra,'context');
   await other.waitForFunction(()=>document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   await other.close();
   await page.locator('#annotation-simple-rows dd[data-row=evidence] .annotation-line').filter({hasText:support}).locator('button.annotation-sign').click();
@@ -78,7 +76,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   assert.equal((await read()).entries[0].status,'ready');
   await page.screenshot({path:output+'/guided-ready-desktop.png',fullPage:true});
   await context.close();
-  context=await browser.newContext({viewport:{width:390,height:844}});page=await context.newPage();await login();
+  context=await browser.newContext({viewport:{width:390,height:844}});page=await context.newPage();globalThis.metisProofPage=page;await login();
   await page.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   await row('core').getByText(statement,{exact:true}).waitFor();
@@ -90,5 +88,6 @@ const tasks=require('./browser_annotation_tasks.cjs');
   await page.screenshot({path:output+'/guided-resumed-desktop.png',fullPage:true});
   assert.deepEqual(errors,[]);
   fs.writeFileSync(output+'/guided-result.json',JSON.stringify({annotation,retry:true,olderEditRefused:true,resumed:true,errors}));
- }finally{await browser.close();}
+ }catch(error){await tasks.describeCard(globalThis.metisProofPage);throw error;}
+ finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -142,3 +142,147 @@ zien; de kaart is de enige weg.
   `browser_human_annotation_check.cjs` en de hulpfuncties voor het
   stappenformulier zijn vervallen: wat ze bewezen en nog bestaat zit in de
   veerkracht-, selectie- en bouwproef.
+
+## Deel C — richting voor de gebruiker, soort corrigeerbaar, uitleg op de plek
+
+Besluit William, 14 november 2026: “Alle drie”, zonder extra stappen; de
+gebruiker moet weten welke mijlpalen er komen. Vastgelegd in #1067 en MET-78.
+
+- **Routeregel** (`src/review/knowledge_route_v1.py`): één regel met de
+  mijlpalen Inleveren › Annoteren › Documentcontrole › Bouwen › Review ›
+  (Tweede review) › Publicatie en één zin “Hierna: …”. De tweede review staat
+  er alleen als die geldt: bij inleveren gekozen (annotatiepagina's) of voor dit
+  object vereist (reviewkaart). De regel staat op de annotatiekaart, de
+  documentcontrole en de reviewkaart van objecten uit annotatie. Hij wordt
+  afgeleid van bestaande toestand (KO-status, bouwstatus, correctie,
+  vierogenplicht) en voegt geen knop, vraag of stap toe.
+- **Soort als kaartregel**: de kaart toont het soort altijd als regel met een
+  keuzelijst. De keuzelijst is één blijvend element, zodat een keuze in
+  uitvoering de focus houdt. Wijzigen houdt de selecties; de betekenisvelden
+  van het oude soort vervallen en blijven open als signaal.
+- **Uitleg via ?** bij Uitspraak, Soort, Hoort erbij en Onderbouwing: tikken
+  klapt de uitleg open onder de regel (`aria-expanded`, geen hover-tooltip). De
+  uitleg blijft open tijdens het werk.
+- **Documentcontrole**: elk signaal staat op een eigen regel en de links
+  plakken niet meer aan de volgende kop (Impeccable-audit).
+
+### Bouwregel bij een gecorrigeerd soort (raakt de levenscyclus, fail-closed)
+
+`revision_workflow._drop_confirmation_of_another_kind`: bij opnieuw bouwen nam
+de nieuwe versie het eerder bevestigde soort over, waardoor een correctie van
+het soort in de kaart verloren ging. Dit gat bestond al vóór deel B.
+
+```text
+Lifecycle entity: WorkingRevision (opvolgende kennisobjectversie uit annotatie)
+Lifecycle transition: correctie in de kaart → opnieuw bouwen → nieuwe versie In review
+Initial durable state: een gebouwde versie met bevestigd soort S.
+Trigger: de annotatie krijgt in de kaart soort T ≠ S en wordt opnieuw gebouwd.
+Authorization: ongewijzigd (bestaande bouw- en correctierechten).
+Validation: ongewijzigd; alleen het gecorrigeerde soort wordt vergeleken.
+Mutable entities: de nieuwe versie: zonder bevestiging van S, en zonder
+  bevestigde richting en sterkte (die horen alleen bij een aanbeveling).
+Immutable entities: de vorige versie en haar bevestigingen, bron, annotaties,
+  bouwbewijs, releases.
+Workflow state before/after: In review → In review (nieuwe versie, zoals elke correctie).
+Release/Serving state: ongewijzigd; niets wordt uitgeleverd zonder nieuwe goedkeuring.
+Expected UI result: de reviewkaart van de nieuwe versie toont T als voorgesteld soort.
+Failure result: bij een bouwfout blijft de vorige versie ongewijzigd (bestaande bouw).
+Restart result: de nieuwe versie bewaart T; de oude bevestiging blijft historie.
+Legacy-data result: gelijk soort houdt alle bevestigingen; objecten buiten annotatie ongewijzigd.
+Required black-box scenario: GIVEN een goedgekeurde versie met soort Toelichting;
+  WHEN de reviewer via ‘Aanpassen in de kaart’ Definitie kiest en opnieuw bouwt;
+  THEN toont de nieuwe versie Definitie en wordt die na beoordeling goedgekeurd.
+Explicit non-goals: soort wijzigen op de reviewkaart zelf; objecten buiten annotatie.
+```
+
+### Bewijs
+
+- `tests/test_knowledge_route_1067.py` (routeregel uit toestand, geen bediening)
+  en `tests/test_kind_correction_1067.py` (bouwregel).
+- Browser: `browser_annotation_suggestions_check.cjs` (route, ?, soort
+  corrigeren), `browser_human_review_check.cjs` (route bij bouwen en review,
+  soort corrigeren tot en met goedkeuren), `browser_source_first_card_check.cjs`.
+- verify-this, met dezelfde reviewproef: VERIFIED.
+  - Nulmeting `d7dddf3`: de proef faalt, want de kaart heeft geen soortkeuze.
+  - Tussenmeting zonder bouwregel: de reviewkaart toont het oude soort.
+  - Behandeling: de reviewkaart toont het nieuwe soort.
+- Karakteriseringsgoldens: alleen het versienummer van `console.css` verandert;
+  vergeleken met dat nummer weggefilterd zijn alle 31 bestanden gelijk.
+
+### Besluiten William, 14 november 2026 (uit de Codex-review van #1070)
+
+1. **Relatie naar een doel dat opnieuw wordt gebouwd: de relatie vervalt en wordt opnieuw bevestigd**
+   (`revision_workflow._retarget_relations_to_rebuilt`).
+   - Een bevestigde relatie noemt de exacte versie van het doel die de reviewer zag.
+   - Krijgt dat doel in dezelfde bouw een nieuwe versie, dan:
+     - vervalt de bevestiging;
+     - wijst het voorstel naar de nieuwe versie, zodat de reviewer het opnieuw kan bevestigen.
+   - Een bronobject dat zelf niet veranderde, krijgt een nieuwe versie en gaat terug naar de review, want zijn
+     goedkeuring ging over de oude doeltekst.
+   - Een nieuwe versie kan weer andere relaties raken. Daarom herhaalt deze stap zich tot er niets meer
+     verandert, met een grens die een eindeloze lus weigert.
+   - Fail-closed. Dit gat bestond al vóór slice 5 en gold voor elke correctie van een doel.
+   - Bewijs: `tests/test_kind_correction_1067.py::test_a_relation_to_a_rebuilt_target_is_confirmed_again`, op
+     echte gebouwde objecten.
+2. **Soort wisselen in de kaart: terugzetten herstelt het voorstel van Metis, zonder extra vraag.**
+   - De kaart onthoudt de betekenisvelden per soort zolang de kaart openstaat.
+   - Het nieuwe soort bewaart alleen zijn eigen betekenisvelden. Velden van het vorige soort worden gewist, anders
+     zouden ze ongezien in het object worden gebouwd (Codex P2). Ze komen alleen via het terugzetten terug.
+     Bewijs: de suggestieproef (definitie → toelichting: term en definitie zijn leeg); faalt zonder de wijziging.
+   - Bewijs: de suggestieproef (aanbeveling → toelichting → aanbeveling: de richting komt terug). Die proef faalt
+     zonder de wijziging.
+3. **Relaties die het gecorrigeerde soort niet kan dragen, vervallen met hun bronbewijs** (Codex P2). De nieuwe versie
+   beschrijft alleen haar eigen relaties; de vorige versie bewaart de geschiedenis. Bewijs:
+   `tests/test_kind_correction_1067.py::test_the_evidence_of_a_dropped_relation_goes_with_it`; faalt zonder de wijziging.
+4. **De tweede review in de routeregel volgt de regel van de publicatiecontrole** (Codex P2).
+   `second_approval_required` in `four_eyes_v1` (de publicatiecontrole; alleen die en de inname lezen de configuratie)
+   vraagt `configured_approval` of één goedkeuring de gekozen configuratie vervult. Zo
+   staat ‘Tweede review’ er ook bij v1 `two_others` zonder vierogenvink, waar de publicatie op beide benoemde
+   reviewers wacht. Bewijs: de tabeltest per configuratie in `tests/test_knowledge_route_1067.py`.
+5. **Afgewezen in de tweede review blijft op ‘Tweede review’** (Codex P2). De routeregel leest de fase van de
+   afwijzing uit het reviewlogboek, net als de afwijzingsmelding, in de inventaris en op de reviewkaart. Bewijs:
+   `tests/test_second_review_reject_1064.py::test_second_reviewer_rejects_from_the_review_card_and_the_first_reviewer_reads_why`;
+   faalt zonder de wijziging.
+6. **Een selectie die wordt gemaakt, overleeft het hertekenen van de bron** (besluit William: “Zet de volgende
+   acties door”; vastgelegd in #1067 en MET-78). Na ‘Gereed’ tekent de kaart de markeringen opnieuw. Kwam het
+   antwoord laat, dan wiste dat de volgende selectie stil; dat was de oorzaak van de wisselende browserfouten in CI.
+   `replaceBlock` vervangt een bronblok alleen bij een echte wijziging en zet een lopende selectie terug op dezelfde
+   tekenposities, met dezelfde richting. Bewijs: de bronselectieproef met een laat antwoord op het opslaan; faalt
+   zonder de wijziging. De bouwproef wacht voortaan tot de kaart gereed is voordat hij selecteert.
+7. **De soortkeuze houdt haar focus bij een nieuwe weergave** (Codex P2). Een late controle bouwt de kaart opnieuw
+   op; de soortregel blijft daarbij staan en de andere regels worden eromheen opgebouwd, zodat een keuze in
+   uitvoering niet wordt afgebroken. Bewijs: de suggestieproef met een late controle; faalt zonder de wijziging.
+8. **Een relatiereview blijft bij de versie die is beoordeeld** (Codex P2). Vervalt een bevestiging omdat het doel
+   opnieuw is gebouwd, dan krijgt de nieuwe versie geen herschreven kopie van de oude ontvangst; ze krijgt een eigen
+   ontvangst bij haar review. Bewijs: `tests/test_relation_rebuild_e2e_1067.py`; faalt zonder de wijziging.
+9. **Risico dat alleen bij het oude soort hoorde, vervalt met die bevestiging** (Codex P2). Een bevestigde
+   uitzondering markeert een hoog risico met tweede review. Krijgt het object een ander soort, dan vervalt dat
+   uitzonderingsrisico; risico uit de inhoud zelf blijft, en een hoog risiconiveau blijft alleen als de bouw het zelf
+   meldt. Bewijs: de risicotests in `tests/test_kind_correction_1067.py`; falen zonder de wijziging.
+10. **Het soortgeheugen hoort bij de exacte uitspraak** (Codex P2). Terugzetten herstelt alleen het voorstel voor
+   dezelfde uitspraak; verandert de uitspraak, dan komt er niets van de oude terug. Bewijs: de suggestieproef breidt
+   de uitspraak uit en wisselt terug; faalt zonder de wijziging.
+11. **De soortkeuze toont altijd het opgeslagen soort** (Codex P2). Zodra er een soort is, staat ‘Kies het soort’
+   uit; een lege keuze zet het opgeslagen soort terug in de lijst. Bewijs: de suggestieproef; faalt zonder de wijziging.
+12. **De route van het document telt ook de inhoud** (Codex P2). Een uitzondering vraagt op grond van haar inhoud twee
+   goedkeuringen, ongeacht de configuratie. `document_requires_second_review` (in de publicatiecontrole) toont de
+   tweede review op de annotatiekaart en de documentcontrole zodra een uitspraak die niet is ingetrokken zo'n soort
+   heeft. Bewijs: de tabeltest in `tests/test_knowledge_route_1067.py`; faalt zonder de wijziging.
+13. **Soortkeuze tijdens ‘Gereed’.** Zolang ‘Gereed’ bezig is, staat de soortkeuze uit. Anders maakte een keuze in
+   dat moment de opslag ongezien af. Dat was de oorzaak van de browserfouten die alleen in CI optraden.
+   - Bewijs: de bindingsproef met een vertraagde controle.
+
+### Bewijs van begin tot eind voor relaties (`tests/test_relation_rebuild_e2e_1067.py`)
+
+Een echt document met twee kennisobjecten. Metis stelt een relatie A → B voor, met bronbewijs. De reviewer
+bevestigt haar en keurt A goed. B wordt in de kaart gecorrigeerd en via de productiebouw opnieuw gebouwd. Daarna
+geldt:
+
+- A is een nieuwe versie die terug moet naar de review;
+- het voorstel en het bronbewijs wijzen naar de nieuwe versie van B;
+- de toelating laat A door;
+- de reviewer bevestigt de relatie opnieuw en keurt A goed.
+
+Deze test vond een fout die de unittests niet zagen. Na goedkeuring draagt het bronbewijs nog het id van het
+oorspronkelijke voorstel. Daardoor verhuisde het niet mee en blokkeerde de toelating A. Het bronbewijs verhuist nu
+mee op eindpunt (soort relatie, doel en oude doelversie). Op `bfd3d57` faalt deze test.

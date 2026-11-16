@@ -24,6 +24,16 @@ Follow callers, mixin method resolution, runtime overrides, and supported storag
 topologies for the assigned change. A function named `consider_publish` is not
 permission to bypass `publish` or the durable publication boundary.
 
+## Hard invariant: one deterministic candidate creator before human review
+
+Until human review, deterministic materialisation MUST be the sole KnowledgeCandidate creator. Reuse `src/vorming/knowledge_materialisation_v1.py::materialise_knowledge_candidates`; no provider, selection, evidence-binding, transformation, Admission, retry, or recovery path may introduce a second candidate creator.
+
+- Providers and selection/evidence-binding code MUST return proposals, validated source references, assessments, or failure findings. They MUST NOT independently assign candidate identity, reconstruct canonical candidate text, or create an alternative candidate/source mapping.
+- Deterministic materialisation alone owns candidate text, candidate identity, and the candidate's source mapping. Transformation and Admission MAY validate, project, enrich non-authoritative metadata, or reject its output; they MUST NOT independently create, rewrite, split, merge, or silently repair a candidate. A necessary selection correction MUST return through the existing selection and deterministic materialisation path.
+- Rejection MUST preserve source work and recovery findings under the existing persistence contracts. It MUST NOT trigger a fallback candidate creator.
+- Changes touching these paths MUST prove that evidence binding preserves materialised candidate text, identity, and source mapping, and that every supported pre-review route uses the same creator. Existing source reconstruction remains the owner of the source representation; it is not a second candidate creator.
+- Human review permissions remain governed by the existing review/revision contracts. This pre-review invariant grants no additional review or publication authority. An apparent need to violate the invariant MUST be surfaced as a domain-design conflict before implementation; agents MUST NOT weaken or bypass it autonomously.
+
 ## Use the smallest appropriate workflow
 
 1. Classify the change and rewrite risk under the existing development model.
@@ -40,6 +50,8 @@ permission to bypass `publish` or the durable publication boundary.
 The existing `.agents/skills/improve-codebase-architecture/` skill remains an
 explicitly invoked survey tool. Ordinary changes use this map and the development
 model; no separate personal skill installation is required.
+The companion vocabulary skills `codebase-design` and `grilling` live upstream
+at https://github.com/mattpocock/skills; check availability before claiming to use them.
 
 ## Enforced dependency boundaries
 

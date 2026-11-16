@@ -115,7 +115,8 @@ def test_high_risk_rewrite_rules_reach_execution_and_pr_surfaces() -> None:
     for text in (agents, execution, engineer, template):
         _assert_terms(text, "Rewrite risk", "high")
 
-    _assert_terms(agents, "authority", "writer", "reader", "adversarial")
+    assert 'docs/agents/continuous-development.md' in agents
+    _assert_terms(_read('docs/agents/continuous-development.md'), "authority", "writer", "reader", "adversarial")
     _assert_terms(execution, "big-bang", "destructive or irreversible migration", "human approval")
     _assert_terms(engineer, "stop and rescope", "temporary dual-read/dual-write", "green CI")
     _assert_terms(
@@ -268,5 +269,6 @@ def test_stateful_class_b_gate_is_lightweight_and_escalates_only_when_needed() -
     _assert_terms(model, "Do not apply it to stateless reads", "presentation-only behavior", "no durable state transition")
     _assert_terms(model, "not a second lifecycle contract", "publication lifecycle truth", "lifecycle-vsa.md")
     _assert_terms(model, "STOP", "reclassify to Class A", "before implementation")
-    _assert_terms(agents, "document owns the criteria and escalation rule")
+    assert 'continuous-development.md#stateful-class-b-domain-first-overlay' in agents
+    _assert_terms(model, "document owns the criteria and escalation rule")
     _assert_terms(engineer, "stateful Class B", "before VSA")

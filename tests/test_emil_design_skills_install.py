@@ -49,9 +49,9 @@ def test_adapters_repeat_upstream_metadata_and_link_to_the_canonical_skill():
 
 def test_impeccable_stays_the_mandatory_workflow_and_the_toggle_stays_out():
     agents = (ROOT / "AGENTS.md").read_text()
-    section = agents.split("### Frontend interaction craft — Emil Kowalski skills", 1)[1].split("\n### ", 1)[0]
+    section = next(line for line in agents.splitlines() if line.startswith('| [Emil Kowalski]'))
     assert "docs/agents/emil-design-skills.md" in section
-    assert "Impeccable remains the mandatory" in section
+    assert "Complements mandatory Impeccable" in section
     document = (ROOT / "docs/agents/emil-design-skills.md").read_text()
     assert _manifest()["commit"] in document
     assert "Do not add that toggle" in document

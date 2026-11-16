@@ -48,7 +48,7 @@ nodig. De worker bevat geen issueUpdate-/projectmutaties.
    op #963/MET-47; controleer minstens één open werkpakket en één gemergde
    deelslice. Een tweede ongewijzigde run moet nul changes tonen en exact één
    eigen comment behouden. Controleer dat status/werkkeuze/eigenaar behouden zijn.
-6. Maak **handoff-contract** (workflow **GitHub Linear sync**) een vereiste PR-check in de
+6. Maak **handoff-contract** (workflow **PR handoff**) een vereiste PR-check in de
    bestaande branch ruleset, als menselijke review dat passend vindt. Zonder
    vereiste branchcheck is een rode check zichtbaar, maar geen bewezen
    onomzeilbare mergeblokkade. Bestaande vereiste checks niet vervangen.

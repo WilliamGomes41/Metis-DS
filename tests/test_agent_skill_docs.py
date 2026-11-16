@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import shlex
 
 import yaml
 
@@ -9,6 +10,59 @@ ROOT = Path(__file__).resolve().parents[1]
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
+
+
+def test_skill_selection_links_stitch_fork_without_loosening_existing_triggers() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    guide = agents.split("## Skills\n", 1)[1]
+    rows = {line.split("|")[1].strip(): line for line in guide.splitlines() if line.startswith("| [")}
+    assert "MUST read and apply" in next(v for k, v in rows.items() if "Impeccable" in k)
+    assert "Explicit requests" in next(v for k, v in rows.items() if "pstack" in k)
+    assert "Only on an explicit request" in next(v for k, v in rows.items() if "Matt Pocock" in k)
+    stitch = next(v for k, v in rows.items() if "Stitch" in k)
+    assert "https://github.com/WilliamGomes41/stitch-skills" in stitch
+    assert "before implementing" in stitch
+    assert "docs/agents/shared-skills.md#external-stitch-plugin" in stitch
+    assert "Emil Kowalski" in guide
+    assert "read-only" in next(v for k, v in rows.items() if "Emil Kowalski" in k)
+    shared = (ROOT / "docs/agents/shared-skills.md").read_text()
+    external = shared.split("## External Stitch plugin\n", 1)[1].split("\n## ", 1)[0]
+    for boundary in ("geen kopie in Metis", "Stitch MCP-/accountverbinding",
+                     "claim geen Stitch-generatie", "synthetische data"):
+        assert boundary in external
+    for relative in re.findall(r"\]\((?!https://)([^)]+)\)", guide):
+        assert (ROOT / relative.split('#', 1)[0]).is_file(), relative
+
+
+def test_root_navigation_and_verification_commands_resolve_to_real_targets() -> None:
+    agents = (ROOT / "AGENTS.md").read_text()
+    for relative in re.findall(r"\]\((?!https://)([^)]+)\)", agents):
+        path, _, anchor = relative.partition('#')
+        target = ROOT / path
+        assert target.is_file(), relative
+        if anchor:
+            headings = re.findall(r"^#+ (.+)$", target.read_text(), re.M)
+            slugs = {re.sub(r'[^\w\s-]', '', h.lower()).replace(' ', '-') for h in headings}
+            assert anchor in slugs, relative
+    commands = agents.split('```sh\n', 1)[1].split('```', 1)[0].splitlines()
+    scripts = set()
+    for command in commands:
+        if not command.strip():
+            continue
+        args = shlex.split(command)
+        assert args[0] == 'python'
+        if args[1] == '-m':
+            assert args[2] in {'compileall', 'pytest'}
+            for arg in args[3:]:
+                if arg.startswith('tests/'):
+                    assert (ROOT / arg).is_file(), arg
+        else:
+            assert (ROOT / args[1]).is_file(), command
+            scripts.add(args[1])
+    assert {'scripts/repository_preflight.py', 'scripts/release_control_preflight.py',
+            'scripts/check_architecture_boundaries.py'} <= scripts
+    assert 'bash scripts/test_postgres.sh' in agents
+    assert (ROOT / 'scripts/test_postgres.sh').is_file()
 
 
 def test_statechart_preparation_preserves_authority_and_requires_executable_proof() -> None:
@@ -75,7 +129,7 @@ def test_deployment_protocol_is_mandatory_and_keeps_the_container_route() -> Non
     for rule in (
         "scripts/build_azure_release_image.sh",
         "@sha256:",
-        "De ZIP-route (`deploy-production.yml`) is niet van toepassing",
+        "De ZIP-route (`deploy-production.yml`) is technisch begrensd tot `PYTHON|3.13`",
         "Wissel nooit op een tag",
         "Alleen een exacte `main`-commit",
         "GO van de projectlead per stap die Azure wijzigt",
@@ -97,6 +151,30 @@ def test_deployment_protocol_is_mandatory_and_keeps_the_container_route() -> Non
         "linear-github-handoff.md", "gemerged + gedeployed + geverifieerd",
     ):
         assert evidence in protocol
+
+
+def test_non_workflow_rights_are_a_stop_gate_before_cutover_and_deployment() -> None:
+    cutover = (ROOT / 'docs/AZURE_STEP9_CUTOVER_RUNBOOK.md').read_text(encoding='utf-8')
+    gate_title = '### STOP: rechten buiten workflow nog niet bewezen'
+    gate = cutover.split(gate_title, 1)[1].split('## 4.', 1)[0]
+    assert cutover.index(gate_title) < cutover.index('## 4.')
+    for requirement in (
+        'workflow-PASS is geen toestemming', '`public`', '`api_access`',
+        'rechtenprofiel', 'GRANT-regels', 'runtime-identiteit',
+        'lees- en schrijfbewerkingen', 'geïsoleerde database',
+        'Ontbreekt het rechtenprofiel of het verificatiebewijs: STOP',
+        'Pas geen\nworkflowflag aan en voer geen image-wissel uit',
+    ):
+        assert requirement in gate
+
+    release = (ROOT / 'docs/AZURE_RELEASE_RUNBOOK.md').read_text(encoding='utf-8')
+    stop = 'STOP bij ontbrekend non-workflow-rechtenbewijs'
+    assert release.index(stop) < release.index('## 2. Image bouwen')
+    assert 'AZURE_STEP9_CUTOVER_RUNBOOK.md#stop-rechten-buiten-workflow-nog-niet-bewezen' in release
+
+    protocol = (ROOT / 'docs/agents/deployment-protocol.md').read_text(encoding='utf-8')
+    step = next(line for line in protocol.splitlines() if line.startswith('| 4 |'))
+    assert all(value in step for value in ('`public`', '`api_access`', 'runtime-identiteit', 'STOP'))
 
 
 def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:
@@ -140,9 +218,12 @@ def test_handoff_yaml_contains_required_context_and_allows_no_decision() -> None
 
 def test_class_b_program_design_gate_requires_existing_path_before_code() -> None:
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    owner = 'docs/agents/continuous-development.md'
+    assert owner + '#class-b-program-design-gate' in agents
+    model = (ROOT / owner).read_text(encoding='utf-8')
 
     required_contract = (
-        "### Class B program-design gate",
+        "#### Class B program-design gate",
         "trace the existing execution path",
         "the existing mechanism and authority",
         "the affected functions, types, and call path",
@@ -153,7 +234,7 @@ def test_class_b_program_design_gate_requires_existing_path_before_code() -> Non
         "MUST NOT be expanded into lifecycle-grade paperwork",
     )
     for phrase in required_contract:
-        assert phrase in agents
+        assert phrase in model
 
 
 def test_dispatcher_is_discoverable_and_preserves_selection_boundaries() -> None:
@@ -190,7 +271,10 @@ def test_dispatcher_examples_use_current_names_and_explicit_only_boundaries() ->
     assert not obsolete.intersection(re.findall(r"`([^`]+)`", examples))
 def test_agents_requires_one_deterministic_candidate_creator_before_review():
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    section = agents.split("### Hard invariant: one deterministic candidate creator before human review", 1)[1].split("\n### ", 1)[0]
+    owner = 'docs/agents/abstraction-boundaries.md'
+    assert owner in agents and 'single-candidate-creator rule' in agents
+    contract = (ROOT / owner).read_text(encoding='utf-8')
+    section = contract.split("## Hard invariant: one deterministic candidate creator before human review", 1)[1].split("\n## ", 1)[0]
     for obligation in (
         "deterministic materialisation MUST be the sole KnowledgeCandidate creator",
         "src/vorming/knowledge_materialisation_v1.py::materialise_knowledge_candidates",

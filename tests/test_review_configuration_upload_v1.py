@@ -177,7 +177,9 @@ def test_http_upload_with_choice_stores_chosen(system, *, production_app):
     stored = console._envelope(sid)["review_configuration"]
     assert (stored["option"], stored["four_eyes_required"], stored["reviewers"], stored["readers"], stored["source"]) \
         == ("one_other", True, [ids["first"]], [ids["reader"]], "chosen")
-    assert console._envelope(sid)["named_reviewers"] == [ids["first"]]
+    # #1072 (besluit William 2026-11-14, optie A): v1 one_other with four eyes needs the uploader's approval
+    # (configured_approval), so the uploader is named too; before, the uploader could never approve.
+    assert sorted(console._envelope(sid)["named_reviewers"]) == sorted([ids["first"], ids["uploader"]])
 
 
 def test_upload_form_names_reviewers_once(system, *, production_app):

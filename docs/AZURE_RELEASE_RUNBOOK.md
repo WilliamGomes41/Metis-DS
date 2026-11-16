@@ -1,6 +1,13 @@
 # Azure-release van de console (Docling-image)
 
-Dit runbook beschrijft hoe een exacte `main`-commit als container-image naar Azure gaat. Het is dezelfde route als in `docs/change-contracts/zorgmaatje.md`: `az acr build` met `Dockerfile.docling --target runtime` en daarna de app wisselen via de digest. De ZIP-route (`deploy-production.yml`) levert geen Docling-runtime en is hier niet van toepassing.
+Dit runbook beschrijft hoe een exacte `main`-commit als container-image naar Azure gaat. Het is dezelfde route als in `docs/change-contracts/zorgmaatje.md`: `az acr build` met `Dockerfile.docling --target runtime` en daarna de app wisselen via de digest. Een console-ZIP levert geen volledige Docling-runtime.
+
+De bestaande tijdelijke `deploy-production.yml` blijft beschikbaar voor code-updates
+zolang de app nog `PYTHON|3.13` gebruikt. De workflow leest de actuele
+`linuxFxVersion` en weigert containerhosting, onbekende waarden en leesfouten
+vóór app-settingmutaties of ZIP-deployment. Deze route voert geen eerste
+containerovergang uit. De ZIP-workflow mag pas definitief verdwijnen nadat de
+containerovergang met rollback- en capaciteitsbewijs is geaccepteerd.
 
 Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeurt alleen met GO van William.
 
@@ -24,9 +31,17 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
    - De app setting `WEBSITES_PORT` is `8000`. Gunicorn luistert in het image op `${PORT:-8000}`; App Service gaat zonder deze setting uit van poort 80.
 5. Migraties en runtime-rechten. Voer als database-beheerder uit:
    `python scripts/apply_workflow_postgres_migrations.py verify --host <host> --database metis --user <beheerder> --runtime-role vvn-metis-console`
+   **STOP bij ontbrekend non-workflow-rechtenbewijs.** Een workflow-PASS bewijst
+   geen volledige runtime-toegang. Vóór bouwen of wisselen moet het concrete
+   rechtenprofiel voor `public` en `api_access` zijn toegepast en met de werkelijke
+   runtime-identiteit zijn geverifieerd. Volg de verplichte
+   [stopvoorwaarde en bewijsstukken](AZURE_STEP9_CUTOVER_RUNBOOK.md#stop-rechten-buiten-workflow-nog-niet-bewezen).
    Voeg `--view-check` toe als `METIS_VIEW_CHECK_ORIGIN` gezet is; dan zijn ook de tabel en de rechten op `workflow.view_checks` vereist. Zonder die tabel of rechten start de app dan niet. Voeg `--compact-cards` toe als `CONSOLE_REVIEW_CARD_READS=compact` gezet is; dan zijn ook de tabellen van migratie 027 vereist.
    - Ontbreekt een tabel of kolom (ook `missing_relations` onder `runtime_privileges`): eerst `plan`, dan `apply` met `--confirm-target` en `--confirm-digest`, dan opnieuw `verify`.
    - Staat onder `runtime_privileges` een `BLOCKED`: voer de regels uit `grants` uit, en draai `verify` opnieuw tot `PASS`. De controle kent zelf niets toe. `GRANT … ON ALL TABLES` uit de eerste inrichting dekt geen tabellen uit latere migraties (zo ging het bij 026 mis, #930).
+   - Optioneel: `--strict-runtime-privileges` weigert daarnaast UPDATE op `workflow.publication_refusals` en gevaarlijke workflowrolbevoegdheden. Bij deze weigeringen is een GRANT geen oplossing: inspecteer de effectieve rechten en hun bronnen. De controle wijzigt niets en claimt geen volledige databasebrede least-privilege-audit.
+   - `apply` begrenst lockwachten standaard op 5000 ms; pas dit alleen bewust aan met `--lock-timeout-ms`. Na een lockfout eerst de blokkade onderzoeken, dan de bestaande idempotente route herhalen.
+   - Azure-verbindingen gebruiken `verify-full` met de systeem-CA of het expliciete PEM-bestand in `PGSSLROOTCERT`. Bewijs vanuit het bedoelde image dat trust, DNS-hostname en Entra-login werken; ontbrekende trust is een fout, geen reden voor automatische fallback.
 6. Weergavecontrole: dit runbook zet haar niet aan. Rapporteert de preflight `"view_check": "enabled"`, controleer dan ook wat de preflight niet kan zien, volgens `docs/change-contracts/zorgmaatje.md`: de private evidence-container bestaat, heeft een lifecycle-regel van 7 dagen, en de app-identiteit heeft daarop `Storage Blob Data Contributor`. Doe na de wissel één weergavecontrole. Aanzetten is een aparte stap met GO.
 7. Compacte reviewkaarten: staat `CONSOLE_REVIEW_CARD_READS=compact` aan, en wijzigt de release het `producer_contract` van `review_card_facts_v1`? Dat gebeurt bijvoorbeeld bij een nieuwe `source_containers_v1.VERSION`. Voer dan direct na de wissel `python scripts/prepare_review_cards.py --all` uit, en daarna dezelfde opdracht met `--check`. Zonder die stap tonen de kaarten "Kaartgegevens niet beschikbaar", omdat GET niets opnieuw opbouwt. In de standaardstand (`legacy`) is deze stap niet nodig.
 
