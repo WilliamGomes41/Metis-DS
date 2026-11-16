@@ -11,14 +11,22 @@ import {bindRange} from '/annotations/binding.mjs';
   const clone = value => JSON.parse(JSON.stringify(value));
   // #1067: what to select in each card row, and what '−' does there.
   const HELP={
-    core:['Selecteer één bewering of advies, letterlijk: meestal één zin, soms een zin met een opsomming.',
-      'Twee adviezen? Maak twee kaarten.','Met − haal je de selectie weg.'],
+    core:['Zegt de bron hier iets wat afzonderlijk kan worden begrepen en beoordeeld, zoals een aanbeveling, definitie of verklaring? Selecteer die uitspraak letterlijk.',
+      'Kies één betekenis met de tekst die nodig is om haar goed te begrijpen. Eén zin kan twee uitspraken bevatten; één uitspraak kan meerdere bronbereiken beslaan. Gebruik niet automatisch de hele alinea.',
+      ['“Voer A uit en controleer daarna B.” kan twee afzonderlijk te beoordelen adviezen bevatten. Maak dan twee kaarten.',
+       '“Voor de volgende gevallen geldt:” en een opsommingspunt kunnen samen één uitspraak vormen. Voeg de noodzakelijke inleiding toe bij Hoort erbij.',
+       'Een kopnummer, documentdatum of “Figuur 3” bevat op zichzelf niets wat afzonderlijk te beoordelen is.'],
+      'Twijfel je of dit een aparte uitspraak is? Laat het bronstuk open voor documentcontrole. Twijfel is geen reden om het weg te laten.',
+      'Met − haal je de selectie weg.'],
     type:['Het soort zegt wat voor uitspraak dit is, bijvoorbeeld een aanbeveling of een definitie. Metis stelt het voor; de reviewer controleert het.'],
     belongs:['Selecteer tekst die nodig is om de uitspraak te begrijpen of toe te passen. Bijvoorbeeld:',
-      ['de inleidende zin van een opsomming;','voor wie of wanneer het geldt (‘Bij volwassenen in de thuiszorg’);','een begrip dat in de uitspraak wordt gebruikt.'],
+      ['de inleidende zin van een opsomming;','voor wie of wanneer het geldt (‘Bij volwassenen in de thuiszorg’);','een voorwaarde of uitzondering die de betekenis begrenst;','een begrip dat in de uitspraak wordt gebruikt.'],
+      '“Voer handeling A uit bij groep B. Niet bij conditie C.” kan één aanbeveling zijn met een uitzondering bij Hoort erbij. Een uitzondering is niet automatisch een eigen uitspraak; een afzonderlijk advies kan dat wel zijn.',
+      '“Bij groep C is de effectiviteit onzeker.” kan een eigen uitspraak of een beperking bij een andere uitspraak zijn. Lees de omliggende tekst.',
       'Niet: waarom het klopt. Dat hoort bij Onderbouwing.','Met − haal je tekst weg, of wijs je een voorstel van Metis af.'],
-    evidence:['Selecteer tekst die laat zien waarom de uitspraak klopt. Bijvoorbeeld:',
+    evidence:['Selecteer tekst waarmee de bron de uitspraak ondersteunt of verklaart. Bijvoorbeeld:',
       ['een beschrijving van onderzoek;','de mate van bewijs;','een verwijzing of een afweging van de werkgroep.'],
+      '“De studie omvatte 238 deelnemers.” kan onderzoekscontext zijn; niet iedere feitelijke zin is een eigen uitspraak. Bevat de tekst een afzonderlijk te beoordelen bevinding? Controleer dan of die past bij de toegelaten soorten voor deze bron.',
       'Niet: voorwaarden of doelgroep. Die horen bij Hoort erbij.','Geen onderbouwing in de bron? Laat de regel leeg; de reviewer beoordeelt dat.'],
   };
   const helpOpen=new Set();
