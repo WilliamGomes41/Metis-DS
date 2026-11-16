@@ -36,6 +36,19 @@ Zet `METIS_BROWSER_EXECUTABLE` en `METIS_PLAYWRIGHT_MODULE` zoals in de bestaand
 CI-browserjob. Zet ook de PostgreSQL-clienttools op PATH voor de volledige suite.
 De eerste brede run is onderbroken nadat 20 tests alleen door ontbrekende `psql`
 op PATH faalden; dat omgevingsprobleem is hersteld voor de vervolgrun.
+De vervolgrun is omgezet naar de bestaande CI-verdeling over vier processen.
+Die volledige suite loopt nog op implementatiecommit
+`ab7fd8047aee8fd69175070f7cbcedcdcd24a151`: logs
+`/workspace/metis-test-tools/shard-{0,1,2,3}.log`, resultaten
+`/workspace/metis-test-tools/shards/{0,1,2,3}/result.json`.
+Deze controle is nog geen PASS. Combineer na afloop met
+`scripts/ci_test_shards.py merge` om volledige, eenmalige dekking en afwezigheid
+van PostgreSQL-skips te controleren.
+
+Repositorypreflight, release-controlpreflight over de werkelijke commitdiff,
+Python-compilatie van `src tests`, architectuurgrenzen en JavaScript-syntax zijn
+geslaagd. De documentatie na de genoemde implementatiecommit verandert geen
+productcode of testgedrag.
 
 Dit is geen gebruikersproef, volledige screenreadertest of bewijs dat menselijke
 KO-selecties inhoudelijk beter worden. De vergelijkende acceptatie met medewerkers

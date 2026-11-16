@@ -59,4 +59,22 @@ beoordeelde broncasussen kan de semantische kwaliteitswinst beoordelen. De zes
 synthetische contrasten uit het ontwerp zijn uitleg, geen nieuwe objecttaxonomie.
 Onzekere broninhoud blijft onder de bestaande documentcontrole vallen.
 
-Verificatie-uitkomsten worden na uitvoering hieronder vastgelegd.
+## Technische verificatie en overdracht
+
+Geteste implementatie: `ab7fd8047aee8fd69175070f7cbcedcdcd24a151`.
+De daaropvolgende documentatiecommit verandert geen productcode of tests.
+
+- Gerichte regressie: 46 passed, inclusief de echte browserroute.
+- Laatste browserrun: 1 passed; desktop en mobiel bekeken.
+- Repositorypreflight, release-controlpreflight op alle gewijzigde paden,
+  Python-compilatie, architectuurgrenzen en JavaScript-syntax: PASS.
+- [Bewijs en schermbeelden](../../evidence/1091/README.md).
+- Volledige suite: **loopt nog**, met de bestaande vierdelige CI-verdeling via
+  `scripts/measure_test_suite.py`; resultaten onder
+  `/workspace/metis-test-tools/shards/`. Niet als PASS of voltooiing meetellen.
+  De eerdere seriële run is vervangen door deze complete CI-verdeling nadat
+  het ontbrekende `psql`-zoekpad is hersteld.
+
+Volgende stap: vier suite-uitkomsten beoordelen en combineren met
+`scripts/ci_test_shards.py merge`, daarna inhoudelijke review en de vergelijkende
+medewerkersproef. MET-106 blijft In Progress; geen merge of deployment uitgevoerd.
