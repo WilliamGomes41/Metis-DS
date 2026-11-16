@@ -75,6 +75,7 @@ class Linear:
 @pytest.mark.parametrize(("github_issue", "linear_issue"), [
     (729, "MET-36"), (1013, "MET-57"), (1014, "MET-58"),
     (1015, "MET-59"), (1016, "MET-60"), (1017, "MET-61"),
+    (1091, "MET-106"),
 ])
 def test_merge_and_closed_github_issue_never_close_linear_or_change_work_choice(
     github_issue, linear_issue,
