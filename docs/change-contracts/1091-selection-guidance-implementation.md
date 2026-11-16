@@ -63,6 +63,10 @@ Onzekere broninhoud blijft onder de bestaande documentcontrole vallen.
 
 Geteste implementatie: `ab7fd8047aee8fd69175070f7cbcedcdcd24a151`.
 De daaropvolgende documentatiecommit verandert geen productcode of tests.
+`main` is daarna tot `95e79197f3ba05b5073ad3ed2356f4202318155b` geïntegreerd:
+de gemergde KO-definitie uit #1090 past bij deze UI-uitleg. De drie nieuwe
+protocolcontroles en zes architectuurcontroles zijn aanvullend geslaagd
+([JUnit](../../evidence/1091/main-integration.xml)).
 
 - Gerichte regressie: 46 passed, inclusief de echte browserroute.
 - Laatste browserrun: 1 passed; desktop en mobiel bekeken.
@@ -74,6 +78,10 @@ De daaropvolgende documentatiecommit verandert geen productcode of tests.
   `/workspace/metis-test-tools/shards/`. Niet als PASS of voltooiing meetellen.
   De eerdere seriële run is vervangen door deze complete CI-verdeling nadat
   het ontbrekende `psql`-zoekpad is hersteld.
+- Bekende omgevingsfout in de brede suite: de TLS-proef kan de lokale testserver
+  niet starten met `SSL is not supported by this build`. Geïsoleerd
+  gereproduceerd; een PostgreSQL-build met OpenSSL is gestart onder
+  `/workspace/metis-test-tools/pg16-tls`. Nog geen geslaagde TLS-proef geclaimd.
 
 Volgende stap: vier suite-uitkomsten beoordelen en combineren met
 `scripts/ci_test_shards.py merge`, daarna inhoudelijke review en de vergelijkende
