@@ -1,6 +1,6 @@
 # #1091 — Domeinontwerp: selectiebegeleiding voor kennisobjecten
 
-**Status:** ontwerp ter besluit; niet geïmplementeerd. **Bestaand project:** P-MET-6, Menselijke annotatie en bronverantwoording. **Werkpakket:** MET-106 onder MET-57 / GitHub #1013. **Normatieve samenhang:** KO-definitie #986/MET-49; annotatiewerkplek #1051/MET-71; huidige bron-eerst-kaart #1060/MET-75. **Datum:** 16 november 2026. De verduidelijking in concept-PR #1090 is geen gemergd protocolbewijs.
+**Status:** ontwerp ter besluit; niet geïmplementeerd. **Bestaand project:** P-MET-6, Menselijke annotatie en bronverantwoording. **Werkpakket:** MET-106 onder MET-57 / GitHub #1013. **Normatieve samenhang:** KO-definitie #986/MET-49; annotatiewerkplek #1051/MET-71; huidige bron-eerst-kaart #1060/MET-75. **Datum:** 16 november 2026. De KO-definitieverduidelijking uit #1090 is gemergd (95e79197) en staat in `PROTOCOL.md` §4.2 (v4.3.1); dit ontwerp is daartegen opnieuw gecontroleerd: de begrenzing in §3 (afzonderlijk beoordeelbaar is niet zelfstandig een praktijkvraag beantwoorden) volgt §4.2.
 
 **User promise:** Een medewerker die een bron leest krijgt op het **moment van de eerste inhoudelijke selectie** korte, begrijpelijke begeleiding om te onderscheiden of een tekstdeel een zelfstandige, afzonderlijk te beoordelen uitspraak vormt, of uitsluitend context, onderbouwing of bronstructuur is. De medewerker houdt het inhoudelijke besluit; het systeem maakt geen extra kennisobjecten.
 
@@ -84,7 +84,7 @@ Echte voorbeelden moeten afkomstig zijn uit toegelaten bronnen en vooraf door in
 | Hulp is niet een inhoudelijk besluit | UI vs `human_annotation_v1` | `?` openen/sluiten/vernieuwen schrijft geen annotatie of object |
 | Alleen mens kiest de grens | `human_annotation_v1.save` | Helptekst triggert geen automatische `core`-, context- of bewijsbinding |
 | Kandidaattekst blijft letterlijk brongebonden | Bronreconstructie + materialiser | Exacte geselecteerde spans geven identieke kandidaattekst/ID/mapping vóór en na wijziging |
-| Onzekere broninhoud blijft zichtbaar | Bestaand documentoverzicht/source accountability | `Niet vastgesteld` blijft open; geen auto-`excluded` |
+| Onverantwoorde broninhoud blijft zichtbaar | `unaccounted_ranges` (`human_annotation_preview_v1`) + source-accountability closure | Na hulp openen/sluiten en opslaan blijven alle `unaccounted_ranges` open en zichtbaar in het documentoverzicht; geen bronstuk krijgt automatisch `excluded_with_reason`. De semantische signaalsectie `Niet vastgesteld door Metis` telt NOOIT als dit bewijs |
 | Annoteren is geen goedkeuring | Reviewkernel/publicatie | Hulp openen verandert noch `ready`-gate noch review-/servingstatus |
 | Bestaande runtime- en opslaggrenzen blijven | Azure kernel/PostgreSQL/Blob | Geen extra writer, SQL-migratie, externe API-call of data-export |
 

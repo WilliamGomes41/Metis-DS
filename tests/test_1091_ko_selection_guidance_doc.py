@@ -23,3 +23,16 @@ def test_design_states_it_is_not_implemented():
 def test_design_keeps_human_decision_and_adds_no_objects():
     text = DESIGN.read_text(encoding='utf-8')
     assert 'De medewerker houdt het inhoudelijke besluit; het systeem maakt geen extra kennisobjecten.' in text
+
+
+def test_design_treats_merged_1090_as_protocol_authority():
+    text = DESIGN.read_text(encoding='utf-8')
+    assert 'geen gemergd protocolbewijs' not in text
+    assert 'De KO-definitieverduidelijking uit #1090 is gemergd' in text
+
+
+def test_source_accountability_proof_targets_unaccounted_ranges():
+    text = DESIGN.read_text(encoding='utf-8')
+    row = next(line for line in text.splitlines() if line.startswith('| Onverantwoorde broninhoud blijft zichtbaar'))
+    assert '`unaccounted_ranges`' in row
+    assert '`excluded_with_reason`' in row
