@@ -29,7 +29,7 @@ bouwopdracht. Het bouwmodule blijft eigenaar van de bestaande query voor die
 opdracht. Alleen bij een lopende bouw wordt de bevestigde lijststatus ververst;
 de polling leest het bestaande lichte bouwstatus-endpoint. De volledige bron- en
 annotatieset wordt pas opnieuw gelezen wanneer de bouw eindigt.
-dit past nooit de actieve editorversie of CAS-basis aan. Een verouderd antwoord
+Dit past nooit de actieve editorversie of CAS-basis aan. Een verouderd antwoord
 mag een recentere opslagbevestiging niet overschrijven. Falen van de statusread
 laat de laatst bevestigde lijst staan met een zichtbare melding.
 
@@ -64,4 +64,11 @@ vallen buiten deze implementatie.
 - Desktop 1440 en mobiel 390 px gerenderd en bekeken; geen horizontale overflow.
 
 [Schermbeelden en JUnit](../../evidence/saved-annotations/README.md).
-De volledige suite wordt nog uitgevoerd voordat de lokale oplevering wordt afgerond.
+De volledige collectie op implementatiecommit `b8824937` is na één volledige
+herhaling van partitie 2 gevalideerd met de canonieke shardmerger: 8.810 geslaagd,
+58 overgeslagen, geen fouten of PostgreSQL-skips. De eerste uitvoering had één
+timingoverschrijding in een bestaande Review-batchtest (0,351 s > 0,250 s).
+Die proef slaagde zowel gericht als binnen de volledige partitieherhaling,
+zonder code- of testgrenswijziging. De oorzaak is niet vastgesteld; beide
+uitkomsten staan in de verificatiesamenvatting. De latere bewijsaanvulling
+wijzigt uitsluitend documentatie en verificatieartefacten, geen code of tests.
