@@ -73,12 +73,18 @@ const tasks=require('./browser_annotation_tasks.cjs');
     assert.equal(await list().count(),1);
     assert.equal((await read()).entries.find(item=>item.annotation_id===firstId).status,'withdrawn');
     await save(first);
-    for(const width of [1440,390]) {
+    assert.equal(await page.locator('#annotation-finish').isVisible(),false,'one document-completion action is enough once the list is available');
+    for(const width of [1440,1024,768,390]) {
       await page.setViewportSize({width,height:1100});
       await page.evaluate(()=>window.scrollTo(0,0));
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-      await page.screenshot({path:output+'/saved-annotations-'+width+'.png',fullPage:true});
+      for(const link of await page.locator('#annotation-saved-list a, #annotation-saved-overview').all())
+        assert((await link.boundingBox()).height>=44,'compact rows must retain touch targets');
+      if([1440,390].includes(width)) await page.screenshot({path:output+'/saved-annotations-'+width+'.png',fullPage:true});
     }
+    await page.locator('.annotation-instruction summary').click();
+    await page.getByText('Wijs een eigen uitspraak aan:',{exact:false}).waitFor();
+    await page.locator('.annotation-instruction summary').click();
 
     await page.locator('#annotation-saved-overview').click();
     await page.waitForURL(url=>url.searchParams.get('overview')==='true');

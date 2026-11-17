@@ -72,3 +72,11 @@ Die proef slaagde zowel gericht als binnen de volledige partitieherhaling,
 zonder code- of testgrenswijziging. De oorzaak is niet vastgesteld; beide
 uitkomsten staan in de verificatiesamenvatting. De latere bewijsaanvulling
 wijzigt uitsluitend documentatie en verificatieartefacten, geen code of tests.
+
+## Opmaakvervolg na gebruikersbeoordeling
+
+De projectlead accepteerde de werking en vroeg op 17 november om verbetering
+van de layout. Deze Class C-verfijning (Rewrite risk: none) behoudt de bestaande
+handlers en domeinregels. De documentkop en lijst zijn compacter, de hulp is
+inklapbaar en de dubbele afrondactie wordt eenmaal getoond.
+[Nieuw browserbewijs en schermbeelden](../../evidence/saved-annotations-layout/README.md).

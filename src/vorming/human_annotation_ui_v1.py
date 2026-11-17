@@ -367,7 +367,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         # #1060 slice 5: the card offers the kinds of statement; Metis proposes one, the worker may correct it.
         state['kinds'] = [{'value':key,'label':label} for key,label in TYPES.items() if key in CLOSED_OBJECT_TYPES]
         data = json.dumps(state,ensure_ascii=False).replace('<','\\u003c')
-        body = intro + '''<p>Wijs een eigen uitspraak aan: iets wat de bron stelt, definieert, verklaart of aanbeveelt. Tekst die alleen bij een andere uitspraak hoort, voeg je daar toe bij Hoort erbij of Onderbouwing. Selecteer tekst in de bron en kies naast je selectie waar die bij hoort.</p>
+        body = '<header class="annotation-workspace-intro">' + intro + '''</header><details class="annotation-instruction"><summary>Hulp bij annoteren</summary><p>Wijs een eigen uitspraak aan: iets wat de bron stelt, definieert, verklaart of aanbeveelt. Tekst die alleen bij een andere uitspraak hoort, voeg je daar toe bij Hoort erbij of Onderbouwing. Selecteer tekst in de bron en kies naast je selectie waar die bij hoort.</p></details>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
@@ -388,21 +388,45 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <p id="annotation-saved-summary" role="status" aria-live="polite">De opgeslagen annotaties worden geladen.</p>
 <ol id="annotation-saved-list"></ol>
 <p id="annotation-saved-notice" role="status" hidden></p>
-<p><a id="annotation-saved-build" hidden>Opbouw bekijken</a></p>
-<p><a id="annotation-saved-overview" href="/annotations?'''+esc(urlencode({'document':document,'overview':'true'}))+'''" hidden>Bronselectie beëindigen en document controleren</a></p>
+<div class="annotation-saved-actions"><a id="annotation-saved-build" hidden>Opbouw bekijken</a>
+<a id="annotation-saved-overview" class="btn-secondary" href="/annotations?'''+esc(urlencode({'document':document,'overview':'true'}))+'''" hidden>Bronselectie beëindigen en document controleren</a></div>
 </section></aside></div>
 <script type="application/json" id="annotation-data">'''+data+'''</script><script type="module" src="/annotations/editor.js"></script>'''
         css = '''<style>
-#annotation-saved{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--line)}
-#annotation-saved-list{list-style:none;padding:0;margin:.75rem 0;max-height:15rem;overflow:auto;scroll-padding:.5rem}
-#annotation-saved-list li{margin:0;padding:.75rem .25rem;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
-#annotation-saved-list a{display:block;min-height:2.75rem;align-content:center;text-underline-offset:.2em}
-#annotation-saved-list a[aria-current]{font-weight:700}
+.annotation-workspace-intro{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.25rem 1.5rem;align-items:center}
+.annotation-workspace-intro h1{font-size:1.5rem;margin:0;grid-column:1;grid-row:1}
+.annotation-workspace-intro h2{color:var(--text);font-size:1.125rem;margin:0;grid-column:1;grid-row:2;overflow-wrap:anywhere}
+.annotation-workspace-intro>p{margin:0;color:var(--muted);font-size:.875rem;grid-column:2}
+.annotation-workspace-intro>p[data-working-revision]{grid-row:1}
+.annotation-workspace-intro>p:has(a){grid-row:2}
+.annotation-workspace-intro .ko-route{grid-column:1/-1;margin:.75rem 0 0}
+.annotation-workspace-intro .ko-route-next{font-size:.875rem;color:var(--muted)}
+.annotation-instruction{margin:0 0 .75rem;color:var(--muted);font-size:.875rem;line-height:1.6}
+.annotation-instruction summary{min-height:2.75rem;align-content:center;cursor:pointer;width:fit-content}
+.annotation-instruction summary:focus-visible{outline:2px solid var(--paars);outline-offset:2px}
+.annotation-instruction p{max-width:75ch;margin:.25rem 0 1rem}
+@media(max-width:800px){.annotation-workspace-intro{display:block}.annotation-workspace-intro h2{margin:.5rem 0}.annotation-workspace-intro>p{display:inline-block;margin:0 .75rem .25rem 0}}
+#annotation-saved{margin:1.25rem -1.25rem -1.25rem;padding:1rem 1.25rem 1.25rem;background:var(--surface-soft);border-top:1px solid var(--line);border-radius:0 0 12px 12px}
+#annotation-controls #annotation-saved-heading{font-size:1rem;color:var(--text);margin:0}
+#annotation-controls #annotation-saved-summary{margin:.25rem 0 .5rem;font-size:.8125rem;color:var(--muted)}
+#annotation-saved-list{list-style:none;padding:0;margin:0;max-height:18rem;overflow:auto;scroll-padding:.25rem}
+#annotation-saved-list li{margin:0;padding:.25rem 0 .75rem;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+#annotation-saved-list li:last-child{border-bottom:0}
+#annotation-saved-list a{display:block;min-height:2.75rem;align-content:center;line-height:1.45;font-size:.9375rem;text-decoration:none;text-underline-offset:.2em}
+#annotation-saved-list a:hover{text-decoration:underline}
+#annotation-saved-list a[aria-current]{font-weight:700;text-decoration:underline}
 #annotation-saved-list a:focus-visible,#annotation-saved-overview:focus-visible{outline:2px solid var(--paars);outline-offset:2px}
 #annotation-saved-list a[aria-disabled=true],#annotation-saved-overview[aria-disabled=true]{opacity:.65}
-.annotation-saved-status,.annotation-saved-detail{display:block;font-size:.9rem;line-height:1.5}
+.annotation-saved-status,.annotation-saved-detail{display:block;font-size:.8125rem;line-height:1.5}
 .annotation-saved-status{font-weight:600}.annotation-saved-detail{color:var(--muted)}
-#annotation-saved-overview,#annotation-saved-build{display:inline-block;min-height:2.75rem;align-content:center}
+.annotation-saved-actions{display:flex;flex-direction:column;align-items:stretch;gap:.5rem;margin-top:.75rem}
+#annotation-saved-overview,#annotation-saved-build{min-height:2.75rem;align-content:center;font-size:.875rem}
+#annotation-saved-overview{display:block;text-align:left;padding:.625rem .75rem;line-height:1.5}
+#annotation-controls:has(#annotation-saved-overview:not([hidden])) #annotation-finish{display:none}
+#annotation-controls:has(#annotation-saved-overview:not([hidden])) .annotation-task-actions:not(:has(.btn-primary:not([hidden]))){display:none}
+#annotation-controls>h2:first-child{font-size:1.125rem;color:var(--text);margin-bottom:.75rem}
+#annotation-controls #annotation-simple-heading{margin:1rem 0 .5rem;font-size:1rem}
+#annotation-status:empty{display:none}
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
 #annotation-editor-inputs{min-width:0;margin:0;padding:0;border:0}
 .annotation-document{position:relative;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;max-height:calc(100vh - 8rem);overflow:auto}
