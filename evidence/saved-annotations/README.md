@@ -43,6 +43,8 @@ dekken. [Verificatiesamenvatting](verification.json) bewaart beide uitkomsten;
 [gerichte timingherhaling](batch-timing-retry.xml). De ruwe rapporten staan lokaal
 in de in de samenvatting genoemde directories.
 
-Publicatie naar GitHub
-of Linear is niet uitgevoerd: het aanmaken van een issue werd door automatische
-goedkeuringscontrole geweigerd. De implementatie en het bewijs blijven lokaal.
+De eerste lokale oplevering volgde op weigering van externe publicatie door
+automatische goedkeuringscontrole. Daarna gaf de projectlead op 17 november 2026
+expliciet opdracht tot publicatie naar GitHub/Linear. Registratie:
+[GitHub #1094](https://github.com/WilliamGomes41/Metis-DS/issues/1094),
+[MET-107](https://linear.app/metis-phoenix/issue/MET-107). Dit is geen deploymentbewijs.

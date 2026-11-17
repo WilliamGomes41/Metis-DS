@@ -8,9 +8,13 @@ Rewrite risk: none
 
 Opdracht projectlead, 17 november 2026: “Implementeer dat”, na het voorstel voor
 een blijvende lijst ‘Opgeslagen annotaties’. Basis: main `17bce9e1`.
-Het aanmaken van een extern uitvoeringsticket is door automatische goedkeuringscontrole
-geweigerd. Deze expliciete opdracht wordt lokaal uitgevoerd; niets wordt zonder
-publicatieautorisatie naar GitHub of Linear geschreven.
+Publicatie is eerst lokaal gehouden na weigering door automatische
+goedkeuringscontrole. Op 17 november 2026 gaf de projectlead daarna expliciet
+opdracht: “Push naar github/linear”. Uitvoeringsticket:
+[GitHub #1094](https://github.com/WilliamGomes41/Metis-DS/issues/1094), werkbord:
+[MET-107](https://linear.app/metis-phoenix/issue/MET-107).
+Deze toestemming betreft publicatie van branch, concept-PR en werkregistratie;
+merge, deployment en live verificatie blijven afzonderlijke vervolgstappen.
 
 ## Werking en ontwerp
 
