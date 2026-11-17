@@ -324,14 +324,20 @@ import {bindRange} from '/annotations/binding.mjs';
   async function refreshSavedBuild() {
     if(buildPhase?.state!=='running') return;
     try {
-      const response=await fetch('/annotations/api?'+new URLSearchParams({document:state.snapshot_id}),{cache:'no-store'});
+      const response=await fetch('/annotations/build/api?'+new URLSearchParams({document:state.snapshot_id,attempt:buildPhase.attempt_id}),{cache:'no-store'});
       if(!response.ok) throw new Error();
-      const view=await response.json();
-      if(view.generation===state.generation) {
-        savedBindings=view.object_bindings || {};buildPhase=view.current_build;buildNotice='';
-      } else if(view.generation>state.generation) {
-        buildNotice='De opgeslagen annotaties zijn elders gewijzigd. Herlaad de pagina voor de actuele voortgang.';
-        renderSavedAnnotations();return;
+      const progress=await response.json();
+      buildNotice='';
+      if(progress.state!=='running') {
+        const completed=await fetch('/annotations/api?'+new URLSearchParams({document:state.snapshot_id}),{cache:'no-store'});
+        if(!completed.ok) throw new Error();
+        const view=await completed.json();
+        if(view.generation===state.generation) {
+          savedBindings=view.object_bindings || {};buildPhase=view.current_build;
+        } else if(view.generation>state.generation) {
+          buildNotice='De opgeslagen annotaties zijn elders gewijzigd. Herlaad de pagina voor de actuele voortgang.';
+          renderSavedAnnotations();return;
+        }
       }
     } catch(_) {buildNotice='De voortgang kon niet worden opgehaald. De laatst bevestigde opslag blijft zichtbaar; probeer Opbouw bekijken.';}
     renderSavedAnnotations();

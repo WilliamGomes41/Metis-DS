@@ -87,14 +87,19 @@ const tasks=require('./browser_annotation_tasks.cjs');
     await page.goto(base+'/annotations?document='+sid);
     await savedRow(first).getByText('Wordt gebouwd',{exact:true}).waitFor();
     await savedRow(second).getByText('Wordt gebouwd',{exact:true}).waitFor();
+    let fullSourceReads=0;
+    page.on('request',request=>{
+      if(request.method()==='GET' && new URL(request.url()).pathname==='/annotations/api') fullSourceReads+=1;
+    });
     // Failed progress reads preserve the receipts and explicitly say freshness is unknown.
     let failPoll=true;
-    await page.route('**/annotations/api?*',route=>{
+    await page.route('**/annotations/build/api?*',route=>{
       if(failPoll) {failPoll=false;return route.fulfill({status:503,contentType:'application/json',body:'{}'});}
       return route.continue();
     });
     await page.locator('#annotation-saved-notice').filter({hasText:'De voortgang kon niet worden opgehaald'}).waitFor();
     assert.equal(await list().count(),2);
+    assert.equal(fullSourceReads,0,'a progress tick must not reload the entire source and annotation set');
     await page.evaluate(()=>fetch('/browser-release-build',{method:'POST'}));
     await savedRow(first).getByText('Beschikbaar voor Review',{exact:true}).waitFor({timeout:20000});
     await savedRow(second).getByText('Beschikbaar voor Review',{exact:true}).waitFor();

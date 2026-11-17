@@ -10,6 +10,7 @@ Alle documenten, accounts en providerantwoorden zijn synthetische testgegevens.
 - [Gerichte tests: 79 passed](focused.xml)
 - [Nieuwe browserroute: 1 passed](browser.xml)
 - [Bestaande browserroutes: 4 passed](browser-regression.xml)
+- [Na optimaliseren van de voortgangsread: 2 passed](progress.xml)
 
 De nieuwe browserroute controleert succesvolle opslag en doorgaan, herladen,
 heropenen via Enter, een geweigerde wijziging met behoud van de opgeslagen versie,

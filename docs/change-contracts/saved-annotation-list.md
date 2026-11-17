@@ -27,6 +27,8 @@ de actuele wijzigingen; bij een opslagfout blijft de medewerker in de kaart.
 Statussen komen uit bestaande annotatiestatus, objectbinding/pending en de laatste
 bouwopdracht. Het bouwmodule blijft eigenaar van de bestaande query voor die
 opdracht. Alleen bij een lopende bouw wordt de bevestigde lijststatus ververst;
+de polling leest het bestaande lichte bouwstatus-endpoint. De volledige bron- en
+annotatieset wordt pas opnieuw gelezen wanneer de bouw eindigt.
 dit past nooit de actieve editorversie of CAS-basis aan. Een verouderd antwoord
 mag een recentere opslagbevestiging niet overschrijven. Falen van de statusread
 laat de laatst bevestigde lijst staan met een zichtbare melding.
@@ -54,6 +56,9 @@ vallen buiten deze implementatie.
   de opgeslagen lijst ontbreekt (1 failed, 10,96 s), en slaagt met de wijziging.
 - Vier bestaande browserroutes geslaagd: bronselectie, annotatiekaart,
   modelvoorstellen/typecorrectie en afsluiten/bouwen/Review (83,92 s).
+- Na de lichtere voortgangspolling zijn de nieuwe browserroute en de bestaande
+  volledige bouwroute opnieuw geslaagd: 2 passed (36,13 s). De proef controleert
+  expliciet dat een lopende statuscontrole de volledige bron niet opnieuw leest.
 - Repositorypreflight, release-control op de werkelijke gewijzigde paden,
   architectuurgrenzen, Python-compilatie en JavaScript-syntax geslaagd.
 - Desktop 1440 en mobiel 390 px gerenderd en bekeken; geen horizontale overflow.
