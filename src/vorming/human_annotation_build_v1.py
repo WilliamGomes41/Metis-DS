@@ -86,14 +86,20 @@ def _capture(con, snapshot_id, store, actor_id):
     return row, entries, {**basis, 'overview_hash': stable_hash(basis)}
 
 
+def latest_build(connection, snapshot_id):
+    """Project the existing durable build command; never start or change a build."""
+    active = connection.execute("SELECT a.attempt_id,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
+        "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
+        "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
+    return dict(active) if active else None
+
+
 def overview(console, *, actor_id, snapshot_id):
     annotations.authorize(console, actor_id, console._envelope(snapshot_id))
     with console.workflow_document_store._connect() as con:
         con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         row, entries, basis = _capture(con, snapshot_id, console.workflow_document_store, actor_id)
-        active = con.execute("SELECT a.attempt_id,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
-            "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
-            "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
+        active = latest_build(con, snapshot_id)
     fragments = stored_extraction({**row['source_identity'], 'prepared_source_extraction': row['extraction']})
     if fragments is None or row['extraction']['record_hash'] != row['extraction_hash']:
         annotations.fail('annotation_representation_stale')

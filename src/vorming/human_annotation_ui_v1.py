@@ -211,6 +211,14 @@ def source_document_html(blocks):
 
 
 def install(app, console, require, page, nav, esc, *, dispatcher):
+    def editor_state(actor, document):
+        view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document)
+        from src.vorming.human_annotation_build_v1 import latest_build
+        with console.workflow_document_store._connect() as con:
+            con.read_only = True
+            view['current_build'] = latest_build(con, document)
+        return view
+
     @app.get('/annotations', response_class=HTMLResponse)
     def editor(request: Request, document: str = '', overview: bool = False):
         actor = require(request)
@@ -249,7 +257,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 '<p>Annoteren geeft geen goedkeuring. De bij ontvangst gekozen beoordeling blijft gelden.</p>'
                 '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bron openen voor annotatie</button></form></section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
         from src.vorming import human_annotation_build_v1 as build
-        state = (build.overview if overview else domain.overview)(console, actor_id=actor['account_id'], snapshot_id=document)
+        state = build.overview(console, actor_id=actor['account_id'], snapshot_id=document) if overview else editor_state(actor, document)
         from src.vorming.source_bound_fields_v3 import FIELDS, TYPE_FIELDS, CONTEXT_FIELDS
         from src.vorming.human_annotation_contract_v1 import CONTEXT_BINDING_FIELDS, ROLE_MAP
         from src.vorming.human_annotation_v1 import TYPE_CORE_FIELDS
@@ -374,9 +382,27 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <section id="annotation-save-conflict" hidden><h3>Je werk en de opgeslagen versie verschillen</h3><p>Je aanwijzingen blijven hier staan. Vergelijk ze met de opgeslagen versie voordat je kiest wat je behoudt.</p><details><summary>Mijn huidige werk</summary><pre id="annotation-local-work"></pre></details><a id="annotation-server-work" target="_blank" rel="noopener">Bekijk opgeslagen versie in een nieuw venster</a></section>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button>
 <div class="annotation-task-actions"><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Opslaan en naar volgend kennisobject</button><button class="btn-secondary" type="button" id="annotation-finish" hidden>Opslaan en bronselectie beëindigen</button><button class="btn-primary" type="button" id="annotation-rebuild" hidden>Kennisobject opnieuw bouwen</button></div>
-</fieldset></aside></div>
+</fieldset>
+<section id="annotation-saved" aria-labelledby="annotation-saved-heading">
+<h2 id="annotation-saved-heading">Opgeslagen annotaties</h2>
+<p id="annotation-saved-summary" role="status" aria-live="polite">De opgeslagen annotaties worden geladen.</p>
+<ol id="annotation-saved-list"></ol>
+<p id="annotation-saved-notice" role="status" hidden></p>
+<p><a id="annotation-saved-build" hidden>Opbouw bekijken</a></p>
+<p><a id="annotation-saved-overview" href="/annotations?'''+esc(urlencode({'document':document,'overview':'true'}))+'''" hidden>Bronselectie beëindigen en document controleren</a></p>
+</section></aside></div>
 <script type="application/json" id="annotation-data">'''+data+'''</script><script type="module" src="/annotations/editor.js"></script>'''
         css = '''<style>
+#annotation-saved{margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--line)}
+#annotation-saved-list{list-style:none;padding:0;margin:.75rem 0;max-height:15rem;overflow:auto;scroll-padding:.5rem}
+#annotation-saved-list li{margin:0;padding:.75rem .25rem;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+#annotation-saved-list a{display:block;min-height:2.75rem;align-content:center;text-underline-offset:.2em}
+#annotation-saved-list a[aria-current]{font-weight:700}
+#annotation-saved-list a:focus-visible,#annotation-saved-overview:focus-visible{outline:2px solid var(--paars);outline-offset:2px}
+#annotation-saved-list a[aria-disabled=true],#annotation-saved-overview[aria-disabled=true]{opacity:.65}
+.annotation-saved-status,.annotation-saved-detail{display:block;font-size:.9rem;line-height:1.5}
+.annotation-saved-status{font-weight:600}.annotation-saved-detail{color:var(--muted)}
+#annotation-saved-overview,#annotation-saved-build{display:inline-block;min-height:2.75rem;align-content:center}
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
 #annotation-editor-inputs{min-width:0;margin:0;padding:0;border:0}
 .annotation-document{position:relative;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;max-height:calc(100vh - 8rem);overflow:auto}
@@ -571,7 +597,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     @app.get('/annotations/api')
     def get(request: Request, document: str):
         actor = require(request)
-        return JSONResponse(domain.overview(console,actor_id=actor['account_id'],snapshot_id=document),headers={'Cache-Control':'no-store'})
+        return JSONResponse(editor_state(actor, document),headers={'Cache-Control':'no-store'})
 
     @app.get('/annotations/check')
     def check(request: Request, document: str, annotation: str):
