@@ -30,6 +30,8 @@ import {bindRange} from '/annotations/binding.mjs';
       'Niet: voorwaarden of doelgroep. Die horen bij Hoort erbij.','Geen onderbouwing in de bron? Laat de regel leeg; de reviewer beoordeelt dat.'],
   };
   const helpOpen=new Set();
+  const savedRows=new Map();
+  let savedBindings=state.object_bindings || {},buildPhase=state.current_build,buildNotice='';
   // Signals a worker can act on, shown in the row they are about.
   const leaning=new Set(['supported_object_missing','condition_target_missing','exception_target_missing','annotation_relation_target_missing','no_independent_claim']);
   const broken=new Set(['incomplete_sentence','recommendation_core_incomplete']);
@@ -266,6 +268,80 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     renderRows();
     renderMenu();
+    renderSavedAnnotations();
+  }
+
+  // Only acknowledged versions belong here. The active card may contain newer, unsaved work.
+  function renderSavedAnnotations() {
+    const entries=state.entries.filter(item=>item.revision>0 && item.status!=='withdrawn' && !item.disposition &&
+      (item.ranges.some(range=>range.role==='core') || item.pending_range));
+    const list=el('saved-list'),ids=new Set(entries.map(item=>item.annotation_id));
+    for(const [id,row] of savedRows) if(!ids.has(id)) {row.remove();savedRows.delete(id);}
+    entries.forEach((item,index)=>{
+      const id=item.annotation_id,binding=savedBindings[id],changed=id===entry.annotation_id && dirty!==committed;
+      let label='Opgeslagen',detail='Nog niet gebouwd voor Review.';
+      if(changed) {label='Nog aanpassen';detail='Wijzigingen nog niet opgeslagen; de opgeslagen versie is bewaard.';}
+      else if(item.status!=='ready') {label='Nog aanpassen';detail='Concept opgeslagen.';}
+      else if(binding && !binding.pending) {label='Beschikbaar voor Review';detail='Kennisobject opgebouwd.';}
+      else if(buildPhase?.state==='running') {label='Wordt gebouwd';detail='Annotatie opgeslagen.';}
+      else if(binding?.pending) {label='Nog aanpassen';detail='Aanpassing opgeslagen; opnieuw bouwen.';}
+      let row=savedRows.get(id);
+      if(!row) {
+        row=document.createElement('li');row.dataset.annotationId=id;
+        const link=document.createElement('a'),status=document.createElement('span'),note=document.createElement('span');
+        status.className='annotation-saved-status';note.className='annotation-saved-detail';
+        link.addEventListener('click',async event=>{
+          if(event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          if(finalizing || saving || checking || deriving || rebuilding) return;
+          try {await flush();window.location.assign(link.href);}
+          catch(error) {el('status').textContent=error.message;}
+        });
+        row.append(link,status,note);savedRows.set(id,row);
+      }
+      const [link,status,note]=row.children;
+      const text=item.ranges.filter(range=>range.role==='core').map(range=>range.quote).join(' ') || item.pending_range?.quote || 'Uitspraak nog aanvullen';
+      const chars=Array.from(text),excerpt=chars.slice(0,100).join('')+(chars.length>100 ? '…' : '');
+      link.textContent=excerpt;link.setAttribute('aria-label','Opgeslagen annotatie openen: '+excerpt);
+      link.href='/annotations?'+new URLSearchParams({document:state.snapshot_id,annotation:id})+'#annotation-controls';
+      if(id===entry.annotation_id) link.setAttribute('aria-current','true');else link.removeAttribute('aria-current');
+      link.setAttribute('aria-disabled',String(finalizing || saving || checking || deriving || rebuilding));
+      status.textContent=label;note.textContent=detail;
+      if(list.children[index]!==row) list.insertBefore(row,list.children[index] || null);
+    });
+    el('saved-summary').textContent=entries.length ? entries.length+' '+(entries.length===1 ? 'annotatie opgeslagen.' : 'annotaties opgeslagen.') :
+      'Nog geen annotaties opgeslagen. Je opgeslagen uitspraken verschijnen hier.';
+    const notice=buildNotice || (buildPhase && !['running','succeeded'].includes(buildPhase.state) ?
+      'De laatste opbouw is gestopt. Je opgeslagen annotaties zijn bewaard. Controleer het documentoverzicht.' : '');
+    el('saved-notice').textContent=notice;el('saved-notice').hidden=!notice;
+    el('saved-overview').hidden=!entries.length;
+    el('saved-overview').setAttribute('aria-disabled',String(finalizing || saving || checking || deriving || rebuilding));
+    el('saved-build').hidden=!buildPhase;
+    if(buildPhase) el('saved-build').href='/annotations/build?'+new URLSearchParams({document:state.snapshot_id,attempt:buildPhase.attempt_id});
+  }
+
+  // Refresh only the read-side list during a known build. Never change the active editor's CAS basis.
+  async function refreshSavedBuild() {
+    if(buildPhase?.state!=='running') return;
+    try {
+      const response=await fetch('/annotations/build/api?'+new URLSearchParams({document:state.snapshot_id,attempt:buildPhase.attempt_id}),{cache:'no-store'});
+      if(!response.ok) throw new Error();
+      const progress=await response.json();
+      buildNotice='';
+      if(progress.state!=='running') {
+        const completed=await fetch('/annotations/api?'+new URLSearchParams({document:state.snapshot_id}),{cache:'no-store'});
+        if(!completed.ok) throw new Error();
+        const view=await completed.json();
+        if(view.generation===state.generation) {
+          savedBindings=view.object_bindings || {};buildPhase=view.current_build;
+        } else if(view.generation>state.generation) {
+          buildNotice='De opgeslagen annotaties zijn elders gewijzigd. Herlaad de pagina voor de actuele voortgang.';
+          renderSavedAnnotations();return;
+        }
+      }
+    } catch(_) {buildNotice='De voortgang kon niet worden opgehaald. De laatst bevestigde opslag blijft zichtbaar; probeer Opbouw bekijken.';}
+    renderSavedAnnotations();
+    if(buildPhase?.state==='running') setTimeout(refreshSavedBuild,2000);
   }
   // ---- The menu at the selection. It sits in the scrolling document next to the selected text, so it scrolls with
   // it; it comes right after the source block, so Tab reaches it from a keyboard selection.
@@ -647,6 +723,7 @@ import {bindRange} from '/annotations/binding.mjs';
           entry.revision = data.revision; state.generation = data.generation;
           if (data.objects_revision) state.objects_revision = data.objects_revision;
           if (built() && data.revision > body.expected_revision) built().pending = true;
+          if (savedBindings[entry.annotation_id] && data.revision > body.expected_revision) savedBindings[entry.annotation_id].pending = true;
           // Only the sent snapshot is committed; edits made during fetch remain dirty.
           const saved = {...clone(entry),...body.selection,revision:data.revision};
           const index = state.entries.findIndex(e => e.annotation_id === entry.annotation_id);
@@ -722,11 +799,16 @@ import {bindRange} from '/annotations/binding.mjs';
   el('ready').addEventListener('click',async()=>{
     if(await saveCard()) {load('');status('Opgeslagen. Selecteer de volgende uitspraak.');}
   });
-  el('finish').addEventListener('click',async()=>{
+  async function finishSourceSelection() {
+    if(finalizing || saving || checking || deriving || rebuilding) return;
     if(hasCore() || selected) {if(await saveCard()) toOverview();return;}
     // An object that holds nothing is not left behind to block the document.
     if(entry.revision) {await discardObject();if(entry.revision) return;}
     toOverview();
+  }
+  el('finish').addEventListener('click',finishSourceSelection);
+  el('saved-overview').addEventListener('click',event=>{
+    event.preventDefault();finishSourceSelection().catch(error=>status(error.message));
   });
   const changedSinceBuild = () => !!built()?.pending || dirty!==committed || entry.status!=='ready';
   el('rebuild').addEventListener('click',async()=>{
@@ -768,4 +850,5 @@ import {bindRange} from '/annotations/binding.mjs';
   el('editor-inputs').disabled=false;
   el('initializing').hidden=true;
   status(loadedStatus());
+  if(buildPhase?.state==='running') setTimeout(refreshSavedBuild,2000);
 })();

@@ -1,0 +1,15 @@
+{
+  "savedAcrossNextAndReload": true,
+  "keyboardReopen": true,
+  "failedSaveKeepsReceipt": true,
+  "withdrawal": true,
+  "documentCheck": true,
+  "runningBuild": true,
+  "failedPollPreservesList": true,
+  "completedBuild": true,
+  "widths": [
+    1440,
+    390
+  ],
+  "errors": []
+}

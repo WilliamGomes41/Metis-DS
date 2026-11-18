@@ -20,7 +20,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
  const sid=new URL(page.url()).searchParams.get('document');
  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
- await page.getByText('Wijs een eigen uitspraak aan:',{exact:false}).waitFor();
+ await page.locator('.annotation-instruction summary').click();await page.getByText('Wijs een eigen uitspraak aan:',{exact:false}).waitFor();await page.locator('.annotation-instruction summary').click();
  const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
  const current=async()=>(await read()).entries.find(e=>e.annotation_id===new URL(page.url()).searchParams.get('annotation'));
  const row=key=>page.locator('#annotation-simple-rows dd[data-row='+key+']');

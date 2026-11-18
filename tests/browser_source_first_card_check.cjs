@@ -228,7 +228,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.screenshot({path:output+'/card-mobile.png',fullPage:true});
  await page.setViewportSize({width:1440,height:1000});
  // Ending source selection saves and opens the document check, where the next phase starts.
- await page.locator('#annotation-finish:enabled').click();
+ await page.locator('#annotation-saved-overview').click();
  await page.waitForURL(u=>u.searchParams.get('overview')==='true');
  // Text that is no statement is accounted for in the document check, where it shows up, not in the card.
  const gap=page.locator('.annotation-gap').filter({has:page.locator('q',{hasText:/^Smetten$/})});
