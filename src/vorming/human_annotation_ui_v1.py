@@ -212,11 +212,14 @@ def source_document_html(blocks):
 
 def install(app, console, require, page, nav, esc, *, dispatcher):
     def editor_state(actor, document):
-        view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document)
+        # Build state first: a build read as running keeps the editor polling, so
+        # annotations read afterwards are never older than a build shown as finished.
         from src.vorming.human_annotation_build_v1 import latest_build
         with console.workflow_document_store._connect() as con:
             con.read_only = True
-            view['current_build'] = latest_build(con, document)
+            current_build = latest_build(con, document)
+        view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document)
+        view['current_build'] = current_build
         return view
 
     @app.get('/annotations', response_class=HTMLResponse)
