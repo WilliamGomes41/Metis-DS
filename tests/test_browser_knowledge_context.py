@@ -36,6 +36,7 @@ import pytest
     ('tests.browser_review_disposition_fixture', 'browser_review_disposition_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_guided_annotation_check.cjs'),
     ('tests.browser_annotation_suggestions_fixture', 'browser_annotation_suggestions_check.cjs'),
+    ('tests.browser_annotation_suggestions_fixture', 'browser_one_offer_check.cjs'),
     ('tests.browser_annotation_suggestions_fixture', 'browser_source_first_card_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_annotation_source_selection_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_annotation_binding_check.cjs'),
@@ -71,6 +72,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                            env=env, cwd=root, check=True, timeout=90)
             expected_screenshots = {'browser_annotation_suggestions_check.cjs':7,
                                     'browser_source_first_card_check.cjs':7,
+                                    'browser_one_offer_check.cjs':2,
                                     'browser_annotation_source_selection_check.cjs':4,
                                     'browser_annotation_binding_check.cjs':2,
                                     'browser_annotation_source_progress_check.cjs':2,

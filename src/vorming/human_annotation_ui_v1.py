@@ -364,6 +364,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
+<section id="annotation-offer" aria-label="Voorstel van Metis" hidden>
+<p id="annotation-offer-message" role="status"></p><dl id="annotation-offer-ranges"></dl>
+<button type="button" class="btn-primary" id="annotation-take-offer" hidden>Overnemen</button>
+<button type="button" class="btn-secondary" id="annotation-skip-offer" hidden>Zelf selecteren</button></section>
 <fieldset id="annotation-editor-inputs" aria-label="Annotatie bewerken" disabled>
 <p id="annotation-status" role="status" aria-live="polite"></p>
 <section id="annotation-simple" aria-labelledby="annotation-simple-heading"><h3 id="annotation-simple-heading" tabindex="-1">Selecteer de uitspraak in de bron</h3>
@@ -590,10 +594,14 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             'Metis kon een onderdeel van deze uitspraak niet vaststellen.')} for code in result.pop('signals')]
         return JSONResponse(result, headers={'Cache-Control':'no-store'})
 
+    @app.post('/annotations/passage-offer')
     @app.post('/annotations/suggest')
     async def suggest(request: Request):
         from starlette.concurrency import run_in_threadpool
-        from src.vorming.human_annotation_suggestion_v1 import suggest as propose
+        if request.url.path.endswith('/passage-offer'):
+            from src.vorming.human_annotation_passage_offer import suggest as propose
+        else:
+            from src.vorming.human_annotation_suggestion_v1 import suggest as propose
         actor = require(request)
         try:
             body = await request.json()

@@ -371,6 +371,13 @@ import {bindRange} from '/annotations/binding.mjs';
       else {dt.dataset.row=key;dd.dataset.row=key;}
       text.textContent=label;name.className='annotation-row-name';name.append(text);dt.append(name);
       if(HELP[key]) explain(name,dd,key,label);
+      if(adoptedCard===entry.annotation_id && !kind && !deriving) {
+        sign(dt,'+','Brontekst toevoegen aan '+label,()=>{
+          if(selected) {add(key==='belongs' ? 'context' : key);return;}
+          status('Selecteer tekst in de bron en kies '+label+'.');
+          sourceElements.get(entry.ranges[0]?.block_id)?.focus();
+        });
+      }
       if(kind && kindBox.parentNode===dd) for(const child of [...dd.childNodes]) if(child!==kindBox) dd.insertBefore(child,kindBox);
       build(dd);
       if(kind) {if(!dt.isConnected) rows.append(dt,dd);beforeType=null;}
@@ -464,7 +471,7 @@ import {bindRange} from '/annotations/binding.mjs';
       }
     }
     // A proposal is marked apart: exact source text that is not linked yet.
-    for (const proposal of entry ? openProposals() : []) {
+    for (const proposal of [...(entry ? openProposals() : []), ...offerRanges]) {
       if (!ranges.has(proposal.block_id)) ranges.set(proposal.block_id,[]);
       ranges.get(proposal.block_id).push({...proposal,proposal:true});
     }
@@ -494,6 +501,7 @@ import {bindRange} from '/annotations/binding.mjs';
     }
   }
   function captureSelection(value) {
+    dismissOffer();
     // A selection made while Metis reads the statement waits; it must not make that answer stale.
     if(deriving) {queued=value;renderCard();return;}
     selected=value;lostSelection='';
@@ -720,7 +728,10 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   const toOverview = () => { window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); };
   el('ready').addEventListener('click',async()=>{
-    if(await saveCard()) {load('');status('Opgeslagen. Selecteer de volgende uitspraak.');}
+    if(await saveCard()) {
+      const focus=entry.ranges.find(a=>a.role==='core')?.block_id;
+      load('');status('Opgeslagen. Selecteer de volgende uitspraak.');requestOffer(focus);
+    }
   });
   el('finish').addEventListener('click',async()=>{
     if(hasCore() || selected) {if(await saveCard()) toOverview();return;}
@@ -746,7 +757,60 @@ import {bindRange} from '/annotations/binding.mjs';
   });
 
   // ---- Loading a statement's card.
+  let offerRanges=[], offerRequest=null, adoptedCard=null;
+  function dismissOffer() {
+    offerRequest?.abort();
+    offerRequest=null;
+    const highlighted=offerRanges.length;
+    offerRanges=[];
+    el('offer').hidden=true;
+    if(highlighted) renderSourceHighlights();
+  }
+  async function requestOffer(focus) {
+    dismissOffer();
+    if(entry.revision || selected || hasCore()) return;
+    const controller=new AbortController(), basis=suggestionBasis(), id=entry.annotation_id;
+    offerRequest=controller;
+    el('offer').hidden=false;
+    el('offer-message').textContent='Metis zoekt een uitspraak…';
+    el('offer-ranges').replaceChildren();
+    el('take-offer').hidden=true;
+    el('skip-offer').hidden=false;
+    try {
+      const response=await fetch('/annotations/passage-offer',{method:'POST',signal:controller.signal,
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot_id:state.snapshot_id,focus:focus || null,basis})});
+      if(!response.ok) throw Error();
+      const {ranges}=await response.json();
+      if(controller.signal.aborted || entry.annotation_id!==id || selected || dirty!==0 ||
+          JSON.stringify(basis)!==JSON.stringify(suggestionBasis())) return;
+      offerRanges=ranges;
+      const labels={core:'Uitspraak',context:'Hoort erbij',evidence:'Onderbouwing'};
+      for(const range of ranges) {
+        const title=document.createElement('dt'),quote=document.createElement('dd');
+        title.textContent=labels[range.role];quote.textContent=literal(range);
+        el('offer-ranges').append(title,quote);
+      }
+      el('offer-message').textContent=ranges.length ? 'Voorstel van Metis' : 'Geen voorstel gevonden. Selecteer zelf een uitspraak.';
+      el('take-offer').hidden=!ranges.length;
+      el('skip-offer').hidden=!ranges.length;
+      renderSourceHighlights();
+    } catch(error) {
+      if(controller.signal.aborted) return;
+      el('offer-message').textContent='Voorstel niet beschikbaar. Selecteer zelf een uitspraak.';
+      el('skip-offer').hidden=true;
+    }
+  }
+  el('skip-offer').addEventListener('click',()=>{dismissOffer();status('Selecteer zelf een uitspraak.');});
+  el('take-offer').addEventListener('click',async()=>{
+    if(!offerRanges.length || hasCore() || selected || entry.revision) return;
+    let draft=entry;
+    for(const range of offerRanges)
+      draft=bindRange(draft,range,{role:range.role,evidenceFunction:'supported_by'},fieldContract).entry;
+    dismissOffer();adoptedCard=draft.annotation_id;entry=draft;resetFields();change();render();
+    await derive();
+  });
   function load(id) {
+    dismissOffer();
     const saved = state.entries.find(e => e.annotation_id === id);
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
@@ -768,4 +832,5 @@ import {bindRange} from '/annotations/binding.mjs';
   el('editor-inputs').disabled=false;
   el('initializing').hidden=true;
   status(loadedStatus());
+  if(!entry.revision) requestOffer(state.blocks.find(b=>location.hash==='#'+b.block_id)?.block_id);
 })();
