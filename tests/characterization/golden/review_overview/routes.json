@@ -103,6 +103,12 @@
       ]
     ],
     [
+      "/annotations/passage-offer",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/rebuild",
       [
         "POST"

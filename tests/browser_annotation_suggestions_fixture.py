@@ -8,6 +8,20 @@ from tests.test_annotation_suggestions import proposal, provider
 
 
 def controlled_transport(url, headers, payload, limits):
+    if payload['text']['format']['name'] == 'one_source_statement':
+        window = json.loads(payload['input'][1]['content'])
+        blocks = window['blocks']
+        if not any(b['text'] == 'Tijdens de ochtendronde.' for b in blocks):
+            return provider({'ranges': []})
+        covered = {a['block_id'] for a in window['covered']}
+        def anchor(block, role):
+            return {'block_id':block['block_id'], 'quote':block['text'], 'role':role}
+        core = next((b for b in blocks if b['block_id'] not in covered and
+                     b['text'].startswith(('Het zorgplan','Controleer de huid'))), None)
+        ranges = [anchor(core,'core')] if core else []
+        if core and core['text'].startswith('Het zorgplan'):
+            ranges.extend(anchor(b, role) for b,role in zip(blocks[2:], ('context','evidence')))
+        return provider({'ranges': ranges})
     selected = json.loads(payload['input'][1]['content'])['selected']
     text = selected[0]['text']
     time.sleep(1)
