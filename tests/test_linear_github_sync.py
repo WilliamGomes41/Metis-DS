@@ -29,6 +29,18 @@ def test_incident_pr_handoff_is_supported_by_repository_bindings():
     assert sync.Binding(974, "MET-48") in bindings
 
 
+def test_meaning_reliability_design_has_valid_work_package_handoff():
+    """The design and PR handoff must resolve to the same repository binding."""
+    bindings = sync.load_bindings()
+    assert sync.Binding(1098, "MET-109") in bindings
+    body = "Part of MET-109.\n" + handoff(linear_issue="MET-109")
+    sync.validate_pr_handoff(body, SHA, bindings)
+    design = (Path(__file__).resolve().parents[1]
+              / "docs/change-contracts/1098-betekenisbetrouwbaarheid.md").read_text()
+    assert "https://github.com/WilliamGomes41/Metis-DS/issues/1098" in design
+    assert "https://linear.app/metis-phoenix/issue/MET-109/" in design
+
+
 class GitHub:
     def __init__(self):
         self.issue = {"number": 729, "state": "open", "html_url": sync.REPO_URL + "/issues/729", "body": ""}
