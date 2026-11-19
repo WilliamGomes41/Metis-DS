@@ -2436,6 +2436,40 @@ def _source_category_tiles(source_usage: dict[str, dict[str, Any]]) -> str:
             + '</ul>')
 
 
+def _render_document_coverage(snapshot_id, coverage):
+    if coverage is None:
+        return ""
+    heading = ('<section class="review-section" aria-labelledby="document-coverage-heading" '
+               'data-document-coverage><h3 id="document-coverage-heading">Documenttoets</h3>'
+               f'<p>{_esc(coverage["scope"])}</p>')
+    if coverage["status"] == "unavailable":
+        return heading + '<p>De gecontroleerde bronextractie is niet beschikbaar.</p></section>'
+    kinds = {"recommendation": "Aanbeveling", "condition": "Voorwaarde", "exception": "Uitzondering"}
+    statuses = {"covered": "Gedekt", "partial": "Gedeeltelijk gedekt",
+                "missing": "Ontbreekt", "excluded": "Gemotiveerd uitgesloten"}
+    formation = "/source-selection?" + urlencode({"document": snapshot_id})
+    rows = []
+    for finding in coverage["findings"]:
+        status = finding["status"]
+        kind = finding["kind"]
+        hrefs = []
+        if status != "covered":
+            for number, object_id in enumerate(finding["source_object_ids"], 1):
+                query = urlencode({"document": snapshot_id, "object": object_id, "task": "disposition"})
+                label = "Bronafhandeling bekijken" if len(finding["source_object_ids"]) == 1 else f"Bronafhandeling {number} bekijken"
+                hrefs.append(f'<a href="{_esc("/source-selection?" + query)}">{label}</a>')
+            if not hrefs:
+                hrefs.append(f'<a href="{_esc(formation)}">Bekijk bronwerk in Vorming</a>')
+        reason = f'<p>{_esc(finding["reason"])}</p>' if finding["reason"] else ""
+        action = f'<p>{" · ".join(hrefs)}</p>' if hrefs else ""
+        line = finding["location"].split(";", 1)[0].removeprefix("lines:").split("-")[0]
+        rows.append(f'<li data-coverage-kind="{kind}" data-coverage-status="{status}">'
+                    f'<strong>{kinds[kind]} · {statuses[status]}</strong>'
+                    f'<p>{_esc(finding["text"])}</p><p class="muted">Bronregel {_esc(line)}</p>'
+                    f'{reason}{action}</li>')
+    return heading + '<ul class="object-index">' + "".join(rows) + '</ul></section>'
+
+
 def _review_inventory(
     snapshot_id: str,
     objects: list[dict[str, Any]],
@@ -2449,12 +2483,18 @@ def _review_inventory(
     source_only: bool = False,
     edit_exclusions: bool = False,
     page: int = 1,
+    coverage_envelope=None,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
     from src.vorming.source_containers_v1 import source_accountability, partition
     from src.review.review_duty_v1 import review_repair_duties
     from src.review.knowledge_object_state_v1 import is_knowledge_object
     projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    coverage_html = ""
+    if coverage_envelope is not None and review_path == "richtlijn":
+        from src.review.document_coverage_v1 import assess
+        coverage_html = _render_document_coverage(snapshot_id,
+            assess(coverage_envelope, objects, snapshot_revision, fragments, projection))
     followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     followup_tasks = {
         str(obj["object_id"]): name
@@ -2719,7 +2759,7 @@ def _review_inventory(
         title += f" ({len(selected)})"
     panel_class = "review-blocked-audit" if task == "repair" else "review-passage-inventory"
     return (
-        f'<section class="{panel_class}">'
+        coverage_html + f'<section class="{panel_class}">'
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
         + f'<p>{"Op deze pagina: " if navigation else ""}{len(items)} overige passages; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
@@ -2949,13 +2989,15 @@ def _render_review_index(
     page: int = 1,
     console: OperationsConsole | None = None,
     batch_selection=None,
+    coverage_envelope=None,
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
     if task in {"inventory", "disposition", "waiting", "repair"}:
         return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
                                  bindings=bindings, reviewer_id=reviewer_id, task=task,
-                                 snapshot_revision=snapshot_revision, fragments=fragments, page=page)
+                                 snapshot_revision=snapshot_revision, fragments=fragments, page=page,
+                                 coverage_envelope=coverage_envelope if task == "inventory" else None)
     if task in {"", "contextual", "batch", "second_review"}:
         # This existing renderer owns all presentations of the one content task.
         routes = None
@@ -3434,6 +3476,7 @@ def _render_review_room(
                 bindings=bindings,
                 reviewer_id=reviewer_id, fragments=fragments,
                 page=queue_page, console=console, batch_selection=batch_selection,
+                coverage_envelope=chosen_row,
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
