@@ -496,7 +496,7 @@ def historical_finding(payload):
     return None
 
 
-def _validate_historical_links(payload, annotation_id):
+def _validate_historical_links(payload, annotation_id, blocks):
     links = payload['required_links']
     if (payload.get('selection_version') != 'human-annotation-input-v2'
             or not isinstance(links, list) or len(links) > 256):
@@ -514,6 +514,15 @@ def _validate_historical_links(payload, annotation_id):
                 or (role != 'evidence' and link['evidence_function'] is not None)):
             fail('annotation_integrity_failed')
         _validate_relationship_id(key, role, annotation_id)
+        _, _, block_id, start, end = json.loads(key.removeprefix('link-v1:'))
+        block = blocks.get(block_id)
+        if block is None:
+            fail('annotation_representation_stale')
+        if end > len(block['text']):
+            fail('annotation_anchor_invalid')
+        boundaries = {0, *(match.end() for match in regex.finditer(r'\X', block['text']))}
+        if start not in boundaries or end not in boundaries:
+            fail('annotation_grapheme_boundary_invalid')
         if key in seen or (key in bound and (essential or bound[key].get('required_for_meaning'))):
             fail('annotation_relationship_duplicate')
         seen.add(key)
@@ -529,7 +538,7 @@ def validate_historical_display(payload, *, fragments, annotation_id):
     """Validate the source and current-format fields of a read-only historical row."""
     selection = deepcopy(payload)
     if 'required_links' in selection:
-        _validate_historical_links(payload, annotation_id)
+        _validate_historical_links(payload, annotation_id, {b['block_id']: b for b in semantic_source_blocks(fragments)})
         del selection['required_links']
     anchors = list(selection['ranges'])
     if selection.get('pending_range'):
