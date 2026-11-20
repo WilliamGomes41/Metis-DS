@@ -53,12 +53,25 @@ const assert=require('node:assert/strict');
   await page.locator('#annotation-simple-type-select').selectOption('recommendation');
   const condition=page.locator('[data-source-block]').filter({hasText:'Alleen bij klachten.'});
   const blockId=await condition.getAttribute('data-source-block');
-  await tasks.addAs(page,condition,'Alleen bij klachten.','context');
+  // The card renders the edit before autosave commits it. Wait for the POST
+  // that actually includes this context before reading the saved annotation.
+  const [contextSave]=await Promise.all([
+   page.waitForResponse(response=>{
+    const request=response.request();
+    if(request.method()!=='POST' || new URL(response.url()).pathname!=='/annotations/api') return false;
+    return request.postDataJSON().selection.ranges.some(range=>range.role==='context' && range.block_id===blockId);
+   }),
+   tasks.addAs(page,condition,'Alleen bij klachten.','context'),
+  ]);
+  assert.equal(contextSave.ok(),true,'The selected context must save successfully');
   await row('belongs').getByText('Alleen bij klachten.',{exact:true}).waitFor();
   const read=()=>page.evaluate(async sid=>{const r=await fetch('/annotations/api?document='+sid);if(!r.ok)throw Error('read failed');return r.json();},sid);
-  await page.waitForFunction(async sid=>((await (await fetch('/annotations/api?document='+sid)).json()).entries[0]?.ranges||[]).length===2,sid);
-  const entry=(await read()).entries[0];
+  const annotationId=contextSave.request().postDataJSON().annotation_id;
+  const entry=(await read()).entries.find(item=>item.annotation_id===annotationId);
+  assert.ok(entry,'The annotation acknowledged by autosave must be readable');
+  assert.equal(entry.ranges.length,2);
   const added=entry.ranges.find(r=>r.role==='context');
+  assert.ok(added,'The saved annotation must contain context');
   assert.deepEqual({block_id:added.block_id,start:added.start,end:added.end},{block_id:blockId,start:0,end:Array.from('Alleen bij klachten.').length});
   assert.equal('required_for_meaning' in added,false);
   assert.equal(entry.pending_range,null);
