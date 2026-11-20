@@ -18,8 +18,8 @@ Dit bestand is het ontwerp. Het bevat geen code, geen workflowwijziging en geen 
 | Browserscripts | 32 bestanden `tests/browser_*.cjs`, gestart als subprocess door een pytest-test (bijvoorbeeld `tests/test_browser_deploy_check.py`). Daarnaast de losse scripts `scripts/probe_section.cjs` en `scripts/view_check.cjs`. |
 | Launch | De scripts roepen `chromium.launch({executablePath: process.env.METIS_BROWSER_EXECUTABLE, headless: true})` zelf aan. Er is geen gedeelde helper en geen enkele `tracing`- of `recordHar`-aanroep in `tests/` en `scripts/`. |
 | Uitvoermap | `METIS_BROWSER_OUTPUT` wijst naar de `tmp_path` van de test. De job `browser` in `.github/workflows/ci.yml` draait pytest met `--junitxml=output/browser.xml --basetemp="$RUNNER_TEMP/metis-browser-proof"` en uploadt `output/browser.xml` plus die basetemp als artifact `review-browser-desktop-mobile` met `if: always()`. Bestanden die een script in `METIS_BROWSER_OUTPUT` schrijft, gaan dus zonder workflowwijziging mee. |
-| Bewaartermijn | Die upload-stap zet geen `retention-days`; de GitHub-standaard geldt (90 dagen volgens de aanleiding van het voorstel). Een andere job in dezelfde workflow zet `retention-days: 30`. |
-| Bestaand gebruik van sessie en video | `browser_ko4_transitions_check.cjs` en `browser_deploy_check.cjs` (twee van de drie scripts van PR 1) geven met `storageState: await context.storageState()` een in-memory sessie door aan een tweede context binnen dezelfde run; `browser_ko3_readiness_check.cjs`, `browser_metis_explained_check.cjs` en `browser_annotation_source_selection_check.cjs` doen dat ook. `recordVideo` staat in `browser_ko4_transitions_check.cjs` en `browser_ko3_readiness_check.cjs`; in ko4 is dat opt-in met `METIS_KO4_VIDEO=1`, dat CI niet zet. Alleen `scripts/probe_section.cjs` leest `storageState` uit een bestandspad (`METIS_PROBE_STORAGE_STATE`). |
+| Bewaartermijn | Die upload-stap zet geen `retention-days`; de GitHub-standaard voor artifacts geldt (90 dagen). PR 1 MOET dit bij de start nalezen met `gh api`. Een andere job in dezelfde workflow zet `retention-days: 30`. |
+| Bestaand gebruik van sessie en video | `browser_ko4_transitions_check.cjs` en `browser_deploy_check.cjs` (twee van de drie scripts van PR 1) geven met `storageState: await context.storageState()` een in-memory sessie door aan een tweede context binnen dezelfde run; `browser_metis_explained_check.cjs` en `browser_annotation_source_selection_check.cjs` doen dat ook. `recordVideo` staat voorwaardelijk in `browser_ko4_transitions_check.cjs` (opt-in met `METIS_KO4_VIDEO=1`, dat CI niet zet) en in `browser_ko3_readiness_check.cjs` (opt-in met `METIS_KO3_VIDEO=1`). Alleen `scripts/probe_section.cjs` leest `storageState` uit een bestandspad (`METIS_PROBE_STORAGE_STATE`). |
 | Accounts in de proeven | Fixture-servers (`tests/browser_*_fixture.py`) leveren via `/browser-manifest` synthetische logins, bijvoorbeeld `{'author': 'author', 'reviewer': 'reviewer', 'password': 'fixture-only'}`. De scripts loggen daarmee in op een loopback-uvicorn. |
 | Required checks | `test (3.12)`, `test (3.13)` en `handoff-contract` (`config/github_merge_policy.v1.json`, ruleset G1 main). |
 | Zichtbaarheid | De repository is publiek. Een artifact is voor elke ingelogde GitHub-gebruiker te downloaden. |
@@ -38,7 +38,7 @@ Dit bestand is het ontwerp. Het bevat geen code, geen workflowwijziging en geen 
 flowchart TD
     A["pytest browsertest"] --> B["node tests/browser_*.cjs"]
     B --> C["tests/browser_evidence.cjs (PR 1, nieuw)"]
-    C -->|"alleen loopback, geen storageState/HAR/video"| D["Chromium + tracing"]
+    C -->|"alleen loopback, geen storageState-bestand, geen HAR"| D["Chromium + tracing"]
     D -->|"script slaagt"| E["trace weggegooid, niets op schijf"]
     D -->|"script faalt"| F["trace.zip + scan op cookies/geheimen"]
     F -->|"schoon en kleiner dan cap"| G["METIS_BROWSER_OUTPUT/evidence/"]
