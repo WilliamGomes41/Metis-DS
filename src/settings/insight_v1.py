@@ -85,7 +85,11 @@ _DIAGNOSIS_STYLE = """<style>
 .diagnosis-card { border:1px solid var(--line); border-radius:8px; padding:12px 16px; min-width:0; }
 .diagnosis-summary { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
 .diagnosis-summary dd { margin:0; }
+.diagnosis-attempt-evidence dt { font-weight:600; }
+.diagnosis-attempt-evidence dd { margin:0 0 10px; }
+.document-diagnosis #bewijs { scroll-margin-top:6rem; }
 @media (max-width:640px) {
+  .document-diagnosis #bewijs { scroll-margin-top:18rem; }
   .diagnosis-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
   .diagnosis-table, .diagnosis-table tbody, .diagnosis-table tr, .diagnosis-table th, .diagnosis-table td { display:block; width:auto; }
   .diagnosis-table tr { border-bottom:1px solid var(--line); padding:8px 0; }
@@ -292,6 +296,71 @@ def _diagnosis_coverage_html(objects: list[dict]) -> str:
     return ('<details><summary>Controleoverzicht per kop</summary>'
             '<table class="diagnosis-coverage diagnosis-table"><caption>Status van de passages per kop van de bron</caption>'
             f'<thead><tr><th scope="col">Kop</th>{head}</tr></thead><tbody>{body}</tbody></table></details>')
+
+def _attempt_evidence_html(envelope: dict, document: str, *, attempt: str | None,
+                           origin_request: str | None) -> tuple[str, str]:
+    from src.vorming.processing_trace_v1 import MAX_ATTEMPTS, attempt_id, select_processing_attempt, timestamp
+
+    selection = select_processing_attempt(envelope, attempt=attempt, origin_request=origin_request)
+    selected = selection.get("attempt") or {}
+    selected_id = selected.get("attempt_id")
+    options = []
+    for row in reversed((envelope.get("processing_attempts") or [])[-MAX_ATTEMPTS:]):
+        value = attempt_id(row.get("attempt_id")) if isinstance(row, dict) else None
+        if value is None:
+            continue
+        started = timestamp(row.get("started_at")) or "Tijd niet vastgelegd"
+        selected_attr = " selected" if value == selected_id else ""
+        options.append(f'<option value="{value}"{selected_attr}>{escape(started)} · {value[-8:]}</option>')
+    hidden = f'<input type="hidden" name="document" value="{escape(document, quote=True)}">'
+    controls = ""
+    if options:
+        placeholder = '<option value="" disabled selected>Kies een poging</option>' if not selected_id else ""
+        controls = f'''<form method="get" action="/inzicht/document#bewijs">{hidden}
+          <label>Verwerkingspoging <select name="attempt" required>{placeholder}{"".join(options)}</select></label>
+          <button type="submit" class="btn-secondary">Bekijk poging</button></form>
+          <details><summary>Zoeken op verzoek-ID</summary>
+            <form method="get" action="/inzicht/document#bewijs">{hidden}
+              <label>Oorspronkelijk verzoek-ID <input name="origin_request" type="text" required
+                minlength="32" maxlength="32" pattern="[0-9a-f]{{32}}"></label>
+              <button type="submit" class="btn-secondary">Zoek poging</button></form>
+          </details>'''
+    if selected:
+        rows = (
+            ("Poging-ID", selected_id),
+            ("Oorspronkelijk verzoek-ID", selected.get("origin_request_id")),
+            ("Verwachte bronrevisie (SHA-256)", selected.get("expected_revision_sha256")),
+            ("Gereserveerd contract (SHA-256)", selected.get("reserved_contract_sha256")),
+            ("Gebruikt contract (SHA-256)", selected.get("executed_contract_sha256")),
+        )
+        details = "".join(
+            f'<dt>{escape(label)}</dt><dd>{f"<code>{escape(value)}</code>" if value else "Niet vastgelegd"}</dd>'
+            for label, value in rows)
+        contract = selected.get("executed_contract_version")
+        version = (f'<details><summary>Volledige versie van het gebruikte contract</summary>'
+                   f'<p><code>{escape(contract)}</code></p></details>' if contract else "")
+        evidence = f'<dl class="diagnosis-attempt-evidence">{details}</dl>{version}'
+    else:
+        reason = {
+            "empty": "Er is geen verwerkingspoging vastgelegd.",
+            "invalid_selector": "Kies een poging of vul één geldig oorspronkelijk verzoek-ID in.",
+            "ambiguous": "Meer dan één poging komt overeen. Kies de poging uit de lijst.",
+            "history_truncated": "De beschikbare poginghistorie is begrensd. Deze selectie kan niet worden vastgesteld.",
+            "not_found": "Voor dit document is geen poging gevonden met deze selectie.",
+        }[selection["status"]]
+        evidence = f'<p role="status">{escape(reason)}</p>'
+    params = {"document": document}
+    if selected_id:
+        params["attempt"] = selected_id
+    elif attempt is not None or origin_request is not None:
+        # Do not place unvalidated selector input in page links.
+        from src.section_incident_v1 import identifier
+        if attempt_id(attempt):
+            params["attempt"] = attempt
+        if identifier(origin_request):
+            params["origin_request"] = origin_request
+    return f'<div class="diagnosis-card"><h3>Bewijs per verwerkingspoging</h3>{controls}{evidence}</div>', urlencode(params)
+
 
 def _authorized_documents(state, account, documents) -> list[dict[str, Any]]:
     """Processing scope plus publishers' existing publication document list."""
@@ -528,7 +597,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         return HTMLResponse(html, headers=_HEADERS)
 
     @app.get("/inzicht/document", response_class=HTMLResponse)
-    def document_diagnosis(request: Request, document: str = "") -> HTMLResponse:
+    def document_diagnosis(request: Request, document: str = "", attempt: str | None = None,
+                           origin_request: str | None = None) -> HTMLResponse:
         from src.review.domain_dimensions_v1 import processing_issue_objects
         from src.operations_console_app import ERROR_COPY
         from src.vorming.processing_diagnostics_v1 import processing_diagnostics
@@ -573,7 +643,12 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         pages_html += _source_pages_html(envelope, diagnostic, document) if processing_access else ""
         passages = '<p>Passagediagnostiek en passage-exports zijn beschikbaar voor de aangewezen reviewer.</p>'
         passage_exports = ""
-        source_exports = (f'<li><a href="/inzicht/document/verwerkingsspoor?{query}">Verwerkingsspoor (JSON)</a></li>'
+        attempt_card, attempt_query = (_attempt_evidence_html(envelope, document, attempt=attempt,
+                                                               origin_request=origin_request)
+                                       if processing_access else ("", ""))
+        source_exports = (f'<li><a href="/inzicht/document/verwerkingsspoor?{escape(attempt_query, quote=True)}">'
+                          f'Verwerkingsspoor (JSON)</a></li>'
+                          f'<li><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></li>'
                           if processing_access else "")
         publication_export = (f'<li><a href="/inzicht/document/publicatiebewijs?{query}">Publicatiebewijs (JSON)</a></li>'
                               if "publisher" in roles else "")
@@ -619,6 +694,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 f'<dt>{escape(name)}</dt><dd><code>{escape(str(diagnostic[key]))}</code></dd>'
                 for key, name in (("outcome", "Uitkomst laatste poging"), ("reason_code", "Reden laatste poging"),
                                   ("recovery_advice", "Advies laatste poging")) if diagnostic.get(key))
+            retry_not_before = str(processing.get("retry_not_before") or "niet van toepassing")
+            retry_row = f"<dt>Nieuwe poging vanaf</dt><dd>{escape(retry_not_before)}</dd>"
             verdict = f'''<div class="diagnosis-verdict"{' data-state="blocked"' if label == "Niet publiceerbaar" else ""} role="status">
               <p class="diagnosis-label">{_diagnosis_icon(label)} {escape(label)}</p>
               <p class="lead">{escape(ERROR_COPY.get(blocking_code, "Controleer de actuele verwerking."))}</p>
@@ -626,7 +703,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <dl class="diagnosis-facts">{facts_html}</dl>{review_button}
               <details><summary>Technische details</summary><dl class="diagnosis-summary">
                 <dt>Status</dt><dd><code>{escape(str(processing.get("state") or "niet vastgelegd"))}</code></dd>
-                <dt>Code</dt><dd><code>{escape(str(code))}</code></dd>{attempt_rows}</dl></details></div>'''
+                <dt>Code</dt><dd><code>{escape(str(code))}</code></dd>{attempt_rows}{retry_row}</dl></details></div>'''
             processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
           {_diagnosis_steps_html(processing, blocking_code, progress, diagnostics, diagnostic, admission_blocked=admission_blocked)}
           <section id="acties"><h2>Wat er nu moet gebeuren</h2>
@@ -635,12 +712,6 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             processing_html = ('<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>'
                                '<div class="diagnosis-verdict" role="status"><p class="diagnosis-label">Geen verwerkingsinzage</p>'
                                '<p>Verwerkingsdiagnostiek is beschikbaar voor onderzoekers en aangewezen reviewers.</p></div></section>')
-        attempt_card = (f'''<div class="diagnosis-card"><h3>Laatste verwerkingspoging</h3><dl class="diagnosis-summary">
-              <dt>Opgeslagen pogingen</dt><dd>{len(attempts)}</dd>
-              <dt>Bronversie</dt><dd>{escape(str(envelope.get("version") or ""))}</dd>
-              <dt>Nieuwe poging vanaf</dt><dd>{escape(str(processing.get("retry_not_before") or "niet van toepassing"))}</dd></dl>
-              <p><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></p></div>'''
-                        if processing_access else "")
         from src.settings.view_check import panel as view_check_panel
         view_checks = view_check_panel(app, state, account, document, request.query_params.get('attempt', ''))
         body = f'''{nav(account, "settings")}{_DIAGNOSIS_STYLE}<section class="room document-diagnosis">

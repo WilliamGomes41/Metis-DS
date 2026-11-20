@@ -718,13 +718,19 @@ def install(app, console, require, page, nav, esc):
                                 status_code=303, headers={'Cache-Control': 'no-store'})
 
     @app.get('/inzicht/document/verwerkingsspoor')
-    def processing_trace_export(request: Request, document: str = ''):
+    def processing_trace_export(request: Request, document: str = '', attempt: str | None = None,
+                                origin_request: str | None = None):
         from src.vorming.source_selection_v1 import authorize
-        from src.vorming.processing_trace_v1 import processing_trace
+        from src.vorming.processing_trace_v1 import processing_trace, select_processing_attempt
         actor = require(request)
         envelope = console._envelope(document)
         authorize(console, actor['account_id'], envelope)
-        return JSONResponse(processing_trace(envelope), headers={'Cache-Control': 'no-store',
+        trace = processing_trace(envelope)
+        if attempt is not None or origin_request is not None:
+            selection = select_processing_attempt(envelope, attempt=attempt, origin_request=origin_request)
+            trace['selection'] = {'status': selection['status'],
+                                  'attempt_id': (selection.get('attempt') or {}).get('attempt_id')}
+        return JSONResponse(trace, headers={'Cache-Control': 'no-store',
             'Content-Disposition': 'attachment; filename=processing-trace.json'})
 
     @app.get('/inzicht/document/publicatiebewijs')

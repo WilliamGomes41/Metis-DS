@@ -93,7 +93,15 @@ def test_diagnosis_roles_keep_processing_passages_and_publication_evidence_separ
         assert other.get('/inzicht/document/' + path, params={'document': sid}).status_code == 400
     assert publisher_client.get('/inzicht/document/publicatiebewijs', params={'document': sid}).status_code == 200
     assert reviewer.get('/inzicht/document/publicatiebewijs', params={'document': sid}).status_code == 403
-    assert publisher_client.get('/inzicht/document/verwerkingsspoor', params={'document': sid}).status_code == 403
+    selection = {'document': sid, 'attempt': 'pa_' + 'a' * 32}
+    assert publisher_client.get('/inzicht/document/verwerkingsspoor', params=selection).status_code == 403
+    assert other.get('/inzicht/document/verwerkingsspoor', params=selection).status_code == 400
+    assert other.get('/inzicht/document', params=selection).status_code == 400
+    missing_attempt = reviewer.get('/inzicht/document', params=selection)
+    assert missing_attempt.status_code == 200
+    assert 'Voor dit document is geen poging gevonden met deze selectie.' in missing_attempt.text
+    export = reviewer.get('/inzicht/document/verwerkingsspoor', params=selection).json()
+    assert export['selection'] == {'status': 'not_found', 'attempt_id': None}
 
 
 @pytest.mark.parametrize(('old', 'new'), [
