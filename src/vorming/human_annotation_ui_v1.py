@@ -29,6 +29,8 @@ SOURCE_LABELS={'document_metadata':'Documentgegevens','page_furniture':'Kop- of 
     'navigation':'Navigatie','document_structure':'Kop of documentstructuur',
     'unformed_meaning':'Nog niet tot een uitspraak gevormd','uncertain_source_role':'Bronfunctie nog onzeker'}
 ERRORS = {
+    domain.HISTORICAL_NEUTRAL:'Deze eerdere annotatieversie heeft een oud opslagformaat. Controleer de selectie en sla de annotatie opnieuw op.',
+    domain.HISTORICAL_DECISION:'Deze annotatie is opgeslagen in een eerder formaat. Je kunt haar bekijken in het documentoverzicht. Omzetten is nodig voordat je haar kunt wijzigen of het document kunt afsluiten.',
     'annotation_core_duplicate':'Deze kernbereiken horen al bij een andere annotatie. Verwijder het dubbele kernbereik of wijs andere kernbereiken aan om dit concept te bewaren. De oorspronkelijke annotatie blijft bewaard.',
     'annotation_objects_stale':'De objectversie of beoordeling is gewijzigd. Open de opgeslagen annotatie opnieuw; je huidige aanwijzingen blijven hier zichtbaar.',
     'annotation_revision_storage_not_ready':'Broncorrecties kunnen nog niet worden opgeslagen. Laat de beheerder de annotatieopslag bijwerken; de huidige versie blijft bewaard.',
@@ -227,6 +229,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document)
             if build_state() == before:
                 view['current_build'] = before
+                for entry in view.get('entries', ()):
+                    finding = domain.historical_finding(entry)
+                    if finding:
+                        entry['historical_finding'] = finding
                 return view
         domain.fail('annotation_overview_stale')
 
@@ -293,7 +299,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         if overview:
             items = []
             for entry in state['entries']:
-                if entry['status']=='withdrawn':
+                historical = domain.historical_finding(entry)
+                if entry['status']=='withdrawn' and not historical:
                     continue
                 spans = ''.join('<li><strong>'+escape(LABELS[a['role']])+ (' — verklaart' if a['evidence_function']=='explains' else ' — onderbouwt' if a['evidence_function']=='supported_by' else '')+'</strong>'+
                     ': '+escape(a['quote'])+' <a href="'+escape(back+'#'+a['block_id'],quote=True)+'">Open in bron</a></li>' for a in entry['ranges'])
@@ -309,18 +316,45 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     literal = by_id[span['block_id']]['text'][span['start']:span['end']]
                     fields.append('<li>'+escape(FIELD_LABELS[field])+': '+escape(literal)+'</li>')
                 heading=('Brongebruik: '+SOURCE_LABELS.get(entry['disposition']['reason'],'Functie nog kiezen')) if entry.get('disposition') else TYPES.get(entry['object_type'],'Type nog kiezen')
-                items.append('<article class="object"><h3>'+escape(heading)+'</h3><p>'+escape(missing)+'</p><ul>'+spans+'</ul>'+
+                if historical:
+                    details = ['Eerdere annotatieversie' + (' (teruggenomen)' if entry['status']=='withdrawn' else '')]
+                    historical_ranges = [*entry['ranges'], *([entry['pending_range']] if entry.get('pending_range') else [])]
+                    for anchor in historical_ranges:
+                        if anchor.get('required_for_meaning') is True:
+                            details.append('Als essentieel aangemerkt: '+anchor['quote'])
+                    for link in entry.get('required_links', []):
+                        _, role, block_id, start, end = json.loads(link['relationship_id'].removeprefix('link-v1:'))
+                        block = by_id.get(block_id)
+                        passage = block['text'][start:end] if block and end <= len(block['text']) else ''
+                        label = LABELS[role] + (' — '+passage if passage else ' — oorspronkelijke passage niet beschikbaar')
+                        if link['required_for_meaning']:
+                            details.append('Eerder als essentieel vastgelegd: '+label)
+                        else:
+                            details.extend(['Teruggenomen verband: '+label, 'Reden voor terugname: '+link['withdrawal_reason']])
+                    action = ''.join('<p>'+esc(detail)+'</p>' for detail in details)
+                    if historical == domain.HISTORICAL_NEUTRAL:
+                        action += '<a href="'+esc(back+'&annotation='+entry['annotation_id'])+'">Selectie controleren en opslaan</a>'
+                    article_id = ' id="historisch-'+esc(entry['annotation_id'])+'"'
+                else:
+                    action = '<a href="'+escape(back+'&annotation='+entry['annotation_id'],quote=True)+'">Deze annotatie aanpassen</a>'
+                    article_id = ''
+                items.append('<article class="object"'+article_id+'><h3>'+escape(heading)+'</h3><p>'+escape(missing)+'</p><ul>'+spans+'</ul>'+
                     ('<p>Aangewezen betekenisvelden</p><ul>'+''.join(fields)+'</ul>' if fields else '')+
-                    ('<p>Onderbouwing: expliciet niet van toepassing.</p>' if entry['evidence_not_applicable'] else '')+
-                    '<a href="'+escape(back+'&annotation='+entry['annotation_id'],quote=True)+'">Deze annotatie aanpassen</a></article>')
+                    ('<p>Onderbouwing: expliciet niet van toepassing.</p>' if entry['evidence_not_applicable'] else '')+action+'</article>')
             body = intro + (''.join(items) or '<p>Er zijn nog geen selecties opgeslagen.</p>')
             inspection = state['inspection']
             if inspection['findings']:
-                body += '<section aria-labelledby="annotation-findings"><h2 id="annotation-findings">Nog controleren vóór afsluiten</h2><ul>'
+                body += '<section aria-labelledby="annotation-findings"><h2 id="annotation-findings">Nog controleren vóór afsluiten</h2>'
+                if any(f['code'] in {domain.HISTORICAL_NEUTRAL, domain.HISTORICAL_DECISION} for f in inspection['findings']):
+                    body += '<p>Na omzetting van de eerdere annotaties kan Metis de dekking van het hele document controleren.</p>'
+                body += '<ul>'
                 for finding in inspection['findings']:
                     target = back + ('&annotation='+finding['annotation_id'] if finding['annotation_id'] else '')
                     body += '<li>'+esc(FINDINGS.get(finding['code'], 'Controleer de aangewezen betekenisvelden en hun bronbereiken.'))
-                    body += ' <a href="'+esc(target)+'">Aanpassen in de bron</a>'
+                    if finding['code'] in {domain.HISTORICAL_NEUTRAL, domain.HISTORICAL_DECISION}:
+                        body += ' <a href="#historisch-'+esc(finding['annotation_id'])+'">Bekijk de eerdere annotatie</a>'
+                    else:
+                        body += ' <a href="'+esc(target)+'">Aanpassen in de bron</a>'
                     for related in finding.get('related_annotation_ids', []):
                         body += ' · <a href="'+esc(back+'&annotation='+related)+'">Andere annotatie met dezelfde kern</a>'
                     body += '</li>'
@@ -395,6 +429,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <p id="annotation-suggestion-note" role="status" aria-live="polite"></p>
 <p id="annotation-conflict" hidden><a id="annotation-conflict-link" target="_blank" rel="noopener">Bestaande annotatie openen in een nieuw venster</a></p>
 <section id="annotation-save-conflict" hidden><h3>Je werk en de opgeslagen versie verschillen</h3><p>Je aanwijzingen blijven hier staan. Vergelijk ze met de opgeslagen versie voordat je kiest wat je behoudt.</p><details><summary>Mijn huidige werk</summary><pre id="annotation-local-work"></pre></details><a id="annotation-server-work" target="_blank" rel="noopener">Bekijk opgeslagen versie in een nieuw venster</a></section>
+<button class="btn-secondary" type="button" id="annotation-save-current-format" hidden>Gecontroleerde selectie opnieuw opslaan</button>
 <button class="btn-secondary" type="button" id="annotation-retry" hidden>Opslaan opnieuw proberen</button>
 <div class="annotation-task-actions"><button class="btn-primary" type="button" id="annotation-ready" hidden disabled>Opslaan en naar volgend kennisobject</button><button class="btn-secondary" type="button" id="annotation-finish" hidden>Opslaan en bronselectie beëindigen</button><button class="btn-primary" type="button" id="annotation-rebuild" hidden>Kennisobject opnieuw bouwen</button></div>
 </fieldset>
@@ -695,7 +730,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             result = domain.save(console,actor_id=actor['account_id'],**body)
         except ConsoleError as exc:
             code = exc.code
-            status = 409 if code in {'annotation_write_conflict','annotation_command_conflict','annotation_representation_stale','annotation_client_contract_stale','annotation_objects_stale'} else 422
+            status = 409 if code in {'annotation_write_conflict','annotation_command_conflict','annotation_representation_stale','annotation_client_contract_stale','annotation_objects_stale','annotation_historical_read_only'} else 422
             if code in {'not_authenticated','researcher_role_required','reviewer_not_named_on_snapshot'}:
                 status = 403
             detail = {'error':code,'message':ERRORS.get(code,'Opslaan is niet gelukt. Controleer de bronselectie en probeer opnieuw.')}

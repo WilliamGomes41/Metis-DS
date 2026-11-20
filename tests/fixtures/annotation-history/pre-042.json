@@ -1,0 +1,116 @@
+{
+  "empty_v2": {
+    "annotation_id": "00000000-0000-4000-8000-000000000112",
+    "revision": 1,
+    "payload": {
+      "status": "draft",
+      "object_type": null,
+      "ranges": [],
+      "pending_range": null,
+      "evidence_not_applicable": false,
+      "required_links": [],
+      "selection_version": "human-annotation-input-v2"
+    },
+    "payload_hash": "8396aed170ba4b7f10d07bd020f31674e7123725a93e522ace77b495accee95f"
+  },
+  "pending": {
+    "annotation_id": "00000000-0000-4000-8000-000000000112",
+    "revision": 1,
+    "payload": {
+      "status": "draft",
+      "object_type": null,
+      "ranges": [],
+      "pending_range": {
+        "block_id": "semblock-1b8e7b5b3fa92846559f",
+        "start": 0,
+        "end": 17,
+        "role": "core",
+        "required_for_meaning": false,
+        "evidence_function": null,
+        "quote_sha256": "2954dbac2071c2ef73599a4687dbd1708861b2a465bbf9e63603ad4232f5bb82"
+      },
+      "evidence_not_applicable": false
+    },
+    "payload_hash": "77c0fe8aa3e5f5c063a66f50792a0a014c66828cee971105cdcf66f4c6aa5cb7"
+  },
+  "essential": {
+    "annotation_id": "00000000-0000-4000-8000-000000000112",
+    "revision": 1,
+    "payload": {
+      "status": "draft",
+      "object_type": null,
+      "ranges": [
+        {
+          "block_id": "semblock-1b8e7b5b3fa92846559f",
+          "start": 0,
+          "end": 17,
+          "role": "core",
+          "required_for_meaning": false,
+          "evidence_function": null,
+          "quote_sha256": "2954dbac2071c2ef73599a4687dbd1708861b2a465bbf9e63603ad4232f5bb82"
+        },
+        {
+          "block_id": "semblock-e8784f15d4aa151d1d22",
+          "start": 0,
+          "end": 16,
+          "role": "condition",
+          "required_for_meaning": true,
+          "evidence_function": null,
+          "quote_sha256": "08d1a7938a09bd99a63544132004806bc1a654de34e78a6afd5b379cec291074",
+          "relationship_id": "link-v1:[\"00000000-0000-4000-8000-000000000112\",\"condition\",\"semblock-e8784f15d4aa151d1d22\",0,16]"
+        }
+      ],
+      "pending_range": null,
+      "evidence_not_applicable": false,
+      "required_links": [],
+      "selection_version": "human-annotation-input-v2"
+    },
+    "payload_hash": "9d2387ed62db95f9b83924b037eb6797629c9ef471be0e94d81e4af2f008c84f"
+  },
+  "withdrawal": {
+    "annotation_id": "00000000-0000-4000-8000-000000000112",
+    "revision": 1,
+    "payload": {
+      "status": "draft",
+      "object_type": null,
+      "ranges": [
+        {
+          "block_id": "semblock-1b8e7b5b3fa92846559f",
+          "start": 0,
+          "end": 17,
+          "role": "core",
+          "required_for_meaning": false,
+          "evidence_function": null,
+          "quote_sha256": "2954dbac2071c2ef73599a4687dbd1708861b2a465bbf9e63603ad4232f5bb82"
+        }
+      ],
+      "pending_range": null,
+      "evidence_not_applicable": false,
+      "required_links": [
+        {
+          "relationship_id": "link-v1:[\"00000000-0000-4000-8000-000000000112\",\"condition\",\"semblock-e8784f15d4aa151d1d22\",0,16]",
+          "role": "condition",
+          "evidence_function": null,
+          "required_for_meaning": false,
+          "withdrawal_reason": "Deze voorwaarde hoorde bij een andere uitspraak."
+        }
+      ],
+      "selection_version": "human-annotation-input-v2"
+    },
+    "payload_hash": "cd7ece361c1d7a7cacb96f5ef17cffd184b9bfb1a9b4bf46b781fdf82db1c098"
+  },
+  "withdrawn": {
+    "annotation_id": "00000000-0000-4000-8000-000000000112",
+    "revision": 1,
+    "payload": {
+      "status": "withdrawn",
+      "object_type": null,
+      "ranges": [],
+      "pending_range": null,
+      "evidence_not_applicable": false,
+      "required_links": [],
+      "selection_version": "human-annotation-input-v2"
+    },
+    "payload_hash": "a5163a6b4414ddcad4771d2dce99de776361531104133ba3cca4e0028cbfecca"
+  }
+}

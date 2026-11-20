@@ -9,7 +9,7 @@ from copy import deepcopy
 from src.integrity_kernel import stable_hash
 from src.vorming.admission_gate_v1 import literal_field_codes
 from src.vorming.human_annotation_projection_v1 import bind_context, bind_fields
-from src.vorming.human_annotation_v1 import validate_stored_selection
+from src.vorming.human_annotation_v1 import historical_finding, validate_historical_display, validate_stored_selection
 from src.vorming.knowledge_materialisation_v1 import resolve_source_selection
 from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from src.vorming.source_accountability_v1 import uncovered_ranges, validate_assessments
@@ -122,6 +122,30 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
     if signals is not None:
         signals.extend(found)
     return blocking
+
+
+def inspect_for_overview(entries, *, fragments):
+    """Preview historical heads without making them eligible for a new seal."""
+    current, historical = [], []
+    for entry in entries:
+        code = historical_finding(entry['payload'])
+        if code is None:
+            current.append(entry)
+            continue
+        if stable_hash(entry['payload']) != entry['payload_hash']:
+            raise ValueError('annotation_integrity_failed')
+        validate_historical_display(entry['payload'], fragments=fragments, annotation_id=entry['annotation_id'])
+        historical.append((entry, code))
+
+    result = inspect_document(current, fragments=fragments)
+    if historical:
+        # Coverage of the current subset cannot establish gaps in this document.
+        result['findings'] = [f for f in result['findings'] if f['code'] != 'annotation_source_unaccounted']
+        result['unaccounted_ranges'] = []
+        for entry, code in historical:
+            result['entries'].append({'annotation_id': entry['annotation_id'], 'revision': entry['revision'], 'codes':[code]})
+            result['findings'].append({'annotation_id': entry['annotation_id'], 'code': code})
+    return result
 
 
 def inspect_document(entries, *, fragments):
