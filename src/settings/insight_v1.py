@@ -85,7 +85,11 @@ _DIAGNOSIS_STYLE = """<style>
 .diagnosis-card { border:1px solid var(--line); border-radius:8px; padding:12px 16px; min-width:0; }
 .diagnosis-summary { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
 .diagnosis-summary dd { margin:0; }
+.diagnosis-attempt-evidence dt { font-weight:600; }
+.diagnosis-attempt-evidence dd { margin:0 0 10px; }
+.document-diagnosis #bewijs { scroll-margin-top:6rem; }
 @media (max-width:640px) {
+  .document-diagnosis #bewijs { scroll-margin-top:18rem; }
   .diagnosis-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
   .diagnosis-table, .diagnosis-table tbody, .diagnosis-table tr, .diagnosis-table th, .diagnosis-table td { display:block; width:auto; }
   .diagnosis-table tr { border-bottom:1px solid var(--line); padding:8px 0; }
@@ -335,7 +339,7 @@ def _attempt_evidence_html(envelope: dict, document: str, *, attempt: str | None
         contract = selected.get("semantic_contract_version")
         version = (f'<details><summary>Volledige versie van het gebruikte contract</summary>'
                    f'<p><code>{escape(contract)}</code></p></details>' if contract else "")
-        evidence = f'<dl class="diagnosis-summary">{details}</dl>{version}'
+        evidence = f'<dl class="diagnosis-attempt-evidence">{details}</dl>{version}'
     else:
         reason = {
             "empty": "Er is geen verwerkingspoging vastgelegd.",
