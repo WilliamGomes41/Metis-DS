@@ -412,6 +412,7 @@ import {bindRange} from '/annotations/binding.mjs';
     menu.style.left=Math.max(8,Math.min((rects[0] || last).left-box.left+host.scrollLeft,room))+'px';
   }
   function renderRows() {
+    el('save-current-format').hidden = entry.historical_finding !== 'annotation_historical_format';
     const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
     const done=entry.status==='ready' && dirty===committed && !built(),current=checkIsCurrent(),provisional=!core.length && !!selected;
     el('simple-heading').textContent=!core.length && !selected ? 'Selecteer de uitspraak in de bron' : done ? 'Klaar voor documentcontrole' : '';
@@ -733,6 +734,7 @@ import {bindRange} from '/annotations/binding.mjs';
           if (built() && data.revision > body.expected_revision) built().pending = true;
           if (savedBindings[entry.annotation_id] && data.revision > body.expected_revision) savedBindings[entry.annotation_id].pending = true;
           // Only the sent snapshot is committed; edits made during fetch remain dirty.
+          delete entry.historical_finding;
           const saved = {...clone(entry),...body.selection,revision:data.revision};
           const index = state.entries.findIndex(e => e.annotation_id === entry.annotation_id);
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
@@ -747,6 +749,11 @@ import {bindRange} from '/annotations/binding.mjs';
     })();
     try { await running; } finally { running = null; }
   }
+  el('save-current-format').addEventListener('click', async () => {
+    if (entry.historical_finding !== 'annotation_historical_format' || running || failed) return;
+    dirty += 1;
+    try { await flush(); await runCheck(); } catch { /* flush shows the server response */ }
+  });
   el('retry').addEventListener('click',() => { failed = false; el('retry').hidden = true; flush().catch(() => {}); });
 
   // ---- The check: one at a time. An edit made while a check is running invalidates that
@@ -894,6 +901,11 @@ import {bindRange} from '/annotations/binding.mjs';
   function load(id) {
     dismissOffer();
     const saved = state.entries.find(e => e.annotation_id === id);
+    if (saved?.historical_finding === 'annotation_historical_read_only') {
+      const query = new URLSearchParams({document:state.snapshot_id, overview:'true'});
+      window.location.assign('/annotations?' + query + '#historisch-' + encodeURIComponent(id));
+      return false;
+    }
     entry = saved ? clone(saved) : {annotation_id:crypto.randomUUID(),revision:0,status:'draft',object_type:null,ranges:[],evidence_not_applicable:false};
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
@@ -905,12 +917,13 @@ import {bindRange} from '/annotations/binding.mjs';
     el('conflict').hidden = true;
     render();
     if(hasCore()) runCheck();
+    return true;
   }
-  async function switchEntry(id) { await flush(); load(id); status(loadedStatus()); }
+  async function switchEntry(id) { await flush(); if (load(id)) status(loadedStatus()); }
   window.addEventListener('beforeunload',event => { if (dirty !== committed || running) { event.preventDefault(); event.returnValue = ''; } });
   // #1067: a browser that remembered the retired step form forgets it.
   try {localStorage.removeItem('metis-annotation-form');} catch(_) { /* nothing remembered */ }
-  load(new URLSearchParams(window.location.search).get('annotation'));
+  if (!load(new URLSearchParams(window.location.search).get('annotation'))) return;
   el('editor-inputs').disabled=false;
   el('initializing').hidden=true;
   status(loadedStatus());

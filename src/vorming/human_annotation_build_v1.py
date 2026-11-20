@@ -4,7 +4,7 @@ from copy import deepcopy
 from src.integrity_kernel import stable_hash
 from src.vorming import human_annotation_v1 as annotations
 from src.vorming.human_annotation_contract_v1 import MODE
-from src.vorming.human_annotation_preview_v1 import inspect_document
+from src.vorming.human_annotation_preview_v1 import inspect_for_overview
 from src.vorming.source_preparation_context_v1 import stored_extraction
 from src.workflows.processing_archives_v1 import encoded
 from src.workflows.workflow_transaction_v1 import workflow_transaction
@@ -105,7 +105,7 @@ def overview(console, *, actor_id, snapshot_id):
         annotations.fail('annotation_representation_stale')
     from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(fragments).fragments
-    inspection = inspect_document(entries, fragments=fragments)
+    inspection = inspect_for_overview(entries, fragments=fragments)
     # Display is the existing source reader. A concurrent save requires a new
     # overview; its entries may never be presented under this seal's hash.
     view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
