@@ -11,9 +11,11 @@ import asyncio
 import json
 from copy import deepcopy
 from datetime import timedelta
+from hashlib import sha256
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
+from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
 from src.vorming.processing_retry_v1 import now
@@ -25,7 +27,7 @@ from tests.test_d5_4_review_interaction_evidence import _system
 from tests.test_recommendation_context_v3 import response_for
 
 
-def setup_command(tmp_path, production_console, monkeypatch, request_hook=None):
+def setup_command(tmp_path, production_console, monkeypatch, request_hook=None, *, reserve=True):
     console, users, _, _ = _system(tmp_path, production_console=production_console)
     actor = users['researcher']['account_id']
     sid = console.receive_source(actor_id=actor, filename='handover.html', content_type='text/html',
@@ -46,13 +48,32 @@ def setup_command(tmp_path, production_console, monkeypatch, request_hook=None):
         bind_pre_review_semantic_processing(target, environ={'METIS_PASSAGE_FORMATION_MODE':MODE,
             'METIS_LLM_API_KEY':'fixture','METIS_LLM_MODEL':'test'}, post_json=provider)
     bind(console)
-    attempt, _ = console.reserve_source_selection(actor_id=actor, snapshot_id=sid, command_id='one-start',
-        expected_revision=console.objects_revision(sid))
+    attempt = None
+    if reserve:
+        attempt, _ = console.reserve_source_selection(actor_id=actor, snapshot_id=sid, command_id='one-start',
+            expected_revision=console.objects_revision(sid))
     return console, actor, sid, attempt, calls, bind
 
 
-def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_path, production_console, monkeypatch):
-    console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
+def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(
+        tmp_path, production_console, monkeypatch, *, production_app):
+    from src.telemetry.hub import HUB
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version
+    from src.vorming.processing_trace_v1 import select_processing_attempt
+    from tests.test_d5_4_review_interaction_evidence import PASSWORD
+
+    console, actor, sid, _, calls, bind = setup_command(tmp_path, production_console, monkeypatch, reserve=False)
+    monkeypatch.setattr(HUB, 'record', lambda payload: None)
+    client = TestClient(production_app(console), base_url='https://testserver')
+    assert client.post('/login', data={'username': 'researcher.d54', 'password': PASSWORD},
+                       follow_redirects=False).status_code == 303
+    with monkeypatch.context() as reservation:
+        reservation.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
+        response = client.post('/source-selection/start', data={'document': sid, 'command_id': 'one-start',
+            'expected_revision': console.objects_revision(sid)}, follow_redirects=False)
+    assert response.status_code == 303
+    origin_request = response.headers['x-metis-request-id']
+    attempt = console._envelope(sid)['processing_attempts'][-1]
     monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 0, raising=False)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     handed = console._envelope(sid)['processing_attempts'][-1]
@@ -85,6 +106,19 @@ def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_
         assert con.execute('SELECT result_hash,payload FROM workflow.formation_task_results WHERE result_hash=%s',
             (first['result_hash'],)).fetchone() == first
     assert len(final['quality_processing_runs']) == 1
+    assert final['processing_storage'] == 'task-v1'
+    selection = select_processing_attempt(final, attempt=done['attempt_id'])
+    assert selection['status'] == 'selected'
+    evidence = selection['attempt']
+    contract = semantic_contract_version(field_contract_v3=True)
+    assert evidence['executed_contract_sha256'] == sha256(contract.encode()).hexdigest()
+    assert evidence['expected_revision_sha256'] == sha256(attempt['expected_revision'].encode()).hexdigest()
+    assert evidence['origin_request_id'] == origin_request
+    assert select_processing_attempt(final, origin_request=origin_request) == selection
+    for selector in ({'attempt': done['attempt_id']}, {'origin_request': origin_request}):
+        trace = client.get('/inzicht/document/verwerkingsspoor', params={'document': sid, **selector})
+        assert trace.status_code == 200
+        assert trace.json()['selection'] == {'status': 'selected', 'attempt_id': done['attempt_id']}
 
 
 def test_lease_reclaim_fences_previous_checkpoint_failure_and_execution(tmp_path, production_console, monkeypatch):
