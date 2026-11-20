@@ -12,7 +12,7 @@ Touches lifecycle invariants: no
 
 ## Gegevens en selectie
 
-De workflow blijft eigenaar van poging, bronrevisie en geregistreerde contractversie. De pogingprojectie berekent SHA-256 over de volledige opgeslagen contractwaarde. Gereserveerd en uitgevoerd contract hebben eigen velden. Bij ontbrekend uitvoeringsbewijs blijft de status onbekend. Bij lange waarden blijft de digest beschikbaar wanneer het leesbare contract buiten de exportgrens valt. Er is geen migratie of nieuwe workflowwrite.
+De workflow blijft eigenaar van poging, bronrevisie en geregistreerde contractversie. De pogingprojectie berekent SHA-256 over de volledige opgeslagen contractwaarde. Gereserveerd en uitgevoerd contract hebben eigen velden. Bij ontbrekend uitvoeringsbewijs blijft de status onbekend. De bestaande grens van 512 tekens voor `semantic_contract_version` blijft gelden. Het aanvullende veld `executed_contract_version` toont maximaal 1024 tekens. De digest blijft beschikbaar bij langere canonieke waarden. Er is geen migratie of nieuwe workflowwrite.
 
 Documentdiagnose gebruikt het bestaande tabblad Documenten, binnen Bewijs en downloads. Zonder selector opent daar de recentste bewaarde poging. Met een selector vraagt de gebruiker exact één poging-ID of het oorspronkelijke verzoek-ID binnen het bevoegde document op. Bij een onbekende of dubbelzinnige selector volgt een expliciete melding. Bij afgekapt historiebewijs kan een uniek verzoek-ID niet worden bevestigd. Een exacte poging-ID binnen de beschikbare historie kan wel worden getoond.
 

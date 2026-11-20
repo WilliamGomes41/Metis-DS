@@ -108,7 +108,8 @@ def project_attempt(attempt):
         'extraction_checkpoint_hash': sha(mapping(diagnostic.get('extraction_checkpoint')).get('record_hash')),
         # Absent on legacy attempts: None, never backfilled or inferred.
         'stop_reason': choice(attempt.get('stop_reason'), {'done', 'budget_exhausted', 'error'}),
-        'semantic_contract_version': executed_contract if executed_contract and len(executed_contract) <= 2048 else None,
+        'semantic_contract_version': token(executed_contract, r'[A-Za-z0-9._/-]{1,512}'),
+        'executed_contract_version': token(executed_contract, r'[A-Za-z0-9._/-]{1,1024}'),
         'executed_contract_sha256': digest(executed_contract),
         'reserved_contract_sha256': digest(reserved_contract),
         'executed_contract_status': 'recorded' if executed_contract else 'unknown',
@@ -182,7 +183,8 @@ def clean_trace(raw):
             state=row.get('stored_state'), kind=row.get('kind'), source_hash=row.get('source_hash'),
             started_at=row.get('started_at'), expires_at=row.get('expires_at'), finished_at=row.get('finished_at'),
             error_code=row.get('error_code'), stop_reason=row.get('stop_reason'),
-            semantic_contract_version=row.get('semantic_contract_version'), dispatch={'state':row.get('dispatch_state'), 'claimed_at':row.get('claimed_at')},
+            semantic_contract_version=token(row.get('executed_contract_version'), r'[A-Za-z0-9._/-]{1,1024}')
+                or token(row.get('semantic_contract_version'), r'[A-Za-z0-9._/-]{1,512}'), dispatch={'state':row.get('dispatch_state'), 'claimed_at':row.get('claimed_at')},
             diagnostic={'origin_request_id':row.get('origin_request_id'), 'origin_runtime':row.get('origin_runtime'),
                 'execution_runtime':row.get('execution_runtime'), 'checkpoints':row.get('checkpoints') if isinstance(row.get('checkpoints'), list) else [],
                 'omitted_evidence':['omitted'] if row.get('diagnostic_evidence_omitted') is True else [],

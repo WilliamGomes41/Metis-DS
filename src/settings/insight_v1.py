@@ -336,7 +336,7 @@ def _attempt_evidence_html(envelope: dict, document: str, *, attempt: str | None
         details = "".join(
             f'<dt>{escape(label)}</dt><dd>{f"<code>{escape(value)}</code>" if value else "Niet vastgelegd"}</dd>'
             for label, value in rows)
-        contract = selected.get("semantic_contract_version")
+        contract = selected.get("executed_contract_version")
         version = (f'<details><summary>Volledige versie van het gebruikte contract</summary>'
                    f'<p><code>{escape(contract)}</code></p></details>' if contract else "")
         evidence = f'<dl class="diagnosis-attempt-evidence">{details}</dl>{version}'
@@ -648,7 +648,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                                        if processing_access else ("", ""))
         source_exports = (f'<li><a href="/inzicht/document/verwerkingsspoor?{escape(attempt_query, quote=True)}">'
                           f'Verwerkingsspoor (JSON)</a></li>'
-                          f'<li><a href="/inzicht/document/blokkade?{query}">Blokkade onderzoeken</a></li>'
+                          f'<li><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></li>'
                           if processing_access else "")
         publication_export = (f'<li><a href="/inzicht/document/publicatiebewijs?{query}">Publicatiebewijs (JSON)</a></li>'
                               if "publisher" in roles else "")
@@ -694,9 +694,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 f'<dt>{escape(name)}</dt><dd><code>{escape(str(diagnostic[key]))}</code></dd>'
                 for key, name in (("outcome", "Uitkomst laatste poging"), ("reason_code", "Reden laatste poging"),
                                   ("recovery_advice", "Advies laatste poging")) if diagnostic.get(key))
-            retry_not_before = processing.get("retry_not_before")
-            retry_row = (f"<dt>Nieuwe poging vanaf</dt><dd>{escape(str(retry_not_before))}</dd>"
-                         if retry_not_before else "")
+            retry_not_before = str(processing.get("retry_not_before") or "niet van toepassing")
+            retry_row = f"<dt>Nieuwe poging vanaf</dt><dd>{escape(retry_not_before)}</dd>"
             verdict = f'''<div class="diagnosis-verdict"{' data-state="blocked"' if label == "Niet publiceerbaar" else ""} role="status">
               <p class="diagnosis-label">{_diagnosis_icon(label)} {escape(label)}</p>
               <p class="lead">{escape(ERROR_COPY.get(blocking_code, "Controleer de actuele verwerking."))}</p>

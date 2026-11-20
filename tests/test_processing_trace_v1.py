@@ -21,6 +21,7 @@ def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tm
     actor, reviewer = accounts(console)
     bind(console, provider)
     sid = receive(console, actor, reviewer, 'trace')
+    other_sid = receive(console, actor, reviewer, 'trace-other')
     monkeypatch.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
     app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
@@ -49,6 +50,11 @@ def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tm
         assert trace['attempts'][0]['dispatch_state'] == 'pending'
         assert trace['domain_completion'] == 'not_assessed'
         assert 'private-command' not in json.dumps(trace)
+        for selector in ({'attempt': attempt['attempt_id']}, {'origin_request': request_id}):
+            response = client.get('/inzicht/document/verwerkingsspoor', params={'document': other_sid, **selector})
+            assert response.status_code == 200
+            assert response.json()['selection'] == {'status': 'not_found', 'attempt_id': None}
+            assert response.json()['attempts'] == []
         assert console._envelope(sid) == before
     restarted = restart(console)
     assert restarted._envelope(sid)['processing_attempts'] == [attempt]
@@ -365,6 +371,8 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         console.root, make_console=lambda: restart(console), production_console=production_console)
     before = state.snapshot_objects(sid)
     complete = next(o for o in before if o['content']['clean_text'] == FIRST)
+    from src.telemetry.hub import HUB
+    monkeypatch.setattr(HUB, 'record', lambda payload: None)
     initial = processing_trace(state._envelope(sid))
     assert initial['artifacts']['formation_incomplete'] is True
     current = make(); bind_semantics(current); mode['broken'] = False
@@ -381,15 +389,19 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         attempt = deepcopy(current._envelope(sid)['processing_attempts'][-1])
         assert attempt['kind'] == 'resume'
         current.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+        from src.review.review_ledger import read_events
         params = {'document': sid, 'origin_request': response.headers['x-metis-request-id']}
-        before_reads = deepcopy(current._envelope(sid)), current.objects_revision(sid)
+        def stored():
+            return deepcopy(current._envelope(sid)), current.objects_revision(sid), read_events(current._ledger_path)
+        before_reads = stored()
         trace = client.get('/inzicht/document/verwerkingsspoor', params=params).json()
         assert trace['selection'] == {'status': 'selected', 'attempt_id': attempt['attempt_id']}
         recorded = trace['attempts'][-1]
         from src.vorming.pre_review_semantic_v1 import semantic_contract_version
         contract = semantic_contract_version(field_contract_v3=True)
         contract_digest = sha256(contract.encode()).hexdigest()
-        assert recorded['semantic_contract_version'] == contract
+        assert recorded['executed_contract_version'] == contract
+        assert recorded['semantic_contract_version'] == (contract if len(contract) <= 512 else None)
         assert recorded['executed_contract_sha256'] == contract_digest
         assert recorded['origin_request_id'] == params['origin_request']
         assert recorded['stored_state'] == 'succeeded'
@@ -397,7 +409,14 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         assert diagnosis.status_code == 200
         assert contract_digest in diagnosis.text and recorded['expected_revision_sha256'] in diagnosis.text
         assert f'value="{attempt["attempt_id"]}" selected' in diagnosis.text
-        assert before_reads == (current._envelope(sid), current.objects_revision(sid))
+        # A caller's header must not override the exact query or supply a selector.
+        spoofed = {'X-Metis-Attempt-Id': 'pa_' + 'f' * 32}
+        exact = client.get('/inzicht/document/verwerkingsspoor',
+                           params={'document': sid, 'attempt': attempt['attempt_id']}, headers=spoofed).json()
+        assert exact['selection'] == trace['selection']
+        header_only = client.get('/inzicht/document/verwerkingsspoor', params={'document': sid}, headers=spoofed)
+        assert 'selection' not in header_only.json()
+        assert stored() == before_reads
         assert trace['artifacts']['semantic_identity_hash']
         # The last task's write time reaches the trace through the formation_accounted checkpoint.
         timings = trace['attempts'][-1]['formation_timings']
@@ -486,29 +505,51 @@ def test_cleaned_trace_keeps_planned_tasks_and_timings():
 
 @pytest.mark.pure_function
 def test_attempt_selection_uses_only_retained_document_evidence():
+    from src.settings.insight_v1 import _attempt_evidence_html
     from src.vorming.pre_review_semantic_v1 import semantic_contract_version
     from src.vorming.processing_trace_v1 import clean_trace, processing_trace, select_processing_attempt
 
     contract = semantic_contract_version(field_contract_v3=True)
-    executed = dict(recorded_attempt(), semantic_contract_version=contract)
+    executed = dict(recorded_attempt(), semantic_contract_version=contract,
+                    reserved_semantic_contract_version='older.reservation')
     legacy = dict(recorded_attempt(), attempt_id='pa_' + 'd' * 32,
                   reserved_semantic_contract_version=contract, diagnostic={'origin_request_id': 'e' * 32})
     envelope = {'processing_attempts': [executed, legacy]}
     trace = processing_trace(envelope)
     selected = select_processing_attempt(envelope, origin_request='c' * 32)
     assert selected['attempt'] == trace['attempts'][0]
-    assert selected['attempt']['semantic_contract_version'] == contract
+    assert len(contract) > 512
+    assert selected['attempt']['semantic_contract_version'] is None
+    assert selected['attempt']['executed_contract_version'] == contract
+    assert selected['attempt']['reserved_contract_sha256'] == sha256(b'older.reservation').hexdigest()
     assert selected['attempt']['executed_contract_sha256'] == sha256(contract.encode()).hexdigest()
-    assert clean_trace(trace)['attempts'][0]['executed_contract_sha256'] == selected['attempt']['executed_contract_sha256']
+    offline = clean_trace(trace)['attempts'][0]
+    assert offline['executed_contract_sha256'] == selected['attempt']['executed_contract_sha256']
+    assert offline['executed_contract_version'] == contract
+    assert offline['semantic_contract_version'] is None
     legacy_row = select_processing_attempt(envelope, attempt=legacy['attempt_id'])['attempt']
     assert legacy_row['executed_contract_status'] == 'unknown'
     assert legacy_row['executed_contract_sha256'] is None
     assert legacy_row['reserved_contract_sha256'] == selected['attempt']['executed_contract_sha256']
+    assert trace['attempts'][1]['executed_contract_version'] is None
+    html, _ = _attempt_evidence_html(envelope, 'document', attempt=legacy['attempt_id'], origin_request=None)
+    assert '<dt>Gebruikt contract (SHA-256)</dt><dd>Niet vastgelegd</dd>' in html
+    assert 'Volledige versie van het gebruikte contract' not in html
+    failed = dict(legacy, state='failed')
+    failed_row = processing_trace({'processing_attempts': [executed, failed]})['attempts'][1]
+    assert failed_row['executed_contract_status'] == 'unknown'
+    assert failed_row['executed_contract_version'] is None
+    assert failed_row['executed_contract_sha256'] is None
+    assert failed_row['reserved_contract_sha256'] == legacy_row['reserved_contract_sha256']
     assert select_processing_attempt(envelope, attempt='pa_' + 'f' * 32) == {'status': 'not_found'}
     assert select_processing_attempt(envelope, attempt=legacy['attempt_id'], origin_request='e' * 32) == {
         'status': 'invalid_selector'}
     legacy['diagnostic']['origin_request_id'] = 'c' * 32
     assert select_processing_attempt(envelope, origin_request='c' * 32) == {'status': 'ambiguous'}
+    html, _ = _attempt_evidence_html(envelope, 'document', attempt=None, origin_request='c' * 32)
+    assert 'Meer dan één poging komt overeen' in html
     envelope['processing_attempts'] = [executed] * 64 + [legacy]
     assert select_processing_attempt(envelope, origin_request='e' * 32) == {'status': 'history_truncated'}
+    html, _ = _attempt_evidence_html(envelope, 'document', attempt=None, origin_request='e' * 32)
+    assert 'De beschikbare poginghistorie is begrensd' in html
     assert select_processing_attempt(envelope, attempt=legacy['attempt_id'])['attempt']['attempt_id'] == legacy['attempt_id']
