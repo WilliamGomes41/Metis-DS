@@ -1,7 +1,9 @@
 # #1104 — V3-contractbewijs per poging in Inzicht
 
-Change class: B  
-Rewrite risk: none  
+Change class: B
+
+Rewrite risk: none
+
 Touches lifecycle invariants: no
 
 **Promise.** Vanuit de bestaande Documentdiagnose kan een bevoegde gebruiker de verwerkingspoging aanwijzen en de verwachte bronrevisie en gebruikte annotatieversie herleiden. Het bestaande JSON-verwerkingsspoor geeft dezelfde selectie en hetzelfde bewijs.
