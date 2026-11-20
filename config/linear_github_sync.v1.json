@@ -4,6 +4,10 @@
   "team_id": "2766ee91-9cc4-449b-92db-12ce6593d76a",
   "bindings": [
     {
+      "github_issue": 1104,
+      "linear_issue": "MET-111"
+    },
+    {
       "github_issue": 1098,
       "linear_issue": "MET-109"
     },
