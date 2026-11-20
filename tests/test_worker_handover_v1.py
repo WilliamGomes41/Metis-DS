@@ -11,6 +11,7 @@ import asyncio
 import json
 from copy import deepcopy
 from datetime import timedelta
+from hashlib import sha256
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -52,6 +53,8 @@ def setup_command(tmp_path, production_console, monkeypatch, request_hook=None):
 
 
 def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_path, production_console, monkeypatch):
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version
+    from src.vorming.processing_trace_v1 import select_processing_attempt
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 0, raising=False)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
@@ -85,6 +88,13 @@ def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_
         assert con.execute('SELECT result_hash,payload FROM workflow.formation_task_results WHERE result_hash=%s',
             (first['result_hash'],)).fetchone() == first
     assert len(final['quality_processing_runs']) == 1
+    assert final['processing_storage'] == 'task-v1'
+    selection = select_processing_attempt(final, attempt=done['attempt_id'])
+    assert selection['status'] == 'selected'
+    evidence = selection['attempt']
+    contract = semantic_contract_version(field_contract_v3=True)
+    assert evidence['executed_contract_sha256'] == sha256(contract.encode()).hexdigest()
+    assert evidence['expected_revision_sha256'] == sha256(attempt['expected_revision'].encode()).hexdigest()
 
 
 def test_lease_reclaim_fences_previous_checkpoint_failure_and_execution(tmp_path, production_console, monkeypatch):

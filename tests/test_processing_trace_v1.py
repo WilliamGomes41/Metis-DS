@@ -5,6 +5,7 @@
 """
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
+from hashlib import sha256
 import json
 
 import pytest
@@ -380,9 +381,23 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         attempt = deepcopy(current._envelope(sid)['processing_attempts'][-1])
         assert attempt['kind'] == 'resume'
         current.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
-        trace = client.get('/source-selection/processing-trace', params={'document':sid}).json()
-        assert trace['attempts'][-1]['origin_request_id'] == response.headers['x-metis-request-id']
-        assert trace['attempts'][-1]['stored_state'] == 'succeeded'
+        params = {'document': sid, 'origin_request': response.headers['x-metis-request-id']}
+        before_reads = deepcopy(current._envelope(sid)), current.objects_revision(sid)
+        trace = client.get('/inzicht/document/verwerkingsspoor', params=params).json()
+        assert trace['selection'] == {'status': 'selected', 'attempt_id': attempt['attempt_id']}
+        recorded = trace['attempts'][-1]
+        from src.vorming.pre_review_semantic_v1 import semantic_contract_version
+        contract = semantic_contract_version(field_contract_v3=True)
+        contract_digest = sha256(contract.encode()).hexdigest()
+        assert recorded['semantic_contract_version'] == contract
+        assert recorded['executed_contract_sha256'] == contract_digest
+        assert recorded['origin_request_id'] == params['origin_request']
+        assert recorded['stored_state'] == 'succeeded'
+        diagnosis = client.get('/inzicht/document', params=params)
+        assert diagnosis.status_code == 200
+        assert contract_digest in diagnosis.text and recorded['expected_revision_sha256'] in diagnosis.text
+        assert f'value="{attempt["attempt_id"]}" selected' in diagnosis.text
+        assert before_reads == (current._envelope(sid), current.objects_revision(sid))
         assert trace['artifacts']['semantic_identity_hash']
         # The last task's write time reaches the trace through the formation_accounted checkpoint.
         timings = trace['attempts'][-1]['formation_timings']
@@ -467,3 +482,33 @@ def test_cleaned_trace_keeps_planned_tasks_and_timings():
     cleaned = clean_trace(processing_trace(envelope))
     assert cleaned['artifacts']['formation_progress']['planned_task_count'] == 130
     assert cleaned['attempts'][0]['formation_timings'][0]['provider_seconds'] == 61.5
+
+
+@pytest.mark.pure_function
+def test_attempt_selection_uses_only_retained_document_evidence():
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version
+    from src.vorming.processing_trace_v1 import clean_trace, processing_trace, select_processing_attempt
+
+    contract = semantic_contract_version(field_contract_v3=True)
+    executed = dict(recorded_attempt(), semantic_contract_version=contract)
+    legacy = dict(recorded_attempt(), attempt_id='pa_' + 'd' * 32,
+                  reserved_semantic_contract_version=contract, diagnostic={'origin_request_id': 'e' * 32})
+    envelope = {'processing_attempts': [executed, legacy]}
+    trace = processing_trace(envelope)
+    selected = select_processing_attempt(envelope, origin_request='c' * 32)
+    assert selected['attempt'] == trace['attempts'][0]
+    assert selected['attempt']['semantic_contract_version'] == contract
+    assert selected['attempt']['executed_contract_sha256'] == sha256(contract.encode()).hexdigest()
+    assert clean_trace(trace)['attempts'][0]['executed_contract_sha256'] == selected['attempt']['executed_contract_sha256']
+    legacy_row = select_processing_attempt(envelope, attempt=legacy['attempt_id'])['attempt']
+    assert legacy_row['executed_contract_status'] == 'unknown'
+    assert legacy_row['executed_contract_sha256'] is None
+    assert legacy_row['reserved_contract_sha256'] == selected['attempt']['executed_contract_sha256']
+    assert select_processing_attempt(envelope, attempt='pa_' + 'f' * 32) == {'status': 'not_found'}
+    assert select_processing_attempt(envelope, attempt=legacy['attempt_id'], origin_request='e' * 32) == {
+        'status': 'invalid_selector'}
+    legacy['diagnostic']['origin_request_id'] = 'c' * 32
+    assert select_processing_attempt(envelope, origin_request='c' * 32) == {'status': 'ambiguous'}
+    envelope['processing_attempts'] = [executed] * 64 + [legacy]
+    assert select_processing_attempt(envelope, origin_request='e' * 32) == {'status': 'history_truncated'}
+    assert select_processing_attempt(envelope, attempt=legacy['attempt_id'])['attempt']['attempt_id'] == legacy['attempt_id']

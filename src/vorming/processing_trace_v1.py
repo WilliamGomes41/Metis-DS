@@ -78,6 +78,8 @@ def project_attempt(attempt):
     dispatch = mapping(attempt.get('dispatch'))
     history = diagnostic.get('checkpoints')
     history = history if isinstance(history, list) else []
+    executed_contract = token(attempt.get('semantic_contract_version'), r'[A-Za-z0-9._/-]+')
+    reserved_contract = token(attempt.get('reserved_semantic_contract_version'), r'[A-Za-z0-9._/-]+')
     return {
         'attempt_id': attempt_id(attempt.get('attempt_id')),
         'retry_of': attempt_id(attempt.get('retry_of')),
@@ -106,7 +108,10 @@ def project_attempt(attempt):
         'extraction_checkpoint_hash': sha(mapping(diagnostic.get('extraction_checkpoint')).get('record_hash')),
         # Absent on legacy attempts: None, never backfilled or inferred.
         'stop_reason': choice(attempt.get('stop_reason'), {'done', 'budget_exhausted', 'error'}),
-        'semantic_contract_version': token(attempt.get('semantic_contract_version'), r'[A-Za-z0-9._/-]{1,512}'),
+        'semantic_contract_version': executed_contract if executed_contract and len(executed_contract) <= 2048 else None,
+        'executed_contract_sha256': digest(executed_contract),
+        'reserved_contract_sha256': digest(reserved_contract),
+        'executed_contract_status': 'recorded' if executed_contract else 'unknown',
     }
 
 
@@ -137,6 +142,30 @@ def processing_trace(envelope):
             'logs_are_not_commit_proof']}
 
 
+def select_processing_attempt(envelope, *, attempt=None, origin_request=None):
+    """Select exact stored evidence within the already authorized document."""
+    rows = envelope.get('processing_attempts')
+    rows = rows if isinstance(rows, list) else []
+    recent = [row for row in rows[-MAX_ATTEMPTS:] if isinstance(row, dict)]
+    if attempt is None and origin_request is None:
+        return {'status': 'selected', 'attempt': project_attempt(recent[-1])} if recent else {'status': 'empty'}
+    if attempt is not None:
+        if attempt_id(attempt) is None or origin_request is not None:
+            return {'status': 'invalid_selector'}
+        matches = [row for row in recent if row.get('attempt_id') == attempt]
+    else:
+        if identifier(origin_request) is None:
+            return {'status': 'invalid_selector'}
+        matches = [row for row in recent if mapping(row.get('diagnostic')).get('origin_request_id') == origin_request]
+    if len(matches) > 1:
+        return {'status': 'ambiguous'}
+    if len(rows) > MAX_ATTEMPTS and (origin_request is not None or not matches):
+        return {'status': 'history_truncated'}
+    if not matches:
+        return {'status': 'not_found'}
+    return {'status': 'selected', 'attempt': project_attempt(matches[0])}
+
+
 def clean_trace(raw):
     """Whitelist an offline/exported projection as strictly as the live one."""
     if not isinstance(raw, dict) or raw.get('schema') != VERSION:
@@ -162,6 +191,11 @@ def clean_trace(raw):
         clean = project_attempt(proxy)
         for key in ('command_sha256', 'source_version_sha256', 'expected_revision_sha256', 'configuration_sha256'):
             clean[key] = sha(row.get(key))
+        clean['reserved_contract_sha256'] = sha(row.get('reserved_contract_sha256'))
+        if clean['executed_contract_sha256'] is None:
+            clean['executed_contract_sha256'] = sha(row.get('executed_contract_sha256'))
+        if clean['executed_contract_sha256']:
+            clean['executed_contract_status'] = 'recorded'
         clean['omitted_checkpoints'] += number(row.get('omitted_checkpoints')) or 0
         attempts.append(clean)
     artifacts = raw.get('artifacts') if isinstance(raw.get('artifacts'), dict) else {}
