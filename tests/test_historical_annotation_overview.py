@@ -73,6 +73,22 @@ def test_invalid_historical_decision_is_rejected_even_with_matching_hash(change)
         preview.inspect_for_overview([entry], fragments=fragments)
 
 
+@pytest.mark.parametrize('witness', ['missing_block', 'beyond_block', 'inside_grapheme'])
+def test_historical_link_span_must_exist_in_the_source(witness):
+    entry = deepcopy(OLD['withdrawal'])
+    condition = 'Alleen bij e\u0301czeem.' if witness == 'inside_grapheme' else 'Alleen bij jeuk.'
+    fragments = [_fragment('core', 'De huid is droog.'), _fragment('condition', condition)]
+    block_id = annotations.semantic_source_blocks(fragments)[1]['block_id']
+    span = {'missing_block': ('semblock-ontbreekt', 0, 16), 'beyond_block': (block_id, 0, 17),
+            'inside_grapheme': (block_id, 0, condition.find('\u0301'))}[witness]
+    link = entry['payload']['required_links'][0]
+    link['relationship_id'] = annotations.relationship_id(
+        entry['annotation_id'], {'role': link['role'], 'block_id': span[0], 'start': span[1], 'end': span[2]})
+    entry['payload_hash'] = stable_hash(entry['payload'])
+    with pytest.raises(ConsoleError, match='annotation_representation_stale|annotation_anchor_invalid|annotation_grapheme_boundary_invalid'):
+        preview.inspect_for_overview([entry], fragments=fragments)
+
+
 @pytest.mark.parametrize('name', ['empty_v2', 'withdrawn'])
 def test_upgrade_reopens_mixed_overview_and_protects_saved_head(tmp_path, production_console, production_app, monkeypatch, name):
     console, actor, _, sid, view, _ = source(production_console, tmp_path)
