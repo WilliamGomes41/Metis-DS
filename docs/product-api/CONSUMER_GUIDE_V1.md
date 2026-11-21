@@ -81,8 +81,11 @@ Supported shape:
         "title": "...",
         "url": "...",
         "page": 15,
-        "version": "..."
+        "version": "...",
+        "publication_date": "2024-03-01"
       },
+      "target_group": ["..."],
+      "care_setting": ["..."],
       "release": {
         "release_id": "...",
         "release_version": "...",
@@ -95,6 +98,8 @@ Supported shape:
 ```
 
 Consumers should retain returned identifiers and provenance rather than copying knowledge into an untraceable local blob.
+
+`source.publication_date` is the source's own publication date as recorded at ingest; it differs from `release.published_at`, the moment Metis published the knowledge. `target_group` and `care_setting` are the published object's recorded applicability. An absent value is `null` or `[]`; Metis never substitutes another date or an inferred group. The Product API does not evaluate whether these match a specific patient (`applicability: not_evaluated`).
 
 ## Abstention
 

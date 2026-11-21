@@ -389,6 +389,9 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             "source_url": source.get("source_url"),
             "source_page": source.get("source_page"),
             "source_version": source.get("version"),
+            # The source's own colophon/publication date as recorded at ingest.
+            # Never substituted by the release or ingest time (#1111).
+            "source_publication_date": source.get("publication_date"),
             "topic": content.get("topic", []),
             "target_group": content.get("target_group", []),
             "care_setting": content.get("care_setting", []),
