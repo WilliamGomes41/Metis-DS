@@ -188,6 +188,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // Passages of other objects keep their own mark: only the open object is shown per role.
  assert.equal(await page.locator('[data-source-block] mark[data-annotation][data-role]').count(),0);
  assert(await page.locator('[data-source-block] mark[data-annotation]').count()>0);
+ await page.screenshot({path:output+'/card-role-marks.png',fullPage:true});
  assert.equal(await page.evaluate(()=>document.activeElement?.closest?.('[data-source-block]')?.textContent),support);
  // Codex P2: with a statement, Escape cancels the selection, so no hidden pending selection blocks finishing.
  // Start from a settled, checked card: nothing in flight that could hide a missing recheck.

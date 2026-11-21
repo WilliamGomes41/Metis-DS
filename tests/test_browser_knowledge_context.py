@@ -73,7 +73,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                            env=env, cwd=root, check=True, timeout=90)
             expected_screenshots = {'browser_annotation_suggestions_check.cjs':7,
                                     'browser_saved_annotations_check.cjs':2,
-                                    'browser_source_first_card_check.cjs':7,
+                                    'browser_source_first_card_check.cjs':8,
                                     'browser_one_offer_check.cjs':2,
                                     'browser_annotation_source_selection_check.cjs':4,
                                     'browser_annotation_binding_check.cjs':2,
