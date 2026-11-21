@@ -87,6 +87,20 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await row('belongs').locator('.annotation-line:not(.annotation-proposal)').getByText(intro,{exact:true}).waitFor();
  assert.equal(await proposal.count(),0);
  await page.waitForFunction(()=>!document.querySelector('[data-source-block] mark[data-proposal]'));
+ // #1123: in the source each passage of this object shows its role, with the same mark as its row in the card.
+ const mark=text=>block(text).locator('mark[data-current]');
+ const roleOf=async text=>[await mark(text).getAttribute('data-role'),await mark(text).getAttribute('title')];
+ const look=role=>page.evaluate(role=>{
+  const m=getComputedStyle(document.querySelector('[data-source-block] mark[data-current][data-role='+role+']'));
+  const s=getComputedStyle(document.querySelector('#annotation-simple-rows dt[data-row='+role+'] .annotation-row-name'),'::before');
+  return {fill:m.backgroundColor,line:m.textDecorationLine+' '+m.textDecorationStyle,
+   swatchFill:s.backgroundColor,swatchLine:s.borderBottomStyle,shown:s.display!=='none' && s.content!=='none'};},role);
+ assert.deepEqual(await roleOf(item),['core','Uitspraak']);
+ assert.deepEqual(await roleOf(intro),['belongs','Hoort erbij']);
+ const coreLook=await look('core'),belongsLook=await look('belongs');
+ assert.notDeepEqual([coreLook.fill,coreLook.line],[belongsLook.fill,belongsLook.line]);
+ // The row name in the card carries the same mark, so the source needs no separate legend.
+ for(const l of [coreLook,belongsLook]) {assert(l.shown,JSON.stringify(l));assert.equal(l.swatchFill,l.fill);}
  // 3. Evidence is added when the source has it; the card asks no choice. One button finishes.
  assert.equal(await row('evidence').getByRole('button',{name:/Staat niet in de bron|niet van toepassing/}).count(),0);
  await page.locator('#annotation-ready:enabled').waitFor();
@@ -164,6 +178,16 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.keyboard.press('Enter');
  await row('evidence').getByText(support,{exact:true}).waitFor();
  await page.waitForFunction(()=>document.getElementById('annotation-selection-menu').hidden);
+ // #1123: the evidence has its own mark, apart from the statement and from what belongs to it.
+ await page.waitForFunction(()=>document.querySelector('[data-source-block] mark[data-current][data-role=evidence]'));
+ assert.deepEqual(await roleOf(support),['evidence','Onderbouwing']);
+ const evidenceLook=await look('evidence');
+ assert(evidenceLook.shown,JSON.stringify(evidenceLook));
+ for(const l of [coreLook,belongsLook]) assert.notDeepEqual([evidenceLook.fill,evidenceLook.line],[l.fill,l.line]);
+ assert.equal(evidenceLook.swatchFill,evidenceLook.fill);assert.notEqual(evidenceLook.swatchLine,'none');
+ // Passages of other objects keep their own mark: only the open object is shown per role.
+ assert.equal(await page.locator('[data-source-block] mark[data-annotation][data-role]').count(),0);
+ assert(await page.locator('[data-source-block] mark[data-annotation]').count()>0);
  assert.equal(await page.evaluate(()=>document.activeElement?.closest?.('[data-source-block]')?.textContent),support);
  // Codex P2: with a statement, Escape cancels the selection, so no hidden pending selection blocks finishing.
  // Start from a settled, checked card: nothing in flight that could hide a missing recheck.
