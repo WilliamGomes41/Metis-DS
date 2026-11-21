@@ -539,6 +539,7 @@ import {bindRange} from '/annotations/binding.mjs';
     };
     selection.setBaseAndExtent(...point(kept[0]),...point(kept[1]));
   }
+  const ROLE_LABELS={core:'Uitspraak',belongs:'Hoort erbij',evidence:'Onderbouwing'};
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -569,7 +570,12 @@ import {bindRange} from '/annotations/binding.mjs';
         if (covering.length) {
           const mark=document.createElement('mark');
           if (covering.some(a => a.proposal)) {mark.dataset.proposal='true';mark.title='Voorstel van Metis';}
-          else if (covering.some(a => a.current)) mark.dataset.current='true';
+          else if (covering.some(a => a.current)) {
+            // #1123: the open object's passages show their role, grouped as in the card's rows.
+            const roles=covering.filter(a => a.current).map(a => a.role==='core' || a.role==='evidence' ? a.role : 'belongs');
+            const role=['core','evidence','belongs'].find(r => roles.includes(r));
+            mark.dataset.current='true';mark.dataset.role=role;mark.title=ROLE_LABELS[role];
+          }
           else {mark.dataset.annotation=covering[0].owner;mark.title='Deze annotatie openen';}
           mark.textContent=value;content.append(mark);
         } else content.append(document.createTextNode(value));
