@@ -5,10 +5,15 @@ Behavior proof on the REAL path (PostgreSQL registry rows + Blob read-back),
 not on documentation text. An absent value stays absent: the release time or
 ingest time is never substituted for the source's own publication date.
 """
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 from __future__ import annotations
 
 import copy
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.product_api_v1 import create_product_app
@@ -22,6 +27,13 @@ from tests.test_product_api_postgres_authority_v1 import (
     _paths,
     _registry,
 )
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 PUBLISHED_AT = "2026-09-11T20:00:00+00:00"
 PUBLICATION = {"release_id": "release-postgres-1", "release_version": "1.0", "published_at": PUBLISHED_AT}
