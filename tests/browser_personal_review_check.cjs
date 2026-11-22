@@ -44,6 +44,40 @@ const {writeFile} = require('node:fs/promises');
       await passage.click();
     }
     const form = page.locator('[data-ko-assessment-form]');
+    if (width === 390) {
+      await page.setViewportSize({width:320,height:844});
+      const textZoom = await page.addStyleTag({content:
+        '.ko-submit-feedback, .ko-actions > .ko-submit-status { font-size: 28px !important; }'});
+      await form.locator('[value=later]').scrollIntoViewIfNeeded();
+      try {
+        for (const action of ['approve', 'later']) {
+          const geometry = await form.evaluate((node, action) => {
+            const status = node.querySelector('[data-ko-submit-status]');
+            const buttons = [...node.querySelectorAll('.ko-actions button')];
+            const positions = () => buttons.map(button => button.getBoundingClientRect().top);
+            const before = positions();
+            node.dispatchEvent(new SubmitEvent('submit', {submitter:node.querySelector(`[value="${action}"]`)}));
+            const text = document.createRange();
+            text.selectNodeContents(status);
+            return {message:status.textContent, lines:text.getClientRects().length,
+              gap:Math.min(...positions()) - status.getBoundingClientRect().bottom,
+              before, after:positions()};
+          }, action);
+          assert.equal(geometry.message, action === 'later'
+            ? 'Volgende passage wordt geopend…' : 'Review wordt opgeslagen…');
+          assert.ok(geometry.gap >= 6, `Status overlaps controls at 200% text size: ${JSON.stringify(geometry)}`);
+          assert.deepEqual(geometry.after, geometry.before, 'Controls stay in place at 200% text size');
+          if (action === 'later') {
+            assert.ok(geometry.lines > 1, 'The longer message must exercise wrapping');
+            await page.screenshot({path:`${process.env.METIS_BROWSER_OUTPUT}/personal-pending-text-320.png`, fullPage:true});
+          }
+          await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted:true})));
+        }
+      } finally {
+        await textZoom.evaluate(node => node.remove());
+        await page.setViewportSize({width,height:1000});
+      }
+    }
     const approve = form.locator('[name=review_action][value=approve]');
     assert.equal(await form.locator('[name=object_id]').inputValue(),d.context);
     assert.deepEqual(await state(), before, 'Landing and detail navigation must not mutate domain work');

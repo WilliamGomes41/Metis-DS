@@ -434,7 +434,10 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + _question('placed_correctly', 'Staat dit op de juiste plek?', draft.get('placed_correctly'), subline=place)
             + ('' if annotation else '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">'
                'Open de gerichte correctie</a>.</p>')
-            + '<div class="ko-actions"><p class="ko-submit-status" data-ko-submit-status role="status"></p>'
+            + '<div class="ko-actions"><div class="ko-submit-feedback">'
+            '<span data-ko-submit-label="save" aria-hidden="true">Review wordt opgeslagen…</span>'
+            '<span data-ko-submit-label="later" aria-hidden="true">Volgende passage wordt geopend…</span>'
+            '<p class="ko-submit-status" data-ko-submit-status role="status"></p></div>'
             + '<button class="ko-primary" type="submit" name="review_action" value="approve"'
             + ('' if can_approve else ' disabled') + '>Goedkeuren en opslaan</button>'
             '<a href="' + escape(repair, quote=True) + '">'
@@ -466,9 +469,8 @@ for (const form of document.querySelectorAll('[data-ko-assessment-form]')) {
     submitting = true;
     // Keep the pressed button enabled for the native POST's review_action value.
     submitters.forEach(button => button.setAttribute('aria-disabled', 'true'));
-    status.textContent = event.submitter.value === 'later'
-      ? 'Volgende passage wordt geopend…'
-      : 'Review wordt opgeslagen…';
+    const label = event.submitter.value === 'later' ? 'later' : 'save';
+    status.textContent = form.querySelector(`[data-ko-submit-label="${label}"]`).textContent;
   });
   window.addEventListener('pageshow', event => {
     if (!event.persisted || !submitting) return;

@@ -16,7 +16,7 @@ Op 22 november 2026 gaf de projectlead de opdracht “Start implementatie van de
 
 ## Gedrag
 
-De compacte kaart gebruikt de bestaande HTML-formulierverzending via `/review` of `/review/second-review`. Na browservalidatie toont de kaart boven de hoofdknop een voorleestekst in de bestaande tussenruimte. Goedkeuren en afwijzen tonen “Review wordt opgeslagen…”. Later beoordelen toont “Volgende passage wordt geopend…”. De acties blijven op hun plaats en krijgen geen extra beweging.
+De compacte kaart gebruikt de bestaande HTML-formulierverzending via `/review` of `/review/second-review`. Na browservalidatie toont de kaart boven de hoofdknop een voorleestekst. Goedkeuren en afwijzen tonen “Review wordt opgeslagen…”. Later beoordelen toont “Volgende passage wordt geopend…”. De statusruimte volgt de benodigde teksthoogte, ook op een scherm van 320 CSS-pixels bij 200% tekstgrootte. De acties blijven op hun plaats en krijgen geen extra beweging.
 
 De kaart houdt de verzendstatus lokaal bij. Daardoor kan de browser bij de eerste aanvraag de naam en waarde van de gekozen knop versturen. De kaart vangt herhaalde verzendacties af en herstelt de bediening als dezelfde pagina uit het browsergeheugen terugkomt.
 
