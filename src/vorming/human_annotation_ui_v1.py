@@ -358,7 +358,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 historical = domain.historical_finding(entry)
                 if entry['status']=='withdrawn' and not historical:
                     continue
-                spans = ''.join('<li><strong>'+escape(LABELS[a['role']])+ (' — verklaart' if a['evidence_function']=='explains' else ' — onderbouwt' if a['evidence_function']=='supported_by' else '')+'</strong>'+
+                spans = ''.join('<li><strong>'+escape('Brontekst' if entry.get('disposition') else LABELS[a['role']])+ (' — verklaart' if a['evidence_function']=='explains' else ' — onderbouwt' if a['evidence_function']=='supported_by' else '')+'</strong>'+
                     ': '+escape(a['quote'])+' <a href="'+escape(back+'#'+a['block_id'],quote=True)+'">Open in bron</a></li>' for a in entry['ranges'])
                 missing = 'Selectie nog niet gereed.' if entry['status']!='ready' else ''
                 if entry.get('pending_range'):
@@ -397,17 +397,16 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 items.append('<article class="object"'+article_id+'><h3>'+escape(heading)+'</h3><p>'+escape(missing)+'</p><ul>'+spans+'</ul>'+
                     ('<p>Aangewezen betekenisvelden</p><ul>'+''.join(fields)+'</ul>' if fields else '')+
                     ('<p>Onderbouwing: expliciet niet van toepassing.</p>' if entry['evidence_not_applicable'] else '')+action+'</article>')
-            body = intro + (''.join(items) or '<p>Er zijn nog geen selecties opgeslagen.</p>')
             inspection = state['inspection']
             historical_coverage = any(domain.historical_finding(entry) for entry in state['entries'])
             ready = sum(entry['status'] == 'ready' and not entry.get('disposition')
                         and not domain.historical_finding(entry) for entry in state['entries'])
             rest = len(inspection['source_assessments'])
             opened = len(inspection['unaccounted_ranges'])
-            body += f'<p>Gereedstaande kennisannotaties: {ready} · Verantwoorde restbereiken: {rest}'
+            body = intro + f'<p>Gereedstaande kennisannotaties: {ready} · Verantwoorde restbereiken: {rest}'
             if not historical_coverage:
                 body += f' · Open bronbereiken: {opened}'
-            body += '</p>'
+            body += '</p>' + (''.join(items) or '<p>Er zijn nog geen selecties opgeslagen.</p>')
             if inspection['findings']:
                 body += '<section aria-labelledby="annotation-findings"><h2 id="annotation-findings">Nog controleren vóór afsluiten</h2>'
                 if any(f['code'] in {domain.HISTORICAL_NEUTRAL, domain.HISTORICAL_DECISION} for f in inspection['findings']):
