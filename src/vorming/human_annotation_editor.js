@@ -471,11 +471,11 @@ import {bindRange} from '/annotations/binding.mjs';
       else if(beforeType) {rows.insertBefore(dt,beforeType);rows.insertBefore(dd,beforeType);}
       else rows.append(dt,dd);
     };
-    // #1067: source text that is no statement (recorded in the document check) shows what it is, nothing to fill in.
+    // A recorded source disposition shows its category in the card.
     if(entry.disposition) {
       const reasons=Object.values(fieldContract.source_roles).flat();
       const kind=reasons.find(r=>r.value===entry.disposition.reason)?.label || 'Geen uitspraak';
-      row('core','Geen uitspraak: '+kind.toLowerCase(),dd=>{for(const a of core) line(dd,a.quote,'Weghalen: '+a.quote,()=>{discardObject().catch(()=>{});});});
+      row('disposition','Geen uitspraak: '+kind.toLowerCase(),dd=>{for(const a of core) line(dd,a.quote,'Weghalen: '+a.quote,()=>{discardObject().catch(()=>{});});});
       el('simple-status').textContent='';el('simple-notes').replaceChildren();
       return;
     }
@@ -549,6 +549,7 @@ import {bindRange} from '/annotations/binding.mjs';
     };
     selection.setBaseAndExtent(...point(kept[0]),...point(kept[1]));
   }
+  const ROLE_LABELS={core:'Uitspraak',belongs:'Hoort erbij',evidence:'Onderbouwing'};
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -584,7 +585,16 @@ import {bindRange} from '/annotations/binding.mjs';
         if (covering.length) {
           const mark=document.createElement('mark');
           if (covering.some(a => a.proposal)) {mark.dataset.proposal='true';mark.title='Voorstel van Metis';}
-          else if (covering.some(a => a.current)) mark.dataset.current='true';
+          else if (covering.some(a => a.current)) {
+            mark.dataset.current='true';
+            if (entry.disposition) {
+              mark.title='Geen uitspraak';
+            } else {
+              const roles=covering.filter(a => a.current).map(a => a.role==='core' || a.role==='evidence' ? a.role : 'belongs');
+              const role=['core','evidence','belongs'].find(r => roles.includes(r));
+              mark.dataset.role=role;mark.title=ROLE_LABELS[role];
+            }
+          }
           else if (covering.some(a => a.sourceRest)) {
             const gap = covering.find(a => a.sourceRest);
             mark.dataset.sourceRest = gapId(gap);
