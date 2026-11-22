@@ -3,7 +3,7 @@ from html import escape
 import json
 from pathlib import Path
 import re
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 import asyncio
 from urllib.parse import urlencode
 
@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 from src.operations_console_v1 import ConsoleError
 from src.vorming import human_annotation_v1 as domain
+from src.vorming.source_accountability_v1 import ROLES as SOURCE_ROLES
 
 LABELS = {'core':'Kernuitspraak','population':'Doelgroep','context':'Context','condition':'Voorwaarde',
     'exception':'Uitzondering','explanation':'Toelichting','evidence':'Onderbouwing',
@@ -55,6 +56,7 @@ ERRORS = {
     'annotation_client_contract_stale':'Dit formulier mist nieuw opgeslagen onderdelen. Open de opgeslagen annotatie opnieuw; er is niets overschreven.',
     'annotation_source_disposition_invalid':'Kies een bronfunctie voor dit bronstuk. Voor een uitspraak gebruik je een eigen annotatie met het passende type.',
     'annotation_source_disposition_unresolved':'Dit bronstuk is nog niet afgehandeld. Kies een vastgestelde bronfunctie en wijs de bijbehorende bronbereiken aan.',
+    'annotation_source_role_stale':'De open brontekst of het voorstel is gewijzigd. Controleer de actuele tekst in het document.',
     'source_bound_fields_invalid':'De onderdelen van de uitspraak zijn niet volledig aangeleverd. Open de annotatie opnieuw.',
     'source_bound_field_invalid':'Wijs voor dit onderdeel de exacte brontekst aan.',
     'recommendation_semantics_invalid':'Controleer de richting en sterkte bij deze aanbeveling en wijs het bijbehorende bronbewijs aan.',
@@ -212,8 +214,62 @@ def source_document_html(blocks):
     return ''.join(parts)
 
 
+def gap_id(gap):
+    return f"bronrest-{gap['block_id']}-{gap['start']}-{gap['end']}"
+
+
+def source_work_html(state, esc):
+    work = state['source_work']
+    ranges = {gap['key']: gap for gap in work['ranges']}
+    options = '<option value="">Kies een categorie</option>' + ''.join(
+        f'<option value="{role}:{reason}">{esc(SOURCE_LABELS[reason])}</option>'
+        for role in ('structure', 'metadata') for reason in SOURCE_ROLES[role])
+
+    def command_fields():
+        values = {'document': state['snapshot_id'], 'command_id': str(uuid4()),
+                  'expected_generation': str(state['generation']),
+                  'expected_objects_revision': state['objects_revision'],
+                  'extraction_hash': state['extraction_hash']}
+        return ''.join(f'<input type="hidden" name="{key}" value="{esc(value)}">'
+                       for key, value in values.items())
+
+    def member(gap, group_id=None):
+        target, key = gap_id(gap), esc(gap['key'])
+        quote = esc(gap['quote'])
+        label = f'<label><input type="checkbox" name="member" form="{group_id}" value="{key}" checked> {quote}</label>' if group_id else f'<q>{quote}</q>'
+        return (f'<li id="{esc(target)}" tabindex="-1">{label} '
+                f'<a href="#{esc(gap["block_id"])}" data-annotation-gap="{esc(target)}">Ga naar tekst</a>'
+                '<form method="post" action="/annotations/source-role">'+command_fields()+
+                f'<input type="hidden" name="member" value="{key}">'
+                f'<label for="keuze-{esc(target)}">Bronfunctie</label> '
+                f'<select id="keuze-{esc(target)}" name="reason" required>{options}</select> '
+                '<button class="btn-secondary" type="submit">Vastleggen</button></form></li>')
+
+    sections = []
+    for group in work['groups']:
+        form_id = 'bronrest-groep-'+group['key']
+        category = esc(SOURCE_LABELS[group['proposal'].partition(':')[2]])
+        section = esc(' › '.join(group['section']) or 'Zonder sectiekop')
+        sections.append(f'<details><summary>{section} · Voorstel: {category} ({len(group["members"])})</summary>'
+                        '<ul>'+''.join(member(ranges[key], form_id) for key in group['members'])+'</ul>'
+                        f'<form id="{form_id}" method="post" action="/annotations/source-role">'+command_fields()+
+                        f'<input type="hidden" name="group" value="{group["key"]}">'
+                        f'<input type="hidden" name="reason" value="{group["proposal"]}">'
+                        f'<button class="btn-secondary" type="submit">Bevestig geselecteerde tekst als {category.lower()}</button>'
+                        '</form></details>')
+    unproposed = [gap for gap in ranges.values() if not gap['proposal']]
+    if unproposed:
+        sections.append(f'<details><summary>Zonder voorstel ({len(unproposed)})</summary><ul>'+
+                        ''.join(member(gap) for gap in unproposed)+'</ul></details>')
+    if not sections:
+        return ''
+    return ('<details id="annotation-source-work"><summary>Nog te beoordelen ('+str(len(ranges))+')</summary>'
+            '<p>Kies een bronfunctie of ga naar de tekst om haar als uitspraak aan te wijzen.</p>'+
+            ''.join(sections)+'</details>')
+
+
 def install(app, console, require, page, nav, esc, *, dispatcher):
-    def editor_state(actor, document):
+    def editor_state(actor, document, *, include_source_work=False):
         # Build state is read before and after the overview. A build read as running keeps the
         # editor polling; a build that changed in between means the overview may be older or
         # newer than the state shown, so the whole read is repeated.
@@ -226,7 +282,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 
         for _attempt in range(3):
             before = build_state()
-            view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document)
+            options = {'include_source_work': True} if include_source_work else {}
+            view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document, **options)
             if build_state() == before:
                 view['current_build'] = before
                 for entry in view.get('entries', ()):
@@ -274,11 +331,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 '<p>Annoteren geeft geen goedkeuring. De bij ontvangst gekozen beoordeling blijft gelden.</p>'
                 '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bron openen voor annotatie</button></form></section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
         from src.vorming import human_annotation_build_v1 as build
-        state = build.overview(console, actor_id=actor['account_id'], snapshot_id=document) if overview else editor_state(actor, document)
+        state = build.overview(console, actor_id=actor['account_id'], snapshot_id=document) if overview else editor_state(actor, document, include_source_work=True)
         from src.vorming.source_bound_fields_v3 import FIELDS, TYPE_FIELDS, CONTEXT_FIELDS
         from src.vorming.human_annotation_contract_v1 import CONTEXT_BINDING_FIELDS, ROLE_MAP
         from src.vorming.human_annotation_v1 import TYPE_CORE_FIELDS
-        from src.vorming.source_accountability_v1 import ROLES as SOURCE_ROLES
         state['field_contract']={'fields':list(FIELDS),'type_core_fields':TYPE_CORE_FIELDS,
             'type_fields':TYPE_FIELDS,
             'context_bindings':{role:field for role,field in CONTEXT_BINDING_FIELDS.items() if ROLE_MAP[role] in CONTEXT_FIELDS[field]},
@@ -343,6 +399,15 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     ('<p>Onderbouwing: expliciet niet van toepassing.</p>' if entry['evidence_not_applicable'] else '')+action+'</article>')
             body = intro + (''.join(items) or '<p>Er zijn nog geen selecties opgeslagen.</p>')
             inspection = state['inspection']
+            historical_coverage = any(domain.historical_finding(entry) for entry in state['entries'])
+            ready = sum(entry['status'] == 'ready' and not entry.get('disposition')
+                        and not domain.historical_finding(entry) for entry in state['entries'])
+            rest = len(inspection['source_assessments'])
+            opened = len(inspection['unaccounted_ranges'])
+            body += f'<p>Gereedstaande kennisannotaties: {ready} · Verantwoorde restbereiken: {rest}'
+            if not historical_coverage:
+                body += f' · Open bronbereiken: {opened}'
+            body += '</p>'
             if inspection['findings']:
                 body += '<section aria-labelledby="annotation-findings"><h2 id="annotation-findings">Nog controleren vóór afsluiten</h2>'
                 if any(f['code'] in {domain.HISTORICAL_NEUTRAL, domain.HISTORICAL_DECISION} for f in inspection['findings']):
@@ -370,20 +435,9 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     body += '</ul><a href="'+esc(back+'&annotation='+entry['annotation_id'])+'">Annotatie bekijken</a></li>'
                 body += '</ul></section>'
             if inspection['unaccounted_ranges']:
-                # Text that is no statement is accounted for here, where it shows up; the card is for statements.
-                body += ('<section aria-labelledby="annotation-gaps"><h2 id="annotation-gaps">Nog niet verantwoord bronmateriaal</h2>'
-                         '<p>Is dit geen uitspraak, kies dan wat het is. Is het wel een uitspraak, wijs haar dan aan in de bron.</p><ul>')
-                options = '<option value="">Kies wat het is</option>'+''.join('<option value="'+esc(role+':'+reason)+'">'+esc(SOURCE_LABELS[reason])+'</option>'
-                    for role in ('structure','metadata') for reason in SOURCE_ROLES[role])
-                for index, gap in enumerate(inspection['unaccounted_ranges']):
-                    hidden = {'document':document,'command_id':str(uuid4()),'expected_generation':str(state['generation']),
-                              'expected_objects_revision':state['objects_revision'],'block_id':gap['block_id'],
-                              'start':str(gap['start']),'end':str(gap['end'])}
-                    body += ('<li class="annotation-gap"><q>'+esc(gap['quote'])+'</q><form method="post" action="/annotations/source-role">'+
-                        ''.join('<input type="hidden" name="'+key+'" value="'+esc(value)+'">' for key,value in hidden.items())+
-                        '<label for="annotation-gap-'+str(index)+'">Geen uitspraak</label> <select id="annotation-gap-'+str(index)+'" name="reason" required>'+options+'</select> '
-                        '<button class="btn-secondary" type="submit">Vastleggen</button></form>'
-                        '<a href="'+esc(back+'#'+gap['block_id'])+'">Toch een uitspraak: aanwijzen in de bron</a></li>')
+                body += ('<section aria-labelledby="annotation-gaps"><h2 id="annotation-gaps">Nog niet verantwoord bronmateriaal</h2><ul>')
+                for gap in inspection['unaccounted_ranges']:
+                    body += '<li><q>'+esc(gap['quote'])+'</q> <a href="'+esc(back+'#'+gap_id(gap))+'">Beoordelen in document</a></li>'
                 body += '</ul></section>'
             current = state['current_build']
             if current:
@@ -403,7 +457,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 else:
                     body += '<p>Afsluiten is pas mogelijk als alle annotaties en de bronafhandeling gereed zijn.'+(' De opgeslagen bouwopdracht blijft hierboven bereikbaar.' if current else '')+'</p>'
             body += '<p><a class="btn-secondary" href="'+escape(back,quote=True)+'">Verder aanwijzen</a></p>'
-            return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section><style>.room article.object{margin-block:0 1.5rem}.room article.object>a{display:inline-block;margin-top:.25rem}.room section[aria-labelledby]{margin-top:2rem}#annotation-signals+p+ul>li{margin-block:.5rem 1rem}#annotation-signals+p+ul ul{padding-left:1.1rem;margin:0 0 .25rem}.annotation-gap{margin-block:1rem}.annotation-gap form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}.annotation-gap label{margin:0;font-weight:600}.annotation-gap select{width:auto;flex:0 1 16rem;font-size:1rem;min-height:2.75rem;max-width:100%}.annotation-gap .btn-secondary{min-height:2.75rem}</style>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
+            return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section><style>.room article.object{margin-block:0 1.5rem}.room article.object>a{display:inline-block;margin-top:.25rem}.room section[aria-labelledby]{margin-top:2rem}#annotation-signals+p+ul>li{margin-block:.5rem 1rem}#annotation-signals+p+ul ul{padding-left:1.1rem;margin:0 0 .25rem}</style>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
         blocks = source_document_html(state['blocks'])
         pages = list(dict.fromkeys(loc['page'] for block in state['blocks']
             for loc in block.get('locations') or [] if loc.get('page')))
@@ -414,7 +468,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         data = json.dumps(state,ensure_ascii=False).replace('<','\\u003c')
         body = '<header class="annotation-workspace-intro">' + intro + '''</header><details class="annotation-instruction"><summary>Hulp bij annoteren</summary><p>Wijs een eigen uitspraak aan: iets wat de bron stelt, definieert, verklaart of aanbeveelt. Tekst die alleen bij een andere uitspraak hoort, voeg je daar toe bij Hoort erbij of Onderbouwing. Selecteer tekst in de bron en kies naast je selectie waar die bij hoort.</p></details>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
-<div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div>'''+blocks+'''</div>
+<p id="annotation-source-work-status" role="status"></p>
+<div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
 <section id="annotation-offer" aria-label="Voorstel van Metis" hidden>
@@ -443,6 +498,18 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 </section></aside></div>
 <script type="application/json" id="annotation-data">'''+data+'''</script><script type="module" src="/annotations/editor.js"></script>'''
         css = '''<style>
+.#annotation-source-work{margin:0 0 1rem;border-block-end:1px solid var(--line);padding:.5rem 0}
+#annotation-source-work summary{cursor:pointer;padding:.5rem 0;font-weight:600}
+#annotation-source-work details{padding-inline-start:.75rem}
+#annotation-source-work ul{padding-inline-start:1.25rem}
+#annotation-source-work li{padding:.4rem 0;overflow-wrap:anywhere}
+#annotation-source-work li:focus{outline:2px solid var(--paars)}
+#annotation-source-work form{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-top:.5rem}
+#annotation-source-work select{width:auto;max-width:100%}
+.annotation-source-text mark[data-source-rest]{background:var(--surface-soft);color:inherit;box-shadow:inset 0 -1px var(--muted)}
+.annotation-source-text mark[data-source-rest-focus]{outline:2px solid var(--paars);outline-offset:1px}
+.annotation-source-rest-label{display:inline-block;margin-inline-start:.5rem;font-size:.8rem}
+#annotation-source-work-status:empty{display:none}
 .annotation-workspace-intro{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.25rem 1.5rem;align-items:center}
 .annotation-workspace-intro h1{font-size:1.5rem;margin:0;grid-column:1;grid-row:1}
 .annotation-workspace-intro h2{color:var(--text);font-size:1.125rem;margin:0;grid-column:1;grid-row:2;overflow-wrap:anywhere}
@@ -507,42 +574,59 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 
     @app.post('/annotations/source-role')
     async def source_role(request: Request):
-        # One exact unaccounted range from the document check becomes source text that is no
-        # statement, through the existing save. The kernel keeps every rule and the revision check.
         actor = require(request)
         form = await request.form()
         document = str(form.get('document') or '')
-        overview_url = '/annotations?'+urlencode({'document':document,'overview':'true'})
+        document_url = '/annotations?'+urlencode({'document': document})
+        wants_json = request.headers.get('accept') == 'application/json'
         try:
             role, _, reason = str(form.get('reason') or '').partition(':')
-            start, end, generation = (int(str(form.get(key) or '')) for key in ('start','end','expected_generation'))
+            generation = int(str(form.get('expected_generation') or ''))
             command_id = str(form.get('command_id') or '')
-            view = await asyncio.to_thread(domain.overview, console, actor_id=actor['account_id'], snapshot_id=document)
-            block = next((b for b in view['blocks'] if b['block_id']==str(form.get('block_id') or '')), None)
-            if block is None or not 0<=start<end<=len(block['text']) or not command_id:
+            group = str(form.get('group') or '')
+            members = form.getlist('member')
+            if not members and not group and form.get('block_id'):
+                members = [json.dumps([str(form['block_id']), int(str(form['start'])), int(str(form['end']))])]
+            from src.review.source_context_review_v1 import GROUP_MAX
+            if not command_id or not 1 <= len(members) <= (GROUP_MAX if group else 1):
                 raise ConsoleError('annotation_command_invalid')
-            from uuid import NAMESPACE_URL, uuid5
-            selection = {'status':'ready','object_type':None,'evidence_not_applicable':False,
-                'disposition':{'role':role,'reason':reason},
-                'ranges':[{'block_id':block['block_id'],'start':start,'end':end,'quote':block['text'][start:end],
-                           'role':'core','evidence_function':None}]}
-            await asyncio.to_thread(domain.save, console, actor_id=actor['account_id'], snapshot_id=document,
+            view = await asyncio.to_thread(domain.overview, console, actor_id=actor['account_id'], snapshot_id=document)
+            by_id = {block['block_id']: block['text'] for block in view['blocks']}
+            ranges = []
+            for member_key in members:
+                block_id, start, end = json.loads(member_key)
+                if not isinstance(block_id, str) or type(start) is not int or type(end) is not int:
+                    raise ConsoleError('annotation_command_invalid')
+                text = by_id.get(block_id)
+                if text is None or not 0 <= start < end <= len(text):
+                    raise ConsoleError('annotation_source_role_stale')
+                ranges.append({'block_id': block_id, 'start': start, 'end': end, 'quote': text[start:end],
+                               'role': 'core', 'evidence_function': None})
+            selection = {'status': 'ready', 'object_type': None, 'evidence_not_applicable': False,
+                         'disposition': {'role': role, 'reason': reason}, 'ranges': ranges}
+            result = await asyncio.to_thread(domain.save, console, actor_id=actor['account_id'], snapshot_id=document,
                 command_id=command_id, annotation_id=str(uuid5(NAMESPACE_URL, 'metis-source-role:'+document+':'+command_id)),
-                expected_revision=0, expected_generation=generation, extraction_hash=view['extraction_hash'],
+                expected_revision=0, expected_generation=generation,
+                extraction_hash=str(form.get('extraction_hash') or view['extraction_hash']),
                 normalization=view['normalization'], selection=selection,
-                expected_objects_revision=str(form.get('expected_objects_revision') or '') or None)
+                expected_objects_revision=str(form.get('expected_objects_revision') or ''),
+                source_role_group=group)
         except ConsoleError as exc:
             if exc.code in {'not_authenticated', 'researcher_role_required', 'reviewer_not_named_on_snapshot'}:
                 raise
             error = exc
-        except ValueError:  # a malformed number in the form
+        except (ValueError, TypeError, KeyError):
             error = ConsoleError('annotation_command_invalid')
         else:
-            return RedirectResponse(overview_url+'#annotation-gaps', status_code=303)
-        body = '<h1>Niet vastgelegd</h1><p role="alert">'+esc(ERRORS.get(error.code,
-            'Vastleggen is niet gelukt. Je opgeslagen annotaties blijven bewaard. Controleer het documentoverzicht.'))+'</p>'
-        body += '<p><a href="'+esc(overview_url)+'">Documentoverzicht opnieuw controleren</a></p>'
-        return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>', title='Document controleren'),
+            if wants_json:
+                return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+            return RedirectResponse(document_url+'#annotation-source-work', status_code=303)
+        message = ERRORS.get(error.code, 'Vastleggen is niet gelukt. Controleer de tekst en probeer opnieuw.')
+        if wants_json:
+            return JSONResponse({'error': error.code, 'message': message}, status_code=409)
+        body = '<h1>Niet vastgelegd</h1><p role="alert">'+esc(message)+'</p>'
+        body += '<p><a href="'+esc(document_url)+'">Terug naar de bron</a></p>'
+        return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>', title='Bron aanwijzen'),
                             status_code=409, headers={'Cache-Control':'no-store'})
 
     @app.post('/annotations/finalize')
@@ -669,9 +753,13 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         return RedirectResponse('/annotations?'+urlencode({'document':document}),status_code=303)
 
     @app.get('/annotations/api')
-    def get(request: Request, document: str):
+    def get(request: Request, document: str, source_work: bool = False):
         actor = require(request)
-        return JSONResponse(editor_state(actor, document),headers={'Cache-Control':'no-store'})
+        state = editor_state(actor, document, include_source_work=source_work)
+        if source_work:
+            state = {'generation': state['generation'], 'work': state['source_work'],
+                     'html': source_work_html(state, esc)}
+        return JSONResponse(state, headers={'Cache-Control': 'no-store'})
 
     @app.get('/annotations/check')
     def check(request: Request, document: str, annotation: str):

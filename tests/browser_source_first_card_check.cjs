@@ -230,12 +230,16 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // Ending source selection saves and opens the document check, where the next phase starts.
  await page.locator('#annotation-saved-overview').click();
  await page.waitForURL(u=>u.searchParams.get('overview')==='true');
- // Text that is no statement is accounted for in the document check, where it shows up, not in the card.
- const gap=page.locator('.annotation-gap').filter({has:page.locator('q',{hasText:/^Smetten$/})});
- await gap.locator('select').selectOption('structure:document_structure');
- await Promise.all([page.waitForURL(u=>u.searchParams.get('overview')==='true' && u.hash==='#annotation-gaps'),gap.getByRole('button',{name:'Vastleggen'}).click()]);
- assert.equal(await page.locator('.annotation-gap q',{hasText:/^Smetten$/}).count(),0);
+ // Open work is visible in the overview. The exact source link leads to the classification in the document.
+ const gap=page.locator('#annotation-gaps+ul li').filter({has:page.locator('q',{hasText:/^Smetten$/})});
+ await gap.getByRole('link',{name:'Beoordelen in document'}).click();
+ const sourceGap=page.locator('#annotation-source-work li').filter({has:page.locator('q',{hasText:/^Smetten$/})});
+ await sourceGap.locator('select').selectOption('structure:document_structure');
+ await sourceGap.getByRole('button',{name:'Vastleggen'}).click();
+ await sourceGap.waitFor({state:'detached'});
  assert((await read()).entries.some(e=>e.status==='ready' && e.disposition?.reason==='document_structure' && e.ranges[0].quote==='Smetten'));
+ await page.goto(base+'/annotations?document='+sid+'&overview=true');
+ assert.equal(await gap.count(),0);
  await page.screenshot({path:output+'/document-check-gaps.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
