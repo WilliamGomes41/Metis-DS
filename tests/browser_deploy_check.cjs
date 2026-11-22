@@ -2,12 +2,13 @@
 // console, injected faults are named per page, and no authority row changes.
 const {chromium}=require(process.env.METIS_PLAYWRIGHT_MODULE);
 const fs=require('node:fs');
+const {withBrowserEvidence}=require('./browser_evidence.cjs');
 (async()=>{
   const base=process.env.METIS_BROWSER_BASE;
   const directory=process.env.METIS_BROWSER_OUTPUT;
-  const browser=await chromium.launch({headless:true,executablePath:process.env.METIS_BROWSER_EXECUTABLE});
-  const post=(path,body)=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-  try {
+  await withBrowserEvidence(chromium, {base, output:directory, label:'deploy-check',
+    launchOptions:{headless:true,executablePath:process.env.METIS_BROWSER_EXECUTABLE}}, async ({newContext})=>{
+    const post=(path,body)=>fetch(base+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
     const manifest=await (await fetch(base+'/browser-manifest')).json();
     const before=await (await fetch(base+'/browser-domain-state')).json();
     const results={};
@@ -22,7 +23,8 @@ const fs=require('node:fs');
       return page.evaluate(()=>window.__copiedDeploy);
     };
     for(const username of [manifest.author, manifest.reviewer]){
-      const page=await browser.newPage();
+      const context=await newContext({},true);
+      const page=await context.newPage();
       const errors=[];
       page.on('pageerror',e=>errors.push(String(e)));
       await page.goto(base+'/login');
@@ -65,7 +67,7 @@ const fs=require('node:fs');
         if(!paths.includes(expected))throw Error(username+' missing page '+expected+': '+JSON.stringify(paths));
       results[username]={healthy};
       if(username===manifest.author){
-        const insightContext=await browser.newContext({storageState:await page.context().storageState()});
+        const insightContext=await newContext({storageState:await page.context().storageState()});
         const insight=await insightContext.newPage();
         await insight.route('**/inzicht/api/documents?*',route=>route.fulfill({json:{documents:[],
           total:null,offset:0,limit:200,next_offset:null,telemetry_partial:false,metadata_partial:true}}));
@@ -183,5 +185,5 @@ const fs=require('node:fs');
     const after=await (await fetch(base+'/browser-domain-state')).json();
     if(before.sha256!==after.sha256)throw Error('deploy check changed domain authority');
     fs.writeFileSync(directory+'/deploy-check-result.json',JSON.stringify({...results,domainUnchanged:true},null,2));
-  } finally {await browser.close();}
+  });
 })().catch(error=>{console.error(error);process.exit(1);});
