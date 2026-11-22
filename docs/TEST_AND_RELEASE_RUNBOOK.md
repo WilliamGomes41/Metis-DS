@@ -111,18 +111,25 @@ in de repository.
 
 ## Werking
 
-1. Een pull request voert de volledige suite uit op Python 3.12 en 3.13,
-   verdeeld over vier zelfstandige jobs per versie. De bestaande checks
-   `test (3.12)` en `test (3.13)` controleren de volledige verzameling en het
-   samengevoegde bewijs. Browserproeven draaien parallel in een eigen job.
+**G1-doelchecks** zijn `test` en `handoff-contract`.
+
+**Tijdelijke G1-checks** zijn `test (3.12)` en `test (3.13)`. Ze geven dezelfde
+uitslag door als `test` totdat de beheerder de G1-omschakeling heeft teruggelezen.
+
+1. Een pull request voert de volledige suite uit op Python 3.13, verdeeld over
+   vier zelfstandige jobs. Browserproeven draaien parallel op dezelfde versie.
+   De check `test` bundelt dit bewijs en de characterization-job met gerichte
+   compatibiliteitsproeven op Python 3.12. De aparte Docling-acceptatie bouwt
+   en toetst het containerimage op Python 3.13.
 2. `deploy-test` en de tijdelijke `deploy-production` hebben **geen** `on.push`.
    Merge naar `main` start geen deploy. Zolang `vvn-metis-console-test` niet
    bestaat blijft de testworkflow fail-closed. De productieworkflow weigert
    containerhosting, onbekende runtimewaarden en leesfouten voordat zij
    app settings wijzigt of een ZIP deployt.
 3. Alleen een geslaagde push-CI op main bouwt het deploymentpakket met
-   `bash scripts/create_azure_deploy_package.sh`. Een Python 3.12-proef importeert
-   applicatie en native dependencies uitsluitend uit het uitgepakte ZIP.
+   `bash scripts/create_azure_deploy_package.sh`. De job `package` bouwt voor
+   Python 3.13 en importeert applicatie en native dependencies op die versie
+   uitsluitend uit het uitgepakte ZIP.
    Het ZIP bevat vendored `.python_packages` uit `requirements-console.txt`
    (Protocol v2.24; MUST NOT numpy/sklearn/scipy). `requirements-retrieval.txt`
    blijft de zwaardere extra voor Product API / TF-IDF en gaat niet in het
