@@ -177,13 +177,29 @@ def test_non_workflow_rights_are_a_stop_gate_before_cutover_and_deployment() -> 
     assert all(value in step for value in ('`public`', '`api_access`', 'runtime-identiteit', 'STOP'))
 
 
+def test_pr_template_and_agents_use_closing_keywords_and_live_label() -> None:
+    template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
+    for rule in ("`Closes #N` + `Fixes MET-N`", "`Part of MET-N` + `Refs #N`",
+                 "geen `met-N` in de branchnaam"):
+        assert rule in template
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "A merge alone does not prove deployment or acceptance." in agents
+    assert "Done in Linear = merged on main; deployment/acceptance = label `live`" in agents
+    sync_doc = (ROOT / "docs/agents/linear-github-sync.md").read_text(encoding="utf-8")
+    assert "al gemergde PR" in sync_doc and "waarschuwing" in sync_doc
+
+
 def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:
     contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
     for obligation in (
         "GitHub is de bron van waarheid: code, gedragsbepalende besluiten en bewijs",
         "Linear verwijst naar GitHub en herhaalt het niet. Bij verschil wint GitHub.",
         "Een gedragsbepalend besluit dat alleen in Linear of in chat staat, geldt niet als vastgelegd.",
-        "Done = gemerged + (waar nodig) gedeployed + geverifieerd.",
+        "Done = gemerged op main met `Closes #N` en `Fixes MET-N`.",
+        "Deploy en live verificatie zijn het label `live`",
+        "geen voorwaarde voor Done",
+        "`Part of MET-N` + `Refs #N`",
+        "geen `met-N` in de branchnaam",
         "een verwijzing naar concreet bewijs",
         "CI- of testrun (PR-nummer en head-SHA)",
         "deployment_verified commit=",

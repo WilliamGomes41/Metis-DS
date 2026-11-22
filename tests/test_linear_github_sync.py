@@ -168,13 +168,48 @@ def test_untrusted_handoff_cannot_supply_next_step_and_latest_trusted_one_wins()
 
 def test_explicit_remaining_package_scope_detects_false_done_without_changing_it():
     gh, linear = GitHub(), Linear()
-    gh.prs[0]["author_association"] = "OWNER"
+    gh.prs[0].update(author_association="OWNER", state="open", merged_at=None)
     linear.issue["state"] = {"name": "Done", "type": "completed"}
     before = copy.deepcopy(linear.issue)
     with pytest.raises(sync.SyncError, match="Done conflicteert"):
         sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)
     assert linear.issue == before
     assert len(linear.comments) == 1
+
+
+def test_merged_receipt_with_remaining_work_warns_instead_of_failing():
+    """A merged PR's remaining_work: true next to Done is a warning, not a SyncError."""
+    gh, linear = GitHub(), Linear()
+    gh.prs[0]["author_association"] = "OWNER"
+    linear.issue["state"] = {"name": "Done", "type": "completed"}
+    before = copy.deepcopy(linear.issue)
+    assert sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)["changed"] == 1
+    assert linear.issue == before
+    assert "Waarschuwing" in linear.comments[0]["body"]
+    assert "remaining_work" in linear.comments[0]["body"]
+
+
+def test_no_warning_without_done_or_remaining_work():
+    gh, linear = GitHub(), Linear()
+    gh.prs[0]["author_association"] = "OWNER"
+    sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)
+    assert "Waarschuwing" not in linear.comments[0]["body"]
+
+
+@pytest.mark.parametrize("keyword", ["Part of", "Fixes", "Closes", "Resolves", "fixes"])
+def test_closing_and_partial_keywords_are_one_primary_link(keyword):
+    bindings = [sync.Binding(729, "MET-36")]
+    body = f"Closes #729\n{keyword} MET-36\n" + handoff()
+    sync.validate_pr_handoff(body, SHA, bindings)
+    gh = GitHub()
+    gh.prs[0]["body"] = body
+    assert [p["number"] for p in sync.snapshot(bindings[0], gh, gh.pulls())["pulls"]] == [945]
+
+
+def test_two_primary_links_are_rejected_even_with_mixed_keywords():
+    with pytest.raises(sync.SyncError):
+        sync.validate_pr_handoff("Fixes MET-36. Part of MET-43.\n" + handoff(), SHA,
+                                 [sync.Binding(729, "MET-36"), sync.Binding(730, "MET-43")])
 
 
 def test_stale_receipt_does_not_accuse_current_done():
