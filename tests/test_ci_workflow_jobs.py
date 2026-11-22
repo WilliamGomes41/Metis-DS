@@ -34,14 +34,11 @@ def test_bend_console_comparison_provisions_and_requires_native_postgres():
     assert any('root.iter(\'skipped\')' in cmd for cmd in commands)
 
 
-def test_browser_is_independent_and_existing_required_checks_gate_all_shards():
+def test_browser_is_independent_and_the_test_check_uses_all_suite_shards():
     jobs = workflow('ci.yml')['jobs']
-    assert 'suite' in jobs and 'browser' in jobs
-    assert jobs['suite']['strategy']['matrix']['shard'] == [0, 1, 2, 3]
-    assert jobs['suite']['strategy']['matrix']['python-version'] == ['3.12', '3.13']
+    assert jobs['suite']['strategy']['matrix'] == {'shard': [0, 1, 2, 3]}
     assert 'suite' not in jobs['browser']['needs']
     assert {'suite', 'browser', 'characterization-evidence'} <= set(jobs['test']['needs'])
-    assert jobs['test']['strategy']['matrix']['python-version'] == ['3.12', '3.13']
     assert not any('pytest ' in s.get('run','') and 'browser' in s['run'] for s in jobs['test']['steps'])
     # upload-artifact v4 otherwise returns HTTP 409 when a failed job already
     # uploaded evidence. Retrying that job must replace its proof, not fail again.

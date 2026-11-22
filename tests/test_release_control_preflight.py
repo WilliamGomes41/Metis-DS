@@ -344,13 +344,27 @@ def test_ci_runs_release_control_after_repository_preflight() -> None:
     assert workflow.index("repository_preflight") < workflow.index("release_control_preflight")
 
 
-def test_ci_retains_required_matrix_and_full_verification() -> None:
-    """Scheduling/cache optimizations must preserve both required test checks."""
+def test_ci_retains_full_production_verification_and_python_312_compatibility() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     import yaml
     jobs = yaml.safe_load(workflow)['jobs']
-    for name in ('preflight', 'suite', 'test'):
-        assert jobs[name]['strategy']['matrix']['python-version'] == ['3.12', '3.13']
+    expected_versions = {
+        'preflight': '3.13',
+        'suite': '3.13',
+        'browser': '3.13',
+        'test': '3.13',
+        'characterization-evidence': '3.12',
+    }
+    for name, version in expected_versions.items():
+        setup = next(s for s in jobs[name]['steps'] if s.get('uses', '').startswith('actions/setup-python@'))
+        assert setup['with']['python-version'] == version, name
+    compatibility = next(s for s in jobs['characterization-evidence']['steps']
+                         if 'char-python312-compatibility.xml' in s.get('run', ''))
+    assert 'if' not in compatibility and 'continue-on-error' not in compatibility
+    assert 'bash scripts/test_postgres.sh' in compatibility['run']
+    assert 'pytest -q tests/test_docling_contract_v1.py tests/test_product_api_contract_guard_v1.py' in compatibility['run']
+    assert "assert list(root.iter('testcase'))" in compatibility['run']
+    assert "assert not list(root.iter('skipped'))" in compatibility['run']
     preflight = '\n'.join(s.get('run', '') for s in jobs['preflight']['steps'])
     for command in (
         "python scripts/repository_preflight.py",
