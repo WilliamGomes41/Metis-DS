@@ -44,22 +44,33 @@ def current_g1():
     }
 
 
-def planned_snapshot():
+def before_test_cutover():
     snapshot = current_g1()
-    snapshot.update(plan_ruleset(snapshot, POLICY))
+    checks = snapshot["rules"][2]["parameters"]["required_status_checks"]
+    for check in checks:
+        check["integration_id"] = 15368
+    checks.append({"context": "handoff-contract", "integration_id": 15368})
+    snapshot["rules"][3]["parameters"]["required_review_thread_resolution"] = True
     return snapshot
 
 
-def test_real_baseline_exposes_missing_handoff_threads_and_unbound_checks():
+def planned_snapshot():
+    snapshot = before_test_cutover()
+    snapshot.update(plan_ruleset(snapshot, POLICY, retire_legacy_test_checks=True))
+    return snapshot
+
+
+def test_earlier_baseline_exposes_missing_consolidated_check_handoff_and_threads():
     assert validate_ruleset(current_g1(), POLICY) == [
-        "required check must come from GitHub Actions: test (3.12)",
-        "required check must come from GitHub Actions: test (3.13)",
+        "missing required check: test",
         "missing required check: handoff-contract",
+        "retired check is still required: test (3.12)",
+        "retired check is still required: test (3.13)",
         "review threads must be resolved",
     ]
 
 
-@pytest.mark.parametrize("name", ["test (3.12)", "test (3.13)", "handoff-contract"])
+@pytest.mark.parametrize("name", ["test", "handoff-contract"])
 def test_missing_required_context_fails(name):
     snapshot = planned_snapshot()
     checks = snapshot["rules"][2]["parameters"]["required_status_checks"]
@@ -84,7 +95,7 @@ def test_unresolved_threads_fail():
 
 
 def test_planner_is_pure_idempotent_and_preserves_stronger_and_unrelated_settings():
-    snapshot = current_g1()
+    snapshot = before_test_cutover()
     snapshot["rules"].append({"type": "required_linear_history"})
     snapshot["rules"][2]["parameters"]["required_status_checks"].append(
         {"context": "security", "integration_id": 42}
@@ -94,12 +105,12 @@ def test_planner_is_pure_idempotent_and_preserves_stronger_and_unrelated_setting
         require_last_push_approval=True,
     )
     original = deepcopy(snapshot)
-    planned = plan_ruleset(snapshot, POLICY)
+    planned = plan_ruleset(snapshot, POLICY, retire_legacy_test_checks=True)
     assert snapshot == original
     assert planned["rules"][4] == original["rules"][4]
-    assert planned["rules"][2]["parameters"]["required_status_checks"][2] == {
+    assert {
         "context": "security", "integration_id": 42,
-    }
+    } in planned["rules"][2]["parameters"]["required_status_checks"]
     original_review = original["rules"][3]["parameters"]
     assert planned["rules"][3]["parameters"] == {
         **original_review, "required_review_thread_resolution": True,
@@ -108,6 +119,29 @@ def test_planner_is_pure_idempotent_and_preserves_stronger_and_unrelated_setting
     assert validate_ruleset(snapshot, POLICY) == []
     assert plan_ruleset(snapshot, POLICY) == planned
     assert "id" not in planned and "source" not in planned
+
+
+def test_only_explicit_cutover_retires_exact_legacy_checks():
+    snapshot = before_test_cutover()
+    before = {c["context"] for c in snapshot["rules"][2]["parameters"]["required_status_checks"]}
+    staged = plan_ruleset(snapshot, POLICY)
+    assert {c["context"] for c in staged["rules"][2]["parameters"]["required_status_checks"]} == before | {"test"}
+    assert validate_ruleset({**snapshot, **staged}, POLICY) == [
+        "retired check is still required: test (3.12)",
+        "retired check is still required: test (3.13)",
+    ]
+    cutover = plan_ruleset(snapshot, POLICY, retire_legacy_test_checks=True)
+    assert {c["context"] for c in cutover["rules"][2]["parameters"]["required_status_checks"]} == {
+        "test", "handoff-contract",
+    }
+    assert validate_ruleset({**snapshot, **cutover}, POLICY) == []
+
+
+def test_cutover_refuses_an_unexpected_legacy_provider():
+    snapshot = before_test_cutover()
+    snapshot["rules"][2]["parameters"]["required_status_checks"][0]["integration_id"] = 42
+    with pytest.raises(ValueError, match="unexpected legacy check integration"):
+        plan_ruleset(snapshot, POLICY, retire_legacy_test_checks=True)
 
 
 def test_solo_owner_does_not_gain_impossible_approval_requirements():
@@ -165,9 +199,10 @@ def test_cli_rejects_drift_prints_only_plan_json_and_checks_readback(tmp_path):
     command = [sys.executable, str(ROOT / "scripts/check_github_merge_policy.py"), "--ruleset", str(path)]
     result = subprocess.run(command, capture_output=True, text=True)
     assert result.returncode == 1 and "missing required check: handoff-contract" in result.stderr
-    result = subprocess.run([*command, "--plan"], capture_output=True, text=True)
+    snapshot = before_test_cutover()
+    path.write_text(json.dumps(snapshot))
+    result = subprocess.run([*command, "--plan", "--retire-legacy-test-checks"], capture_output=True, text=True)
     assert result.returncode == 0 and "PLAN ONLY" in result.stderr
-    snapshot = current_g1()
     snapshot.update(json.loads(result.stdout))
     path.write_text(json.dumps(snapshot))
     result = subprocess.run(command, capture_output=True, text=True)
@@ -196,3 +231,44 @@ def test_required_handoff_has_one_unconditional_pr_job_including_body_edits():
     validation = next(s for s in job["steps"] if "--validate-event" in s.get("run", ""))
     assert validation["run"] == 'python scripts/linear_github_sync.py --validate-event "$GITHUB_EVENT_PATH"'
     assert "secrets." not in json.dumps(workflow)
+
+
+@pytest.mark.parametrize(
+    ("results", "exit_code"),
+    [
+        ("success,success,success,success", 0),
+        ("success,success,skipped,success", 1),
+        ("success,success,failure,success", 1),
+        ("success,success,cancelled,success", 1),
+        ("success,success,success", 1),
+        ("", 1),
+    ],
+)
+def test_actual_ci_gate_refuses_incomplete_proof(results, exit_code):
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    gate = jobs["test"]
+    assert gate["if"] == "${{ always() }}"
+    assert gate["needs"] == ["preflight", "suite", "browser", "characterization-evidence"]
+    assert "strategy" not in gate
+    evidence_step = gate["steps"][0]
+    assert evidence_step["env"] == {"REQUIRED_RESULTS": "${{ join(needs.*.result, ',') }}"}
+    assert "if" not in evidence_step and "continue-on-error" not in evidence_step
+    run = subprocess.run(
+        ["bash", "-c", evidence_step["run"]],
+        env={"REQUIRED_RESULTS": results},
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode == exit_code
+
+
+def test_transition_names_report_the_same_test_result_without_rerunning_tests():
+    legacy = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]["legacy-test-status"]
+    assert legacy["name"] == "test (${{ matrix.python-version }})"
+    assert legacy["strategy"]["matrix"] == {"python-version": ["3.12", "3.13"]}
+    assert legacy["if"] == "${{ always() }}" and legacy["needs"] == "test"
+    step, = legacy["steps"]
+    assert step["env"] == {"TEST_RESULT": "${{ needs.test.result }}"}
+    for result in ("success", "skipped", "failure", "cancelled", ""):
+        exit_code = subprocess.run(["bash", "-c", step["run"]], env={"TEST_RESULT": result}).returncode
+        assert exit_code == (0 if result == "success" else 1)

@@ -45,8 +45,6 @@ def test_design_fixes_the_invariants_of_the_trace_keten():
                       'Geen cookies of geheimen in een artifact.',
                       'Namen en afhankelijkheden van de required checks blijven identiek.'):
         assert invariant in text, invariant
-    policy = json.loads((ROOT / 'config' / 'github_merge_policy.v1.json').read_text())
-    assert {c['context'] for c in policy['required_status_checks']} == {'test (3.12)', 'test (3.13)', 'handoff-contract'}
 
 
 def test_design_keeps_existing_in_memory_storage_state_and_refuses_file_state():

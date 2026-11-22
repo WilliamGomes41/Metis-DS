@@ -1,6 +1,6 @@
 # Same Metis kernel and existing startup/authority guards, with an isolated
 # official Docling interpreter. This recipe does not create Azure resources.
-FROM python:3.12-slim AS runtime
+FROM python:3.13-slim AS runtime
 WORKDIR /app
 ARG METIS_BUILD_COMMIT=unknown
 ENV METIS_BUILD_COMMIT=${METIS_BUILD_COMMIT}

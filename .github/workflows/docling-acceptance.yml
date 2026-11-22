@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
       - name: Install PDF standard font rendering dependency
         run: |
           bash scripts/ci_with_apt_proxy.sh apt-get update
