@@ -29,7 +29,7 @@ def test_v212_approval_manifest_matches_protocol_bytes() -> None:
 def test_v212_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -116,7 +116,7 @@ def test_v212_keeps_all_v26_through_v210_rules() -> None:
 def test_v212_does_not_redesign_the_four_layers() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Do not redesign the four layers (source/evidence → canonical knowledge → governance → product)" in delta
     assert "The problem is semantic classification and the hard binding of review, publication and serving" in delta
     assert "The four layers remain source/evidence → canonical knowledge → governance → product" in delta
@@ -130,7 +130,7 @@ def test_v212_does_not_redesign_the_four_layers() -> None:
 def test_v212_extraction_is_structure_and_provenance_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Extraction MUST determine structure and provenance only, NOT the meaning of a passage" in delta
     assert "A heading MAY become object_type `heading`" in delta
     assert "Everything that is not a heading MUST default to `unclassified`" in delta
@@ -147,7 +147,7 @@ def test_v212_extraction_is_structure_and_provenance_only() -> None:
 def test_v212_closed_object_type_set_does_not_invent_types() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`heading`, `definition`, `explanation`, `condition`, `exception`, `recommendation`" in delta
     assert "Operators MUST NOT invent types in the MVP" in delta
     assert "`unclassified` is the default, not a sixth advice type" in delta
@@ -161,7 +161,7 @@ def test_v212_closed_object_type_set_does_not_invent_types() -> None:
 def test_v212_answerability_joins_question_type_and_object_type() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Answerability MUST join question type × object type" in delta
     assert 'MUST NOT be "only recommendations are supported"' in delta
     assert "supported when the available, reviewed object type is suitable for the claimed question" in delta
@@ -183,7 +183,7 @@ def test_v212_answerability_joins_question_type_and_object_type() -> None:
 def test_v212_publish_binds_object_tuple_not_envelope_tick() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Cutover/publish MUST NOT trust envelope `review_passes` alone" in delta
     assert "`object_id` + `object_version` + `canonical_object_hash` + `confirmed_object_type` + `reviewer` + `decision`" in delta
     assert "Independence rule unchanged (uploader MUST NOT be the only required reviewer)" in delta
@@ -201,7 +201,7 @@ def test_v212_publish_binds_object_tuple_not_envelope_tick() -> None:
 def test_v212_serving_uses_atomic_published_projection() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The Product API remains a derived read-only layer" in delta
     assert "Serving MUST use a validated published projection" in delta
     assert "Publish, withdraw and supersede MUST replace that projection atomically" in delta
@@ -222,7 +222,7 @@ def test_v212_serving_uses_atomic_published_projection() -> None:
 def test_v212_delta_keeps_historical_pr27_lock_while_wiring_lists_v211_live() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Ingest URL-HTML remains the v2.11 lock (PR #27, not this file)" in delta
     assert "live URL-HTML MUST NOT be a publishable source" in delta
     assert "uploaded freeze-HTML MAY" in delta
@@ -298,7 +298,7 @@ def test_v212_is_c3_spanning_c5_with_owner_approval_and_does_not_reopen_gd03() -
 
 def test_v212_records_kernel_build_order_without_implementing_code_or_starting_azure() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Do not build a mockup" in delta
     assert "The next implementation after this protocol (not this PR) MUST be the Implementation engineer on the existing kernel" in delta

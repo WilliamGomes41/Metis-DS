@@ -288,7 +288,7 @@ def test_docs_declare_supported_topology_not_silent_multi_writer() -> None:
 
 
 def test_roadmap_records_remediation_5_landing_note() -> None:
-    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     heading = "Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie (ROADMAP)"
     lock = roadmap[roadmap.index(heading) :]

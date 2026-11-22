@@ -32,7 +32,7 @@ def test_v222_approval_manifest_matches_protocol_bytes() -> None:
 def test_v222_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -56,7 +56,7 @@ def test_v222_delta_exists_and_is_the_live_baseline() -> None:
 def test_v222_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -71,7 +71,7 @@ def test_v222_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v222_is_bounded_supersession_of_v221_section_3_order_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Bounded supersession of Protocol v2.21 §3 order A then B then C then D, for next-implementation order only" in delta
     assert "Waves themselves unchanged" in delta
     assert "Historical v2.21 wave definitions remain law except the A-B-C-D next-impl order superseded here" in delta
@@ -86,7 +86,7 @@ def test_v222_is_bounded_supersession_of_v221_section_3_order_only() -> None:
 def test_v222_wave_a_already_on_main_and_v220_not_a_fifth_wave() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Wave A is already in code on `main` `512ffa5026d06ff804434ddf4d07a08a36c02305`" in delta
     assert "v2.20 unpublished-delete remains on main, not a fifth wave" in delta
     assert "MUST NOT rewrite v2.16–v2.21 files except index/conflict pointers" in delta
@@ -99,7 +99,7 @@ def test_v222_wave_a_already_on_main_and_v220_not_a_fifth_wave() -> None:
 def test_v222_new_order_c_then_d_then_zip_then_b() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Wave C: finish PR #82 faults" in delta
     assert "Wave D: `/home/data` inventory, export/restore, proof that `--clean true` wipes wwwroot and MUST NOT delete runtime data" in delta
     assert "THEN one Cloud Shell / production ZIP of that controlled SHA (A+C+D), not a live-URL ingest" in delta
@@ -124,7 +124,7 @@ def test_v222_new_order_c_then_d_then_zip_then_b() -> None:
 def test_v222_wave_c_pr82_faults_and_named_test_app() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "packaging via bash or executable" in delta
     assert "ZIP MUST be fully deployable with dependencies" in delta
     assert "git-archive-only is not enough" in delta
@@ -145,7 +145,7 @@ def test_v222_wave_c_pr82_faults_and_named_test_app() -> None:
 def test_v222_wave_d_clean_true_wipes_wwwroot_not_runtime() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Inventory of `/home/data/metis-console`" in delta
     assert "proof that `--clean true` wipes wwwroot and MUST NOT delete runtime data" in delta
     assert "MUST NOT SSH-wipe `/home/data`" in delta
@@ -158,7 +158,7 @@ def test_v222_wave_d_clean_true_wipes_wwwroot_not_runtime() -> None:
 def test_v222_zip_after_c_d_not_live_url_and_does_not_open_g2() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "not a live-URL ingest" in delta
     assert "ZIP does not open publication" in delta
     assert "Do not claim G2 PASS in this protocol" in delta
@@ -175,7 +175,7 @@ def test_v222_zip_after_c_d_not_live_url_and_does_not_open_g2() -> None:
 def test_v222_next_implementation_is_wave_c_and_d_then_stop_for_zip() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.21 conflict on which implementation is next, this delta governs" in delta
     assert "The next implementation after this protocol merges MUST be the Implementation engineer on the existing kernel/repo for wave C (finish PR #82, do not activate) AND wave D (backup/restore + deploy-persistence test)" in delta
@@ -197,7 +197,7 @@ def test_v222_next_implementation_is_wave_c_and_d_then_stop_for_zip() -> None:
 def test_v222_keeps_continentie_evidence_and_every_guideline_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`PROTOCOL.md` is every-guideline law, not Continentie-only (Protocol v2.20)" in delta
     assert "Historical Continentie evidence sentences in Protocol v2.16–v2.19 MUST remain" in delta
     assert "stamp words as Koppen; 2008 Inhoud cards" in delta
@@ -211,7 +211,7 @@ def test_v222_keeps_continentie_evidence_and_every_guideline_law() -> None:
 def test_v222_g2_readiness_and_pr82_stay_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "G2-readiness (PR #69) already pinned `azure-identity==1.25.3` / `azure-storage-blob==12.30.1`" in delta
     assert "PR #82 (`ci: isolated test deploy + manual production`) is OPEN and MUST NOT be activated until the four faults are fixed AND Azure test App Service `vvn-metis-console-test` exists" in delta
     assert "G2-readiness (PR #69)" in root_protocol

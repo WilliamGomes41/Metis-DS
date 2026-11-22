@@ -33,7 +33,7 @@ def test_v232_approval_manifest_matches_protocol_bytes() -> None:
 def test_v232_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -50,7 +50,7 @@ def test_v232_delta_exists_and_is_the_live_baseline() -> None:
 def test_v232_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "frozen source → source passage → knowledge object → human review → published projection" in delta
@@ -66,7 +66,7 @@ def test_v232_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v232_documenten_ui_room_name_norms() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "MUST be **Documenten**" in delta
     assert "ordinary Dutch, singular room name" in delta
@@ -85,7 +85,7 @@ def test_v232_documenten_ui_room_name_norms() -> None:
 def test_v232_supersedes_only_the_ui_name_not_delete_surface() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "SUPERSEDES only the UI name in Protocol v2.10" in delta or "SUPERSEDES only the UI name in v2.10" in delta
     assert "do NOT reopen delete surface to Review/Inleveren" in delta
     assert "Protocol v2.27 unpublished-delete remains ONE place only" in delta
@@ -106,7 +106,7 @@ def test_v232_historical_delta_filenames_may_keep_path() -> None:
 
 def test_v232_landing_sketch_b_is_out_of_this_pr() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Landing-page sketch B" in delta
     assert "centered sparse home" in delta
@@ -124,7 +124,7 @@ def test_v232_landing_sketch_b_is_out_of_this_pr() -> None:
 def test_v232_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -139,7 +139,7 @@ def test_v232_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v232_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap

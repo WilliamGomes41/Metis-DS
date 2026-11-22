@@ -14,7 +14,7 @@ Oorspronkelijk onderzocht op Git-basis `0bbd58f2aa2b1f4a9e6dff288458ec76b4809c56
 
 De vorige protocoltekst is bytegelijk bewaard als [snapshot](../history/protocol-v4.3/PROTOCOL_BEFORE_ALIGNMENT_2026-11-01.md), SHA-256 `1eaeae0da519c90c09375eb67809bdac5f73d000a790d3e740308b51f1ca003d`. De actuele protocolidentiteit en codeconstante worden 4.3.1. Historische releases en fixtures worden niet herschreven. De constante alleen bewijst geen duurzame protocolversie in releases.
 
-De onderstaande koppeling betreft de genoemde regels en routes. Zij is geen volledige codeaudit en geen verklaring dat alle protocolinvarianten in productie bewezen zijn. Open werk blijft uitsluitend in [de roadmap](../../ROADMAP.md) geprioriteerd.
+De onderstaande koppeling betreft de genoemde regels en routes. Zij is geen volledige codeaudit en geen verklaring dat alle protocolinvarianten in productie bewezen zijn. Open werk blijft uitsluitend in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues) geprioriteerd.
 
 ## Koppeling tussen norm, code en bewijs
 

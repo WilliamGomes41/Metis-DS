@@ -85,7 +85,7 @@ def test_v230_approval_manifest_matches_protocol_bytes() -> None:
 def test_v230_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -117,7 +117,7 @@ def test_v230_delta_exists_and_is_the_live_baseline() -> None:
 def test_v230_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "frozen source → source passage → knowledge object → human review → published projection" in delta
@@ -367,7 +367,7 @@ def test_v230_block_b_review_ui_order_one_save() -> None:
 
 def test_v230_wired_docs_repeat_block_norms() -> None:
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     for surface in (root_protocol, roadmap, changelog):
         assert "There MUST be NO tradeoff" in surface
@@ -389,7 +389,7 @@ def test_v230_wired_docs_repeat_block_norms() -> None:
 
 def test_v230_roadmap_states_four_forge_phases_not_this_pr() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     root_protocol = _read(ROOT / "PROTOCOL.md")
     assert "four Forge phases after separate Metis GOs" in delta
@@ -410,7 +410,7 @@ def test_v230_roadmap_states_four_forge_phases_not_this_pr() -> None:
 def test_v230_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -425,7 +425,7 @@ def test_v230_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v230_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -435,7 +435,7 @@ def test_v230_handoff_must_not_be_recreated() -> None:
 def test_v230_keeps_prior_locks() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "v2.28 Sterkte-on-confirmed-type remains" in delta
     assert "v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm remains law" in delta or "v2.27 unpublished-delete Documentenhiërarchie only + type-to-confirm remains UNCHANGED" in delta
     assert "v2.25 boom path UNCHANGED" in delta or "v2.25 boom path remains UNCHANGED" in delta

@@ -95,7 +95,7 @@ def test_v224_approval_manifest_matches_protocol_bytes() -> None:
 def test_v224_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -120,7 +120,7 @@ def test_v224_delta_exists_and_is_the_live_baseline() -> None:
 def test_v224_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -136,7 +136,7 @@ def test_v224_architecture_sentence_locked_verbatim() -> None:
     sentence = "Runtime-scheiding mag veranderen; protocol- en publicatiegrenzen niet."
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert sentence in delta
     assert sentence in root_protocol
@@ -147,7 +147,7 @@ def test_v224_architecture_sentence_locked_verbatim() -> None:
 def test_v224_split_deploy_package_not_product_idea() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "split the deploy package, not the product idea" in delta
     assert "Two doors already exist" in delta
@@ -161,7 +161,7 @@ def test_v224_split_deploy_package_not_product_idea() -> None:
 def test_v224_console_zip_must_not_vendor_sklearn_stack() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Azure deploy package MUST NOT vendor numpy, sklearn, scipy, or scikit-learn" in delta
     assert "Console ZIP MAY include FastAPI, gunicorn, uvicorn, python-multipart, PyMuPDF, jsonschema, azure-identity, azure-storage-blob" in delta
@@ -185,7 +185,7 @@ def test_v224_console_asgi_must_not_import_retrieval_at_process_start() -> None:
 def test_v224_product_api_not_same_worker_and_not_live_this_wave() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Product API MUST NOT be deployed in the same App Service worker as the Review console" in delta
     assert "MUST NOT go live in this wave" in delta
     assert "No new App Service in this PR" in delta
@@ -199,7 +199,7 @@ def test_v224_product_api_not_same_worker_and_not_live_this_wave() -> None:
 def test_v224_split_does_not_open_publish_or_g2() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "this split opens `publish()` or G2" in delta
     assert "This split does not open `publish()` or G2" in delta
@@ -213,7 +213,7 @@ def test_v224_split_does_not_open_publish_or_g2() -> None:
 def test_v224_shared_across_doors_and_not_accounts_or_unpublished() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Shared across doors: PROTOCOL, freeze bytes (SHA-256), and later G2 published objects" in delta
     assert "MUST NOT share unpublished review store or console login accounts as API entitlement" in delta
     assert "Console accounts are not API tenants" in delta
@@ -227,7 +227,7 @@ def test_v224_shared_across_doors_and_not_accounts_or_unpublished() -> None:
 def test_v224_one_shared_kernel_no_second_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "The temporary deploy split MUST NOT become two systems" in delta
     assert "PROTOCOL, object formats, freeze rules, and publish logic are one shared kernel" in delta
@@ -290,7 +290,7 @@ def test_v224_console_classification_is_rules_not_sklearn() -> None:
 def test_v224_keeps_two_products_and_cli_review_queue() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`service_app.py` AND `product_api_v1.py` are two products" in delta
     assert "Do not silent-delete CLI review-queue" in delta
     assert "Console remains the researcher duty queue" in delta
@@ -306,7 +306,7 @@ def test_v224_keeps_two_products_and_cli_review_queue() -> None:
 def test_v224_next_code_is_requirements_split_not_this_pr() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "split console vs retrieval requirements, prove `console_asgi` import graph has no sklearn/numpy, one thin console ZIP" in delta
     assert "Cloud Shell of that ZIP is a later live step, not tonight" in delta
@@ -330,7 +330,7 @@ def test_v224_next_code_is_requirements_split_not_this_pr() -> None:
 def test_v224_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -340,7 +340,7 @@ def test_v224_handoff_must_not_be_recreated() -> None:
 def test_v224_keeps_continentie_evidence_and_every_guideline_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Continentie evidence sentences" in delta or "historical Continentie evidence sentences" in delta
     assert "PROTOCOL.md is every-guideline law" in delta or "PROTOCOL.md is wet voor iedere richtlijn" in root_protocol
     assert "PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only" in root_protocol

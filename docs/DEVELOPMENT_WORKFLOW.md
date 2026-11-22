@@ -9,9 +9,10 @@ Deze werkwijze voorkomt dat implementatiekeuzes stilzwijgend productregels of ar
 | Laag | Vraag | Verplicht resultaat |
 |---|---|---|
 | `PROTOCOL.md` | Wat moet waar zijn? | Norm, grenzen, invarianten, verantwoordelijkheden en verboden gedrag |
-| `ROADMAP.md` | In welke volgorde realiseren we dit? | Fasen, scope, afhankelijkheden en stopvoorwaarden |
 | Tests | Hoe bewijzen we conformiteit? | Gold cases, acceptatiecriteria, regressie- en invarianttests |
 | Code | Hoe implementeren we het besloten gedrag? | Minimaal noodzakelijke deterministische en modelondersteunde implementatie |
+
+Leg scope, volgorde, afhankelijkheden en stopvoorwaarden vast in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues).
 
 Een lagere laag mag een hogere laag niet tegenspreken. Bij tegenspraak geldt de hogere laag en stopt de wijziging fail-closed.
 
@@ -21,7 +22,7 @@ Een lagere laag mag een hogere laag niet tegenspreken. Bij tegenspraak geldt de 
 2. Classificeer de wijziging en bepaal de hoogste geraakte protocolklasse/gate.
 3. Toets of de bestaande norm het gewenste gedrag ondubbelzinnig bepaalt.
 4. Wijzig eerst het protocol als een nieuwe regel, grens, verantwoordelijkheid of route nodig is.
-5. Bepaal in de roadmap de volgorde, scope en stopvoorwaarden.
+5. Leg in het GitHub-issue de volgorde, scope en stopvoorwaarden vast.
 6. Leg vóór implementatie de relevante gold cases, acceptatietests of invarianttests vast.
 7. Implementeer de kleinste wijziging die de tests en norm realiseert.
 8. Voer repository-preflight, compilatie, invarianttests, volledige tests en relevante echte cases uit.
@@ -49,7 +50,7 @@ Iedere materiële PR vermeldt minimaal:
 - probleem en gewenste uitkomst;
 - geraakte protocolsecties, lagen en hoogste wijzigingsklasse;
 - protocolimpact: geen, verduidelijking of nieuwe versie;
-- roadmapfase en effect op scope/stopvoorwaarden;
+- bijbehorend GitHub-issue en effect op scope en stopvoorwaarden;
 - vooraf vastgelegde tests of acceptatiecases;
 - uitgevoerde preflight, CI, volledige tests en echte-casevalidatie;
 - source-, schema-, publication-, answerability-, security- en privacy-impact waar toepasselijk;
@@ -68,7 +69,7 @@ CI controleert minimaal dat:
 - de sturende documenten bestaan;
 - de hiërarchie in alle sturende documenten herkenbaar en consistent is;
 - `PROTOCOL.md` naar precies één geldende versiegebonden protocolspecificatie verwijst;
-- de roadmap fasen en stopvoorwaarden bevat;
+- actuele documentatie naar GitHub Issues verwijst voor open werk;
 - bestaande architectuur-invarianttests en de volledige testsuite blijven slagen.
 
 Deze documenttests bewijzen geen inhoudelijke goedkeuring. Ze voorkomen wel dat de afgesproken besturingsstructuur onzichtbaar verdwijnt.

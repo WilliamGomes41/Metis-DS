@@ -23,7 +23,7 @@ Onderzoekers, reviewers en publishers werken in de Metis-webomgeving, ieder met 
 ## Verder lezen en bijdragen
 
 - [Protocol](PROTOCOL.md) — productafspraken en blijvende eisen.
-- [Roadmap](ROADMAP.md) — veranderopgaven en acceptatievoorwaarden.
+- [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues) — open werk, afhankelijkheden en acceptatievoorwaarden.
 - [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues) — actuele werkzaamheden en voortgang.
 - [Codeaudit](docs/audit/README.md) — vaste ID-koppelingen en bewijs bij de auditbevindingen A01–A27.
 - [Repositoryafspraken](docs/REPOSITORY_CONVENTIONS.md) en [werkinstructies voor agents](AGENTS.md) — voor ontwikkelaars.

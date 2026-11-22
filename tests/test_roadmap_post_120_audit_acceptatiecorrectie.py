@@ -31,7 +31,7 @@ def _read(path: Path) -> str:
 
 
 def test_roadmap_records_post_120_audit_acceptatiecorrectie() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie (ROADMAP)" in roadmap
     assert "Geen Protocol v2.32. Geen golf 6. Geen productcode in deze PR." in roadmap
@@ -47,7 +47,7 @@ def test_roadmap_records_post_120_audit_acceptatiecorrectie() -> None:
 
 
 def test_roadmap_does_not_claim_waves_1_to_5_fully_cover_reliability() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "#113–#120" in roadmap
     assert "multiuser-betrouwbaarheid" in roadmap
@@ -58,7 +58,7 @@ def test_roadmap_does_not_claim_waves_1_to_5_fully_cover_reliability() -> None:
 
 
 def test_roadmap_orders_audit_remediations_not_a_sixth_wave() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     heading = "Eigenaarslock 2026-09-06 — Post-#120 audit acceptatiecorrectie (ROADMAP)"
     lock = roadmap[roadmap.index(heading) :]
@@ -83,7 +83,7 @@ def test_roadmap_orders_audit_remediations_not_a_sixth_wave() -> None:
 
 
 def test_roadmap_releasecheck_stays_outside_remediations() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Aparte releasecheck (blijft buiten de remediaties)" in roadmap
     assert "MUST NOT Azure ZIP autoriseren" in roadmap
