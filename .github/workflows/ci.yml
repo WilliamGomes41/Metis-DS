@@ -69,6 +69,17 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .
+      - name: Prove Python 3.12 worker and contract compatibility
+        run: |
+          bash scripts/test_postgres.sh > /dev/null
+          python -m pytest -q tests/test_docling_contract_v1.py tests/test_product_api_contract_guard_v1.py \
+            --junitxml=output/char-python312-compatibility.xml
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('output/char-python312-compatibility.xml')
+          assert list(root.iter('testcase')), 'Missing Python 3.12 compatibility proof'
+          assert not list(root.iter('skipped')), 'Python 3.12 compatibility proof must execute'
+          PYCODE
       - name: Verify live worker heartbeat lock order
         run: |
           mkdir -p output
@@ -126,10 +137,6 @@ jobs:
     needs: [change-contract, architecture-boundaries]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,7 +145,7 @@ jobs:
         run: git fetch --no-tags origin main:refs/remotes/origin/main
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.lock
@@ -159,7 +166,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: product-api-v1-openapi-${{ matrix.python-version }}
+          name: product-api-v1-openapi-3.13
           path: output/runtime/product_api_v1.openapi.json
           if-no-files-found: error
       - name: Product API v1 backward compatibility
@@ -173,7 +180,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.12', '3.13']
         shard: [0, 1, 2, 3]
     services:
       postgres:
@@ -206,7 +212,7 @@ jobs:
         run: git fetch --no-tags origin main:refs/remotes/origin/main
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.lock
@@ -219,7 +225,7 @@ jobs:
       - run: pip install --no-deps --no-build-isolation -e .
       - name: Require PostgreSQL command-line test tooling before the suite
         run: psql --version
-      - name: Measure unchanged database fixture alternatives once per Python
+      - name: Measure unchanged database fixture alternatives
         if: matrix.shard == 0
         run: |
           mkdir -p output/shard
@@ -236,7 +242,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: suite-shard-${{ matrix.python-version }}-${{ matrix.shard }}
+          name: suite-shard-3.13-${{ matrix.shard }}
           path: output/shard/
           if-no-files-found: error
 
@@ -276,7 +282,7 @@ jobs:
         run: git fetch --no-tags origin main:refs/remotes/origin/main
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.lock
@@ -316,16 +322,11 @@ jobs:
             ${{ runner.temp }}/metis-browser-proof/
           if-no-files-found: error
 
-  # Preserve the existing required check names; these aggregate executed proof.
   test:
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
     needs: [preflight, suite, browser, characterization-evidence]
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.12', '3.13']
     services:
       postgres:
         image: postgres:16
@@ -350,27 +351,35 @@ jobs:
       METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
 
     steps:
+      - name: Require successful preflight, suite, browser and characterization
+        env:
+          REQUIRED_RESULTS: ${{ join(needs.*.result, ',') }}
+        run: |
+          if [[ "$REQUIRED_RESULTS" != "success,success,success,success" ]]; then
+            echo "::error::Missing or unsuccessful required CI proof ($REQUIRED_RESULTS)"
+            exit 1
+          fi
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.13'
       - name: Install dependencies for conditional historical reproduction
         if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'codex/d6a') || github.head_ref == 'fix/a08-review-completion')
         run: pip install -r requirements-dev.lock && pip install --no-deps --no-build-isolation -e .
       - name: D6a baseline on the unchanged main base
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a')
         run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
       - name: Download all executed suite shards
         uses: actions/download-artifact@v4
         with:
-          pattern: suite-shard-${{ matrix.python-version }}-*
+          pattern: suite-shard-3.13-*
           path: ${{ runner.temp }}/suite-shards
       - name: Require complete executed suite with zero PostgreSQL skips
         if: ${{ !cancelled() }}
         env:
-          EXPECTED_PYTHON: ${{ matrix.python-version }}
+          EXPECTED_PYTHON: '3.13'
         run: |
           args=()
           if [ -f output/d6a-before.json ]; then args+=(--baseline output/d6a-before.json); fi
@@ -384,7 +393,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: suite-timing-${{ matrix.python-version }}
+          name: suite-timing-3.13
           path: output/d6a-*
           if-no-files-found: warn
       - name: D5 PostgreSQL lifecycle without disk mirrors
@@ -414,7 +423,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: pg-without-mirrors-${{ matrix.python-version }}
+          name: pg-without-mirrors-3.13
           path: output/pg-without-mirrors.xml
           if-no-files-found: error
       - name: Verify reprocessing owner guard and PG state against native PostgreSQL (#708)
@@ -476,7 +485,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: a10-native-${{ matrix.python-version }}
+          name: a10-native-3.13
           path: output/a10-native.xml
           if-no-files-found: error
       - name: Prove A08 review regressions on the unchanged merged base
@@ -511,7 +520,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: a08-before-${{ matrix.python-version }}
+          name: a08-before-3.13
           path: output/a08-before.xml
           if-no-files-found: error
       - name: Verify A08 atomic heading batches against native PostgreSQL
@@ -544,7 +553,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: a08-native-${{ matrix.python-version }}
+          name: a08-native-3.13
           path: output/a08-native.xml
           if-no-files-found: error
       - name: Verify durable processing trace and restart evidence
@@ -559,15 +568,22 @@ jobs:
           assert not list(root.iter("skipped")), "Processing trace proof must execute every backend"
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Processing trace proof failed"
           PYCODE
-      - name: Require every existing CI gate
-        if: ${{ !cancelled() }}
+
+  # Remove these temporary status names after G1 requires the consolidated test.
+  legacy-test-status:
+    name: test (${{ matrix.python-version }})
+    if: ${{ always() }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']
+    steps:
+      - name: Require the consolidated test to succeed
         env:
-          REQUIRED_RESULTS: ${{ join(needs.*.result, ',') }}
-        run: |
-          python - <<'PYCODE'
-          import os
-          assert all(r == 'success' for r in os.environ['REQUIRED_RESULTS'].split(',')), 'An upstream CI gate failed or was skipped'
-          PYCODE
+          TEST_RESULT: ${{ needs.test.result }}
+        run: test "$TEST_RESULT" = success
 
   package:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
