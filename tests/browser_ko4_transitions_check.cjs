@@ -4,16 +4,19 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { withBrowserEvidence } = require('./browser_evidence.cjs');
 
 (async () => {
   const base = process.env.METIS_BROWSER_BASE;
   const out = process.env.METIS_BROWSER_OUTPUT;
   const phase = process.env.METIS_KO4_BROWSER_PHASE;
+  await withBrowserEvidence(chromium, {
+    base, output: out, label: phase === 'after' ? 'ko4-after' : 'ko4-before',
+    launchOptions: {executablePath: process.env.METIS_BROWSER_EXECUTABLE, args: ['--no-sandbox']},
+  }, async ({ newContext }) => {
   const manifest = await (await fetch(base + '/ko4-browser-manifest')).json();
   const proof = async slug => (await (await fetch(base + '/ko4-browser-proof/' + slug)).json());
-  const browser = await chromium.launch({executablePath: process.env.METIS_BROWSER_EXECUTABLE,
-    args: ['--no-sandbox']});
-  const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
+  const context = await newContext({viewport: {width: 1440, height: 1000}}, true);
   const page = await context.newPage();
   const card = target => base + '/review?' + new URLSearchParams({document: target.snapshot_id, object: target.object_id});
   const form = target => target.locator('[data-ko-assessment-form]');
@@ -93,7 +96,6 @@ const crypto = require('node:crypto');
       same_person_no_additional_decision: true, same_person_http_status: previous.samePersonHTTPStatus, viewports: [375, 768, 1024, 1440],
       evidence: previous.evidence,
     }, null, 2));
-    await browser.close();
     return;
   }
 
@@ -116,7 +118,7 @@ const crypto = require('node:crypto');
   }
 
   const videoEnabled = process.env.METIS_KO4_VIDEO === '1';
-  const filmedContext = await browser.newContext({viewport: {width: 1440, height: 1000},
+  const filmedContext = await newContext({viewport: {width: 1440, height: 1000},
     storageState: await context.storageState(), ...(videoEnabled ?
       {recordVideo: {dir: path.join(out, 'video'), size: {width: 1440, height: 1000}}} : {})});
   const filmed = await filmedContext.newPage();
@@ -290,7 +292,7 @@ const crypto = require('node:crypto');
   unchanged(corrected, await proof('not-applicable'));
 
   const second = manifest.documents.second;
-  const secondaryContext = await browser.newContext({viewport: {width: 1440, height: 1000}});
+  const secondaryContext = await newContext({viewport: {width: 1440, height: 1000}});
   const secondary = await secondaryContext.newPage();
   await login(secondary, 'second');
   await secondary.goto(card(second));
@@ -327,5 +329,5 @@ const crypto = require('node:crypto');
     evidence: ['missing/negative answers', 'missing evidence',
       'native support repair', 'exact linked approval', 'explicit N/A', 'new open correction',
       'old receipt stability', 'independent second approval', 'immutable source/canonical state']}, null, 2));
-  await browser.close();
+  });
 })().catch(error => {console.error(error); process.exit(1);});
