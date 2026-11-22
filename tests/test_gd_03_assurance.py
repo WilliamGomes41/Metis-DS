@@ -79,7 +79,7 @@ def test_gd03_assurance_matches_governance_bytes_and_is_established() -> None:
 
 def test_gd03_human_record_and_governance_keep_other_decisions_open() -> None:
     governance = GOVERNANCE.read_text(encoding="utf-8")
-    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md").read_text(encoding="utf-8")
 
     assert "| GD-03 |" in governance
     assert "ESTABLISHED" in governance

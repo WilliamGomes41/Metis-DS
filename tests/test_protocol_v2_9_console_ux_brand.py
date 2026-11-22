@@ -29,7 +29,7 @@ def test_v29_approval_manifest_matches_protocol_bytes() -> None:
 def test_v29_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -84,7 +84,7 @@ def test_v29_keeps_all_v26_v27_and_v28_rules() -> None:
 def test_v29_records_task_oriented_researcher_surface() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The console MUST be a task-oriented researcher surface, not a dump of the kernel data model" in delta
     assert "The primary action on each room MUST be visually obvious" in delta
     assert "Visual hierarchy MUST distinguish sections and next steps" in delta
@@ -110,7 +110,7 @@ def test_v29_records_copy_and_forbids_via_negativa_as_primary() -> None:
 def test_v29_records_researcher_vocabulary_not_kernel_words() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "document, titel, versie, familie, klasse, status, inleveren, review, publiceren" in delta
     assert 'MUST NOT use "envelope" as a UI term' in delta
     assert "conversation metaphor only" in delta
@@ -126,7 +126,7 @@ def test_v29_records_researcher_vocabulary_not_kernel_words() -> None:
 def test_v29_records_login_username_and_password() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Login MUST ask for gebruikersnaam AND wachtwoord" in delta
     assert "No shared login" in delta
     assert "No open registration" in delta
@@ -137,7 +137,7 @@ def test_v29_records_login_username_and_password() -> None:
 
 def test_v29_records_move_and_promote_as_visible_actions() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Move-between-families and promote-class MUST look like real clickable actions" in delta
     assert "not buried extra forms" in delta
     assert "without typing a kernel id" in delta
@@ -147,7 +147,7 @@ def test_v29_records_move_and_promote_as_visible_actions() -> None:
 def test_v29_records_venvn_digital_stylesheet() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "The console MUST use the V&VN digital stylesheet" in delta
     assert "`#E23100`" in delta
@@ -237,7 +237,7 @@ def test_v29_is_c3_with_owner_approval_and_retrospective_review() -> None:
 
 def test_v29_records_ux_rewrite_build_order_without_skipping_g2() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Do not build a mockup" in delta
     assert "The next implementation after this delta MUST be a console UX rewrite on the existing kernel" in delta
     assert "MUST NOT invent Azure, Vercel or Neon as in-scope" in delta

@@ -32,7 +32,7 @@ def test_v223_approval_manifest_matches_protocol_bytes() -> None:
 def test_v223_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -57,7 +57,7 @@ def test_v223_delta_exists_and_is_the_live_baseline() -> None:
 def test_v223_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -72,7 +72,7 @@ def test_v223_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v223_first_delete_cut_then_one_zip_of_that_sha() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "first DELETE cut, then one ZIP of that SHA" in delta
     assert "MUST NOT ZIP `a566af56` if that forces a second ZIP after cleanup" in delta
@@ -100,7 +100,7 @@ def test_v223_first_delete_cut_then_one_zip_of_that_sha() -> None:
 def test_v223_auditor_verdict_is_request_simplification_not_gd03() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Auditor verdict: **REQUEST SIMPLIFICATION**" in delta
     assert "This is not GD-03" in delta
     assert "This is not publication" in delta
@@ -115,7 +115,7 @@ def test_v223_auditor_verdict_is_request_simplification_not_gd03() -> None:
 def test_v223_first_delete_cut_is_zero_caller_src_modules_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "first DELETE cut, zero-caller src/ modules only" in delta
     for name in (
@@ -139,7 +139,7 @@ def test_v223_first_delete_cut_is_zero_caller_src_modules_only() -> None:
 def test_v223_does_not_delete_v20_lock_canonical_store_or_two_products() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "still subprocess-locked by `tests/test_protocol_v2.py`" in delta
     assert "src/semantic_transform_v2.py" in delta
     assert "src/prepublication_gate_v2.py" in delta
@@ -160,7 +160,7 @@ def test_v223_does_not_delete_v20_lock_canonical_store_or_two_products() -> None
 def test_v223_keeps_console_split_wave_a_and_both_test_families() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`operations_console_v1.py` versus `operations_console_app.py` split remains" in delta
     assert "no template engine" in delta
     assert "Wave A splitter + `reject_candidate` remain" in delta
@@ -179,7 +179,7 @@ def test_v223_keeps_console_split_wave_a_and_both_test_families() -> None:
 def test_v223_integrity_sprint_and_dual_review_queue_are_planned_not_silent_delete() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "point `scripts/run_integrity_sprint.sh` at committed fixtures instead of `python -m src.semantic_transform_v21`" in delta
     assert "Do not merge v2/v21/generic in that PR" in delta
     assert "CLI `review-queue` (`build_review_queue_v3`) versus console `review_stacks` / `slow_review_duty`" in delta
@@ -197,7 +197,7 @@ def test_v223_integrity_sprint_and_dual_review_queue_are_planned_not_silent_dele
 def test_v223_next_implementation_is_one_deletion_pr_before_one_zip() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "The next **code** implementation MUST be one deletion PR on the existing kernel/repo (first DELETE cut plus integrity-sprint fixture retarget)" in delta
     assert "on main BEFORE any Cloud Shell ZIP" in delta
@@ -222,7 +222,7 @@ def test_v223_next_implementation_is_one_deletion_pr_before_one_zip() -> None:
 def test_v223_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -232,7 +232,7 @@ def test_v223_handoff_must_not_be_recreated() -> None:
 def test_v223_keeps_continentie_evidence_and_every_guideline_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`PROTOCOL.md` is every-guideline law, not Continentie-only (Protocol v2.20)" in delta
     assert "Continentie evidence sentences in Protocol v2.16–v2.19 MUST remain" in delta
     assert "PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only" in root_protocol

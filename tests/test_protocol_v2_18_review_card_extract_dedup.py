@@ -32,7 +32,7 @@ def test_v218_approval_manifest_matches_protocol_bytes() -> None:
 def test_v218_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -52,7 +52,7 @@ def test_v218_delta_exists_and_is_the_live_baseline() -> None:
 def test_v218_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -67,7 +67,7 @@ def test_v218_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v218_review_card_shows_freeze_sentence_once() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The review object card MUST show the freeze sentence once" in delta
     assert "MUST NOT duplicate it as both h3/title and body" in delta
     assert "Compact row / card: one source sentence plus short status" in delta
@@ -82,7 +82,7 @@ def test_v218_review_card_shows_freeze_sentence_once() -> None:
 def test_v218_extract_must_not_split_grammatical_continuation() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Extract MUST NOT split a grammatical continuation of the previous sentence into a new object" in delta
     assert "Trailing clauses MUST stay in the same knowledge object as the sentence they complete" in delta
     assert "This restates and tightens the Protocol v2.16 truncated-sentence / tiny-object forbid" in delta
@@ -98,7 +98,7 @@ def test_v218_extract_must_not_split_grammatical_continuation() -> None:
 def test_v218_extract_must_not_emit_identical_clean_text_twice() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Extract MUST NOT emit a second knowledge object whose visible freeze prose (`clean_text`) is identical" in delta
     assert "Repeated HTML (samenvatting versus module) is not extra knowledge" in delta
     assert "Distinct real headings in different sections MAY remain" in delta
@@ -114,7 +114,7 @@ def test_v218_extract_must_not_emit_identical_clean_text_twice() -> None:
 def test_v218_v217_chrome_and_slogan_held() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Chrome Tools/Home is gone (v2.17 held)" in delta
     assert "Slogan gone (v2.17 held)" in delta
     assert "This fail is duplication + truncated-sentence split" in delta
@@ -127,7 +127,7 @@ def test_v218_v217_chrome_and_slogan_held() -> None:
 def test_v218_unpublished_continentie_reextract_and_no_hiding() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "a new extract of the same freeze bytes is REQUIRED" in delta
     assert "Source hash of the freeze stays" in delta
     assert "Unpublished object identities MAY be replaced" in delta
@@ -167,7 +167,7 @@ def test_v218_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_g
 
 def test_v218_records_extract_card_wave_then_g2_and_does_not_implement_product_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.17 conflict on which implementation is next, this delta governs" in delta
     assert "the open review object card MUST show the freeze sentence once" in delta

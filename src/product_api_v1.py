@@ -40,7 +40,7 @@ from .usage_ledger_v1 import UsageLedger
 
 ROOT = Path(__file__).resolve().parents[1]
 API_VERSION = "v1"
-SERVICE_VERSION = "product-api-v1.5.0"
+SERVICE_VERSION = "product-api-v1.6.0"
 
 ProductAccessPrincipal = TenantPolicy | ApiAccessPrincipal
 
@@ -91,6 +91,7 @@ class SourcePayload(ProductContractModel):
     page: int | None = None
     version: str | None = None
     locator: dict[str, Any] | str | None = None
+    publication_date: str | None = None
 
 
 class ReleasePayload(ProductContractModel):
@@ -122,6 +123,8 @@ class RetrieveResultPayload(ProductContractModel):
     content: str | None = None
     structured_logic: dict[str, Any] | None = None
     source: SourcePayload
+    target_group: list[str] = Field(default_factory=list)
+    care_setting: list[str] = Field(default_factory=list)
     release: ReleasePayload
     scores: ScorePayload
     content_hash: str | None = None
@@ -177,6 +180,8 @@ class KnowledgeResponse(ProductContractModel):
     content: str | None = None
     structured_logic: dict[str, Any] | None = None
     source: SourcePayload
+    target_group: list[str] = Field(default_factory=list)
+    care_setting: list[str] = Field(default_factory=list)
     release: ReleasePayload
     content_hash: str | None = None
     projection_hash: str | None = None
@@ -331,6 +336,18 @@ def _read_presented_credential(authorization: str | None, header_credential: str
     if header_credential and header_credential.strip():
         return header_credential.strip()
     return None
+
+
+def _applicability_context(md: dict[str, Any]) -> dict[str, list[str]]:
+    """Expose the published target group and care setting as recorded (#1111).
+
+    Values come only from the published projection; an absent value is an
+    empty list, never an inferred group or setting.
+    """
+    return {
+        "target_group": [str(item) for item in (md.get("target_group") or [])],
+        "care_setting": [str(item) for item in (md.get("care_setting") or [])],
+    }
 
 
 def _corpus_revision(records: list[dict[str, Any]]) -> str:
@@ -626,7 +643,7 @@ class ProductState:
             if not record:
                 continue
             md = record.get("metadata") or {}
-            result = {"knowledge_object_id": item["object_id"], "object_version": item.get("object_version"), "document_id": md.get("document_id"), "object_type": item.get("object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version"), "locator": md.get("source_locator")}, "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "scores": {"hybrid_rrf": item.get("rrf_score"), "lexical": item.get("lexical_score"), "vector": item.get("vector_score")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness"), "advice_weight": bool(item.get("advice_weight")), "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else [])}
+            result = {"knowledge_object_id": item["object_id"], "object_version": item.get("object_version"), "document_id": md.get("document_id"), "object_type": item.get("object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version"), "locator": md.get("source_locator"), "publication_date": md.get("source_publication_date")}, **_applicability_context(md), "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "scores": {"hybrid_rrf": item.get("rrf_score"), "lexical": item.get("lexical_score"), "vector": item.get("vector_score")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness"), "advice_weight": bool(item.get("advice_weight")), "labels": item.get("labels") or (["V", "VN"] if raw.get("answerability") == "supported" else [])}
             semantics = self._confirmed_recommendation_semantics(record)
             if semantics is not None:
                 result["recommendation_semantics"] = semantics
@@ -677,7 +694,7 @@ class ProductState:
         blocked = serving_block_reason(record)
         if blocked:
             raise HTTPException(status_code=404, detail={"code": "knowledge_object_not_servable", "reason": blocked, "status": "abstain", "answerability": "insufficient_evidence", "abstain_sentence": sentence_for(blocked)})
-        payload = {"api_version": API_VERSION, "synthetic_fixture": self.synthetic, "knowledge_object_id": object_id, "object_version": md.get("object_version"), "document_id": md.get("document_id"), "object_type": md.get("confirmed_object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version")}, "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness")}
+        payload = {"api_version": API_VERSION, "synthetic_fixture": self.synthetic, "knowledge_object_id": object_id, "object_version": md.get("object_version"), "document_id": md.get("document_id"), "object_type": md.get("confirmed_object_type") or md.get("object_type"), "content": record.get("retrieval_text"), "structured_logic": record.get("structured_logic"), "source": {"title": md.get("source_title"), "url": md.get("source_url"), "page": md.get("source_page"), "version": md.get("source_version"), "publication_date": md.get("source_publication_date")}, **_applicability_context(md), "release": {"release_id": md.get("release_id"), "release_version": md.get("release_version"), "published_at": md.get("published_at")}, "content_hash": md.get("content_hash"), "projection_hash": record.get("projection_hash"), "chunk_readiness": md.get("chunk_readiness")}
         semantics = self._confirmed_recommendation_semantics(record)
         if semantics is not None:
             payload["recommendation_semantics"] = semantics

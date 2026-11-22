@@ -3,7 +3,7 @@
 ## Goal
 
 Metis turns source documents into traceable knowledge for human review, controlled publication and retrieval.
-Follow the existing hierarchy: [PROTOCOL.md](PROTOCOL.md) → [ROADMAP.md](ROADMAP.md) → acceptance tests → code.
+Follow the existing hierarchy: [PROTOCOL.md](PROTOCOL.md) → acceptance tests → code. Track open work and missing evidence in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues).
 
 ## Where to look
 
@@ -35,7 +35,8 @@ For setup and test-database configuration, use [STACK_SETUP_BASELINE.md](docs/ST
 
 Report the actual check results and tested commit, remaining uncertainty and next step. For UI changes, add rendered/browser evidence at relevant widths.
 A missing or failed required check is not PASS. Do not weaken or delete tests to hide a regression; justify actual contract changes.
-Record evidence and the session handoff under the [GitHub–Linear contract](docs/agents/linear-github-handoff.md). A merge alone does not prove deployment or acceptance.
+Record evidence and the session handoff under the [GitHub–Linear contract](docs/agents/linear-github-handoff.md). A merge alone does not prove deployment or acceptance. Done in Linear = merged on main; deployment/acceptance = label `live`. Forge sets the label `live` after post-deploy proof.
+Merge gate = required CI checks + Forge's control report (PR template); merge only after William's literal GO.
 
 ## Stop and surface the decision
 

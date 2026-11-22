@@ -32,7 +32,7 @@ def test_v226_approval_manifest_matches_protocol_bytes() -> None:
 def test_v226_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -60,7 +60,7 @@ def test_v226_delta_exists_and_is_the_live_baseline() -> None:
 def test_v226_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -75,7 +75,7 @@ def test_v226_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v226_core_rule_supersedes_promote_class_total_wipe() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "A document class change MUST invalidate only what that class change substantively affects" in delta
     assert "MUST NOT be a silent total wipe of all review state as the only story" in delta
@@ -103,7 +103,7 @@ def test_v226_source_unchanged() -> None:
 def test_v226_object_review_model_distinction() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "**richtlijn-path Klassen**" in delta or "richtlijn-path Klassen" in delta
     assert "`richtlijn` | `handreiking` | `artikel` | `transcript` | `podcast`" in delta
     assert "**beslisboom-path Klasse**" in delta or "beslisboom-path Klasse" in delta
@@ -138,7 +138,7 @@ def test_v226_transition_matrix() -> None:
 def test_v226_same_model_keeps_objects_selective_invalidation() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "keep objects, locators, fragment bounds, content hashes, class-independent relations" in delta
     assert "Re-open only class-dependent confirmations" in delta or "re-open only class-dependent confirmations" in delta
     assert "Target architecture = selective invalidation" in delta or "target architecture = selective invalidation" in delta
@@ -161,7 +161,7 @@ def test_v226_review_history_auditability() -> None:
 def test_v226_published_never_rewritten() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "MUST NOT mutate the live published release back to unpublished" in delta
     assert "MUST create a new draft candidate version" in delta
@@ -175,7 +175,7 @@ def test_v226_published_never_rewritten() -> None:
 def test_v226_ux_rename_promoveren_to_klasse_wijzigen() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Rename console action **Promoveren** → **Klasse wijzigen**" in delta or "Rename the console action **Promoveren** → **Klasse wijzigen**" in delta
     assert "Before confirm, MUST show consequence" in delta or "before confirm, MUST show consequence" in delta
@@ -195,7 +195,7 @@ def test_v226_ux_rename_promoveren_to_klasse_wijzigen() -> None:
 def test_v226_first_code_wave_is_forge_klasse_wijzigen_not_this_pr() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Rename **Promoveren** → **Klasse wijzigen**" in delta
     assert "Enforce the matrix" in delta or "Enforce matrix" in delta
@@ -219,7 +219,7 @@ def test_v226_first_code_wave_is_forge_klasse_wijzigen_not_this_pr() -> None:
 def test_v226_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -234,7 +234,7 @@ def test_v226_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v226_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -244,7 +244,7 @@ def test_v226_handoff_must_not_be_recreated() -> None:
 def test_v226_keeps_v225_boom_path_and_continentie_evidence() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "v2.25 boom path UNCHANGED" in delta or "v2.25 boom path remains UNCHANGED" in delta or "Protocol v2.25 UNCHANGED" in delta
     assert "Historical Continentie evidence sentences in Protocol v2.16–v2.19 MUST remain" in delta
     assert "PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only" in root_protocol

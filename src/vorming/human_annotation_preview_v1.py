@@ -5,19 +5,53 @@ is an input check, not Admission, source-role confirmation or review approval.
 The build still has to validate the sole materialiser's actual output.
 """
 from copy import deepcopy
+import json
 
 from src.integrity_kernel import stable_hash
 from src.vorming.admission_gate_v1 import literal_field_codes
 from src.vorming.human_annotation_projection_v1 import bind_context, bind_fields
-from src.vorming.human_annotation_v1 import validate_stored_selection
+from src.vorming.human_annotation_v1 import historical_finding, validate_historical_display, validate_stored_selection
 from src.vorming.knowledge_materialisation_v1 import resolve_source_selection
 from src.vorming.semantic_passage_v1 import semantic_source_blocks
-from src.vorming.source_accountability_v1 import uncovered_ranges, validate_assessments
+from src.vorming.source_accountability_v1 import ROLES, uncovered_ranges, validate_assessments
 from src.vorming.source_bound_fields_v3 import TYPE_FIELDS, VIA_RELATION
 
 
 def _span(anchor):
     return {key: anchor[key] for key in ('block_id', 'start', 'end')}
+
+
+def source_range_key(span):
+    return json.dumps([span['block_id'], span['start'], span['end']], separators=(',', ':'))
+
+
+def source_work(inspection, blocks):
+    """Project exact open ranges and conservative B6 proposals without accounting for them."""
+    from src.review.source_context_review_v1 import GROUP_MAX
+    from src.vorming.source_containers_v1 import accounting_reason
+
+    roles = {reason: role for role in ('metadata', 'structure') for reason in ROLES[role]}
+    by_id = {block['block_id']: block for block in blocks}
+    ranges, grouped = [], {}
+    for gap in inspection['unaccounted_ranges']:
+        block = by_id[gap['block_id']]
+        reason = None
+        # A remnant detached from a mixed block can look like metadata by itself.
+        if gap['quote'].strip() == block['text'].strip():
+            reason = accounting_reason(gap['quote'], require_known_navigation=True)
+        proposal = f'{roles[reason]}:{reason}' if reason in roles else None
+        member = {**gap, 'key': source_range_key(gap), 'proposal': proposal}
+        ranges.append(member)
+        if proposal:
+            section = tuple(block.get('section_path') or ())
+            grouped.setdefault((section, proposal), []).append(member['key'])
+    groups = []
+    for (section, proposal), members in grouped.items():
+        for start in range(0, len(members), GROUP_MAX):
+            batch = members[start:start + GROUP_MAX]
+            groups.append({'key': stable_hash([section, proposal, batch]), 'section': section,
+                           'proposal': proposal, 'members': batch})
+    return {'ranges': ranges, 'groups': groups}
 
 
 def usable_annotation_semantics(payload, *, fragments):
@@ -122,6 +156,30 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
     if signals is not None:
         signals.extend(found)
     return blocking
+
+
+def inspect_for_overview(entries, *, fragments):
+    """Preview historical heads without making them eligible for a new seal."""
+    current, historical = [], []
+    for entry in entries:
+        code = historical_finding(entry['payload'])
+        if code is None:
+            current.append(entry)
+            continue
+        if stable_hash(entry['payload']) != entry['payload_hash']:
+            raise ValueError('annotation_integrity_failed')
+        validate_historical_display(entry['payload'], fragments=fragments, annotation_id=entry['annotation_id'])
+        historical.append((entry, code))
+
+    result = inspect_document(current, fragments=fragments)
+    if historical:
+        # Coverage of the current subset cannot establish gaps in this document.
+        result['findings'] = [f for f in result['findings'] if f['code'] != 'annotation_source_unaccounted']
+        result['unaccounted_ranges'] = []
+        for entry, code in historical:
+            result['entries'].append({'annotation_id': entry['annotation_id'], 'revision': entry['revision'], 'codes':[code]})
+            result['findings'].append({'annotation_id': entry['annotation_id'], 'code': code})
+    return result
 
 
 def inspect_document(entries, *, fragments):

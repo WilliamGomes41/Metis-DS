@@ -49,7 +49,7 @@ def test_v234_requires_atomic_evidence_and_rollback() -> None:
 
 def test_root_protocol_and_roadmap_point_to_v234() -> None:
     protocol = (ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
-    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md").read_text(encoding="utf-8")
     assert "baseline is Protocol v2.34.0 plus v2.33.0" in roadmap
     assert "aangevuld met Protocol v2.34.0 plus Protocol v2.33.0" in protocol
     assert "PROTOCOL_V2_34_G2_PUBLICATION_ACTIVATION_DELTA.md" in protocol

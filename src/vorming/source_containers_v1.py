@@ -116,10 +116,10 @@ _ACCOUNTING_RULES = (
 )
 
 
-def accounting_reason(text):
+def accounting_reason(text, *, require_known_navigation=False):
     """Machine reason for source accountability; whole range only, never location."""
     reason = metadata_reason(text)
-    if reason:
+    if reason and not (reason == 'navigation' and require_known_navigation):
         return reason
     text = text.strip()
     return next((reason for rule, reason in _ACCOUNTING_RULES if rule.fullmatch(text)), None)

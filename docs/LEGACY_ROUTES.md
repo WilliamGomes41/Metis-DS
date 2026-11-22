@@ -1,6 +1,6 @@
 # Legacy verwerking — expliciete status per pad
 
-De actuele verwerkingsregels staan in [PROTOCOL.md §5](../PROTOCOL.md#5-semantische-interpretatie-en-harde-invarianten); open uitvoering en acceptatie staan in [ROADMAP.md](../ROADMAP.md). Dit register beschrijft compatibiliteit en uitgevoerde verwijderingen, geen aanvullende productnorm.
+De actuele verwerkingsregels staan in [PROTOCOL.md §5](../PROTOCOL.md#5-semantische-interpretatie-en-harde-invarianten); open uitvoering en acceptatie staan in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues). Dit register beschrijft compatibiliteit en uitgevoerde verwijderingen, geen aanvullende productnorm.
 
 Eigenaar voor L01–L08: Metis-maintainer; oorspronkelijk uitvoeringsissue #455. De historische machineleesbare inventaris staat in `config/legacy_processing_routes.json`; het oorspronkelijke vervangingsplan staat in [het implementatievoorstel](METIS_SOURCE_BOUND_IMPLEMENTATION_PLAN.md), §6–9.
 

@@ -376,7 +376,7 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path, *, 
 
 
 def test_roadmap_live_norm_is_readable_and_historical_stacks_are_demoted() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "## Geldende norm (live)" in roadmap
     assert "Historische supersessie-index" in roadmap

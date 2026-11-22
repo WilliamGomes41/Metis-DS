@@ -29,7 +29,7 @@ def test_v27_approval_manifest_matches_protocol_bytes() -> None:
 def test_v27_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -72,7 +72,7 @@ def test_v27_keeps_all_v26_console_rules() -> None:
 
 def test_v27_records_first_wave_source_rules() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "First-wave official files MUST be the HTML page and the PDF only" in delta
     assert "kennisplatform `story.html` boom players MUST be out of the first wave" in delta
     assert "The official file MUST be the kennisplatform freeze, not a living Word document" in delta
@@ -106,7 +106,7 @@ def test_v27_records_object_level_retrieve_and_abstain_api() -> None:
 
 def test_v27_records_live_curation_distribution() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The DS asset is live curation" in delta
     assert "The default product MUST be a live retrieve-and-abstain subscription" in delta
     assert "Training MAY exist only as a second licence" in delta
@@ -121,7 +121,7 @@ def test_v27_records_live_curation_distribution() -> None:
 
 def test_v27_records_later_analytics_limits() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "which objects were asked" in delta
     assert "Care-impact research is out of DS" in delta
     assert "DS MUST NOT perform care-impact research" in delta
@@ -134,7 +134,7 @@ def test_v27_records_later_analytics_limits() -> None:
 
 def test_v27_does_not_skip_fase2_or_claim_console_built() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Do not skip Fase 2 bron 2 storage" in delta
     assert "The console remains approved-not-built" in delta
     assert "The next concrete task remains bron 2 storage" in delta

@@ -227,7 +227,7 @@ def test_activation_runbook_is_docs_only() -> None:
 
 
 def test_roadmap_and_changelog_record_readiness_not_pass() -> None:
-    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md").read_text(encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert "de Azure Blob-adapter bestaat" in roadmap
     assert "azure-identity==1.25.3" in roadmap

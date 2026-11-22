@@ -29,7 +29,7 @@ def test_v210_approval_manifest_matches_protocol_bytes() -> None:
 def test_v210_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -90,7 +90,7 @@ def test_v210_keeps_all_v26_v27_v28_and_v29_rules() -> None:
 def test_v210_renames_familieboom_to_documentenhierarchie() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert 'The console room currently labelled "Familieboom" MUST be renamed **Documentenhierarchie**' in delta
     assert "Documentenhierarchie is ordinary Dutch" in delta
     assert "The kernel model remains family × class" in delta
@@ -116,7 +116,7 @@ def test_v210_renames_familieboom_to_documentenhierarchie() -> None:
 def test_v210_records_waiting_task_badges_as_real_kernel_work() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Each top nav heading MUST show a visible waiting-task badge" in delta
     assert 'a count, for example "1"' in delta
     assert "when that room has work for the current user" in delta
@@ -144,7 +144,7 @@ def test_v210_records_waiting_task_badges_as_real_kernel_work() -> None:
 def test_v210_records_accounts_room_with_closed_role_set() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The console MUST include an **Accounts** room" in delta
     assert "Accounts is identity administration" in delta
     assert "It is not chat" in delta
@@ -180,7 +180,7 @@ def test_v210_records_accounts_room_with_closed_role_set() -> None:
 def test_v210_keeps_promote_review_and_family_move_without_rereview() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Promoting class still MUST require a new review" in delta
     assert "already Protocol v2.8" in delta
     assert "Family move still MUST NOT require clinical re-review" in delta
@@ -249,7 +249,7 @@ def test_v210_is_c5_spanning_c3_with_owner_approval_and_retrospective_review() -
 
 def test_v210_records_console_followup_build_order_without_skipping_g2() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Do not build a mockup" in delta
     assert "The next implementation after this delta MUST be a console follow-up on the v2.9 UX" in delta
     assert "open PR #25 if still open" in delta

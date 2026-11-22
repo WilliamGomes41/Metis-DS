@@ -29,7 +29,7 @@ def test_v211_approval_manifest_matches_protocol_bytes() -> None:
 def test_v211_delta_exists_and_is_a_live_baseline_component() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -113,7 +113,7 @@ def test_v211_keeps_all_v26_through_v210_rules() -> None:
 def test_v211_does_not_ban_html_entirely() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Do NOT ban HTML entirely" in delta
     assert "The kennisplatform freeze is often HTML" in delta
     assert "Continentie first envelope would stall if HTML were banned" in delta
@@ -126,7 +126,7 @@ def test_v211_does_not_ban_html_entirely() -> None:
 def test_v211_requires_uploaded_html_freeze_and_rejects_live_url_html() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Official first-wave HTML MUST be an uploaded freeze file" in delta
     assert "exact bytes" in delta
     assert "Live URL-HTML MUST be rejected at ingest" in delta
@@ -150,7 +150,7 @@ def test_v211_requires_uploaded_html_freeze_and_rejects_live_url_html() -> None:
 def test_v211_is_scoped_supersession_of_v27_url_ingest_for_html() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "scoped supersession" in delta
     assert "Protocol v2.7 only as it said ingest MUST accept a URL" in delta
     assert "without distinguishing HTML vs PDF" in delta
@@ -188,7 +188,7 @@ def test_v211_requires_source_locators_on_knowledge_objects() -> None:
 def test_v211_product_api_fail_closes_supported_without_locator() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The Product API MUST NOT return `supported` if the object's source locator is missing/empty" in delta
     assert "Fail-closed" in delta
     assert "Abstain instead (catalog sentence, no LLM)" in delta
@@ -202,7 +202,7 @@ def test_v211_product_api_fail_closes_supported_without_locator() -> None:
 
 def test_v211_capture_is_not_publication_and_g2_still_blocks() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Capture remains not publication" in delta
     assert "The G2 locator still required to publish" in delta
     assert "The G2 locator remains the publication blocker" in delta
@@ -268,7 +268,7 @@ def test_v211_is_c3_with_owner_approval_and_retrospective_review() -> None:
 
 def test_v211_records_kernel_build_order_without_implementing_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Do not build a mockup" in delta
     assert "The next implementation after this delta MUST be the Implementation engineer on the existing kernel" in delta

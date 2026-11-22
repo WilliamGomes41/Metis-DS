@@ -1,6 +1,6 @@
 ## Scope
 
-This repository is V&VN Data Services only. Do not record status, phases or UI of other products in `PROTOCOL.md` or `ROADMAP.md`.
+This repository is V&VN Data Services only. Do not record status, phases or UI of other products in `PROTOCOL.md`.
 
 ## Change
 
@@ -64,12 +64,23 @@ If anything other than `None` applies:
 - **onzekerheid**:
 - **advies**:
 
+## Controlerapport Forge
+
+Merge-poort = verplichte CI-checks (groen op de exacte head) + dit controlerapport van Forge.
+Mergen pas na William's letterlijke GO.
+
+- **head**:
+- **verplichte CI-checks**:
+- **bevindingen / blockers**:
+- **oordeel Forge**: PASS | FAIL
+
 ## Verification
 
 - [ ] `python scripts/repository_preflight.py`
 - [ ] `python scripts/release_control_preflight.py`
 - [ ] `python -m compileall -q src`
 - [ ] `pytest -q`
-<!-- Permanente overdracht: voeg precies één Part of MET-… toe en het blok uit
-docs/agents/linear-github-handoff.md met de echte head-SHA. De handoff-contractcheck
+<!-- Permanente overdracht: afrondende PR → `Closes #N` + `Fixes MET-N`;
+deel-PR → `Part of MET-N` + `Refs #N`, en geen `met-N` in de branchnaam.
+Voeg daarnaast het blok uit docs/agents/linear-github-handoff.md toe met de echte head-SHA. De handoff-contractcheck
 weigert ontbrekende of achterhaalde overdracht. Dit vervangt geen inhoudelijk bewijs. -->

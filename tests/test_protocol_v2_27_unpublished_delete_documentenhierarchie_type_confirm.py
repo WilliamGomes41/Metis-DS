@@ -32,7 +32,7 @@ def test_v227_approval_manifest_matches_protocol_bytes() -> None:
 def test_v227_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -61,7 +61,7 @@ def test_v227_delta_exists_and_is_the_live_baseline() -> None:
 def test_v227_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -76,7 +76,7 @@ def test_v227_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v227_single_place_is_documentenhierarchie() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Unpublished document delete MUST be available from **exactly one** console place: **Documentenhiërarchie**" in delta
     assert "MUST NOT offer Verwijder unpublished document (or equivalent delete control) from Inleveren, Review, Publiceren, Accounts, or any other room" in delta
@@ -96,7 +96,7 @@ def test_v227_single_place_is_documentenhierarchie() -> None:
 def test_v227_type_to_confirm_exact_title() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "the operator MUST type the **exact document title** into a confirmation field (type-to-confirm)" in delta
     assert "The console MUST show the title clearly so the operator can copy/read it" in delta
@@ -113,7 +113,7 @@ def test_v227_type_to_confirm_exact_title() -> None:
 def test_v227_supersedes_v220_document_card_review_chooser_surfaces() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "SUPERSEDES any reading of Protocol v2.20 that delete MUST appear on the document card / Review-chooser as alternative surfaces" in delta
     assert "Replace with: Documentenhiërarchie only + type-to-confirm exact title" in delta or "Documentenhiërarchie only + type-to-confirm" in delta
@@ -127,7 +127,7 @@ def test_v227_supersedes_v220_document_card_review_chooser_surfaces() -> None:
 def test_v227_keeps_v220_unpublished_only_audit_no_published_no_ssh() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Only unpublished captured snapshots MAY be deleted by an authorized console operator" in delta
     assert "MUST write an audit-ledger row" in delta or "MUST write an audit-ledger row:" in delta
     assert "MUST NOT delete a published projection" in delta
@@ -143,7 +143,7 @@ def test_v227_keeps_v220_unpublished_only_audit_no_published_no_ssh() -> None:
 def test_v227_protocol_is_every_guideline_law_not_continentie_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`PROTOCOL.md` is the law of V&VN Data Services for every guideline, not a Continentie-only protocol" in delta
     assert "Historical Continentie evidence sentences in Protocol v2.16–v2.19 MUST remain" in delta
     assert "PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only" in root_protocol
@@ -154,7 +154,7 @@ def test_v227_protocol_is_every_guideline_law_not_continentie_only() -> None:
 def test_v227_first_code_wave_is_forge_delete_surface_not_this_pr() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Remove delete controls from every surface except Documentenhiërarchie" in delta
     assert "Add type-to-confirm field requiring exact document title (title shown)" in delta
@@ -175,7 +175,7 @@ def test_v227_first_code_wave_is_forge_delete_surface_not_this_pr() -> None:
 def test_v227_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -190,7 +190,7 @@ def test_v227_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v227_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -200,7 +200,7 @@ def test_v227_handoff_must_not_be_recreated() -> None:
 def test_v227_keeps_v226_klasse_wijzigen_and_v225_boom_path() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "v2.26 Klasse wijzigen first wave is already on `main` (PR #97)" in delta or "That wave is already on `main` (PR #97)" in delta
     assert "v2.25 boom path UNCHANGED" in delta or "v2.25 boom path remains UNCHANGED" in delta
     assert "Klasse wijzigen" in root_protocol

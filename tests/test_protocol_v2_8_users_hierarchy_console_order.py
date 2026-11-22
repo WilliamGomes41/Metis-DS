@@ -29,7 +29,7 @@ def test_v28_approval_manifest_matches_protocol_bytes() -> None:
 def test_v28_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -80,7 +80,7 @@ def test_v28_keeps_all_v26_and_v27_rules() -> None:
 def test_v28_records_primary_users_not_nurses() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "guideline researchers, who use the console" in delta
     assert "B2B subscribers: an EPD, an institution, or their bot" in delta
     assert "Nurses are not primary users of DS" in delta
@@ -94,7 +94,7 @@ def test_v28_records_primary_users_not_nurses() -> None:
 
 def test_v28_records_two_axis_source_hierarchy() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Heavier class MUST NOT be filled by lighter class" in delta
     assert "`richtlijn` > `handreiking` > `artikel` > `transcript` / `podcast`" in delta
     assert "A podcast MUST NOT replace a guideline in the API even in the same family" in delta
@@ -127,7 +127,7 @@ def test_v28_clarifies_rag_is_not_the_product() -> None:
 
 def test_v28_records_real_console_mvp_build_order_without_skipping_storage() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Do not build a mockup" in delta
     assert 'Do not wait for Azure or a finished "DS" before researchers have a real console' in delta
     assert "The next implementation after this delta MUST be a real console MVP, not a mockup" in delta

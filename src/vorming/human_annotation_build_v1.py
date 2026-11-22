@@ -4,7 +4,7 @@ from copy import deepcopy
 from src.integrity_kernel import stable_hash
 from src.vorming import human_annotation_v1 as annotations
 from src.vorming.human_annotation_contract_v1 import MODE
-from src.vorming.human_annotation_preview_v1 import inspect_document
+from src.vorming.human_annotation_preview_v1 import inspect_for_overview
 from src.vorming.source_preparation_context_v1 import stored_extraction
 from src.workflows.processing_archives_v1 import encoded
 from src.workflows.workflow_transaction_v1 import workflow_transaction
@@ -86,20 +86,26 @@ def _capture(con, snapshot_id, store, actor_id):
     return row, entries, {**basis, 'overview_hash': stable_hash(basis)}
 
 
+def latest_build(connection, snapshot_id):
+    """Project the existing durable build command; never start or change a build."""
+    active = connection.execute("SELECT a.attempt_id,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
+        "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
+        "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
+    return dict(active) if active else None
+
+
 def overview(console, *, actor_id, snapshot_id):
     annotations.authorize(console, actor_id, console._envelope(snapshot_id))
     with console.workflow_document_store._connect() as con:
         con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         row, entries, basis = _capture(con, snapshot_id, console.workflow_document_store, actor_id)
-        active = con.execute("SELECT a.attempt_id,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
-            "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
-            "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
+        active = latest_build(con, snapshot_id)
     fragments = stored_extraction({**row['source_identity'], 'prepared_source_extraction': row['extraction']})
     if fragments is None or row['extraction']['record_hash'] != row['extraction_hash']:
         annotations.fail('annotation_representation_stale')
     from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(fragments).fragments
-    inspection = inspect_document(entries, fragments=fragments)
+    inspection = inspect_for_overview(entries, fragments=fragments)
     # Display is the existing source reader. A concurrent save requires a new
     # overview; its entries may never be presented under this seal's hash.
     view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
