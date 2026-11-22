@@ -8,6 +8,16 @@ import {bindRange} from '/annotations/binding.mjs';
   const state = JSON.parse(document.getElementById('annotation-data').textContent);
   const el = id => document.getElementById('annotation-' + id);
   const fieldContract = state.field_contract;
+  const sourceWorkHost = el('source-work-host');
+  const gapId = gap => `bronrest-${gap.block_id}-${gap.start}-${gap.end}`;
+  let sourceWork = state.source_work;
+  let sourceWorkGeneration = state.generation;
+  let focusedGap = null;
+  let sourceWorkSaving = false;
+  const sourceCategory = gap => {
+    const [role, reason] = (gap.proposal || ':').split(':');
+    return fieldContract.source_roles[role]?.find(item => item.value === reason)?.label || 'Nog te beoordelen';
+  };
   const clone = value => JSON.parse(JSON.stringify(value));
   // #1067: what to select in each card row, and what '−' does there.
   const HELP={
@@ -461,11 +471,11 @@ import {bindRange} from '/annotations/binding.mjs';
       else if(beforeType) {rows.insertBefore(dt,beforeType);rows.insertBefore(dd,beforeType);}
       else rows.append(dt,dd);
     };
-    // #1067: source text that is no statement (recorded in the document check) shows what it is, nothing to fill in.
+    // A recorded source disposition shows its category in the card.
     if(entry.disposition) {
       const reasons=Object.values(fieldContract.source_roles).flat();
       const kind=reasons.find(r=>r.value===entry.disposition.reason)?.label || 'Geen uitspraak';
-      row('core','Geen uitspraak: '+kind.toLowerCase(),dd=>{for(const a of core) line(dd,a.quote,'Weghalen: '+a.quote,()=>{discardObject().catch(()=>{});});});
+      row('disposition','Geen uitspraak: '+kind.toLowerCase(),dd=>{for(const a of core) line(dd,a.quote,'Weghalen: '+a.quote,()=>{discardObject().catch(()=>{});});});
       el('simple-status').textContent='';el('simple-notes').replaceChildren();
       return;
     }
@@ -539,6 +549,7 @@ import {bindRange} from '/annotations/binding.mjs';
     };
     selection.setBaseAndExtent(...point(kept[0]),...point(kept[1]));
   }
+  const ROLE_LABELS={core:'Uitspraak',belongs:'Hoort erbij',evidence:'Onderbouwing'};
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -551,6 +562,11 @@ import {bindRange} from '/annotations/binding.mjs';
     for (const proposal of [...(entry ? openProposals() : []), ...offerRanges]) {
       if (!ranges.has(proposal.block_id)) ranges.set(proposal.block_id,[]);
       ranges.get(proposal.block_id).push({...proposal,proposal:true});
+    }
+    for (const gap of sourceWork.ranges) {
+      if (!gap.proposal && gapId(gap) !== focusedGap) continue;
+      if (!ranges.has(gap.block_id)) ranges.set(gap.block_id, []);
+      ranges.get(gap.block_id).push({...gap,sourceRest:true});
     }
     for (const block of state.blocks) {
       const node = sourceElements.get(block.block_id);
@@ -569,7 +585,22 @@ import {bindRange} from '/annotations/binding.mjs';
         if (covering.length) {
           const mark=document.createElement('mark');
           if (covering.some(a => a.proposal)) {mark.dataset.proposal='true';mark.title='Voorstel van Metis';}
-          else if (covering.some(a => a.current)) mark.dataset.current='true';
+          else if (covering.some(a => a.current)) {
+            mark.dataset.current='true';
+            if (entry.disposition) {
+              mark.title='Geen uitspraak';
+            } else {
+              const roles=covering.filter(a => a.current).map(a => a.role==='core' || a.role==='evidence' ? a.role : 'belongs');
+              const role=['core','evidence','belongs'].find(r => roles.includes(r));
+              mark.dataset.role=role;mark.title=ROLE_LABELS[role];
+            }
+          }
+          else if (covering.some(a => a.sourceRest)) {
+            const gap = covering.find(a => a.sourceRest);
+            mark.dataset.sourceRest = gapId(gap);
+            if (gapId(gap) === focusedGap) mark.dataset.sourceRestFocus = 'true';
+            mark.title = sourceCategory(gap);
+          }
           else {mark.dataset.annotation=covering[0].owner;mark.title='Deze annotatie openen';}
           mark.textContent=value;content.append(mark);
         } else content.append(document.createTextNode(value));
@@ -660,20 +691,90 @@ import {bindRange} from '/annotations/binding.mjs';
   function revealSource(target) {
     const node = document.getElementById(target);
     if (!node || !node.closest('.annotation-document')) return;
-    const folded = node.closest('details');
-    if (folded) folded.open = true;
+    for(let parent=node.parentElement; parent; parent=parent.parentElement) {
+      if(parent instanceof HTMLDetailsElement) parent.open = true;
+    }
     node.scrollIntoView({block:'start'});
+    if(node.id.startsWith('bronrest-')) node.focus({preventScroll:true});
   }
+  function renderSourceLabels() {
+    document.querySelectorAll('.annotation-source-rest-label').forEach(label=>label.remove());
+    for(const gap of sourceWork.ranges) {
+      if(!gap.proposal) continue;
+      const link=document.createElement('a');
+      link.className='annotation-source-rest-label';
+      link.href='#'+gapId(gap);
+      link.textContent='Voorstel: '+sourceCategory(gap);
+      sourceElements.get(gap.block_id)?.after(link);
+    }
+  }
+  async function refreshSourceWork() {
+    const response=await fetch('/annotations/api?'+new URLSearchParams({document:state.snapshot_id,source_work:'true'}));
+    if(!response.ok) throw new Error('De bronverantwoording kon niet worden vernieuwd.');
+    const next=await response.json();
+    if(next.generation!==state.generation) return;
+    sourceWorkGeneration=next.generation;
+    const open=[...sourceWorkHost.querySelectorAll('details[open] > summary')].map(item=>item.textContent);
+    sourceWork=next.work;
+    sourceWorkHost.innerHTML=next.html;
+    sourceWorkHost.querySelectorAll('details').forEach(item=>{
+      item.open=open.includes(item.firstElementChild.textContent) || (item.id==='annotation-source-work' && open.length>0);
+    });
+    renderSourceLabels();
+    renderSourceHighlights();
+  }
+  sourceWorkHost.addEventListener('submit', async event => {
+    event.preventDefault();
+    if(sourceWorkSaving || deriving || saving || finalizing || rebuilding) return;
+    const form=event.target, data=new FormData(form), notice=el('source-work-status');
+    if(!data.getAll('member').length) {notice.textContent='Selecteer ten minste één bronbereik.';return;}
+    sourceWorkSaving=true;
+    const workplace=sourceWorkHost.closest('.annotation-workplace');
+    workplace.inert=true;
+    try {
+      await flush();
+      // An autosave in this tab may change the available ranges. Present the
+      // current proposal again before confirming any changed group.
+      if(Number(data.get('expected_generation'))!==state.generation) {
+        await refreshSourceWork();
+        notice.textContent='De brontekst is bijgewerkt. Controleer de selectie en bevestig opnieuw.';
+        return;
+      }
+      const response=await fetch(form.action,{method:'POST',body:data,headers:{Accept:'application/json'}});
+      const result=await response.json();
+      if(!response.ok) {notice.textContent=result.message || 'Vastleggen is niet gelukt.';return;}
+      const resume=new URL(location.href);
+      resume.hash='annotation-source-work';
+      history.replaceState(null,'',resume);
+      location.reload();
+    } catch(error) {
+      notice.textContent=error.message || 'Vastleggen is niet gelukt. Probeer opnieuw.';
+    } finally {
+      sourceWorkSaving=false;
+      workplace.inert=false;
+      if(form.isConnected) event.submitter?.focus();
+      else sourceWorkHost.querySelector('summary')?.focus();
+    }
+  });
   const pageNav = el('page-nav');
   if (pageNav) pageNav.addEventListener('change',() => revealSource(pageNav.value));
   document.addEventListener('click',event => {
     const link=event.target.closest?.('a[href^="#"]');
+    if(link?.dataset.annotationGap) {
+      focusedGap=link.dataset.annotationGap;
+      renderSourceHighlights();
+    }
     if (link?.hash) revealSource(decodeURIComponent(link.hash.slice(1)));
     // A marked passage of another statement opens that statement's card.
     const mark=event.target.closest?.('mark[data-annotation]');
     if(mark && window.getSelection().isCollapsed) switchEntry(mark.dataset.annotation).catch(()=>{});
   });
   window.addEventListener('hashchange',() => revealSource(decodeURIComponent(location.hash.slice(1))));
+  if(location.hash==='#annotation-source-work') {
+    const work=el('source-work');
+    if(work) work.open=true;
+  }
+  renderSourceLabels();
   if (location.hash) revealSource(decodeURIComponent(location.hash.slice(1)));
 
   // ---- Saving: one writer, the kernel's annotation command; every edit is a numbered version.
@@ -729,6 +830,7 @@ import {bindRange} from '/annotations/binding.mjs';
             if (answer) { retryRequest = null; }
             const error = new Error(data.message || 'Opslaan mislukt.'); error.validation = answer; throw error;
           }
+          const sourceWorkWasCurrent=sourceWorkGeneration===state.generation;
           entry.revision = data.revision; state.generation = data.generation;
           if (data.objects_revision) state.objects_revision = data.objects_revision;
           if (built() && data.revision > body.expected_revision) built().pending = true;
@@ -737,8 +839,13 @@ import {bindRange} from '/annotations/binding.mjs';
           delete entry.historical_finding;
           const saved = {...clone(entry),...body.selection,revision:data.revision};
           const index = state.entries.findIndex(e => e.annotation_id === entry.annotation_id);
+          const previous = state.entries[index];
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
           committed = version; retryRequest = null;setEntryUrl(entry.annotation_id);
+          if(sourceWorkWasCurrent && previous?.status!=='ready' && !previous?.historical_finding && data.status!=='ready') {
+            sourceWorkGeneration=data.generation;
+            for(const input of sourceWorkHost.querySelectorAll('[name=expected_generation]')) input.value=data.generation;
+          } else if(!sourceWorkSaving) refreshSourceWork().catch(()=>{});
           el('retry').hidden = true;
           status(built() ? 'Aanpassing opgeslagen.' : data.status === 'ready' ? 'Klaar voor documentcontrole en opgeslagen.' : data.status === 'withdrawn' ? 'Annotatie teruggenomen en opgeslagen.' : 'Concept opgeslagen.');renderCard();
         } catch (error) {

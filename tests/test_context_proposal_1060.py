@@ -154,24 +154,26 @@ def test_a_selection_not_yet_committed_already_gets_its_proposal(smetten):
     assert proposal['quote'] == intro['quote']
 
 
-def test_text_that_is_no_statement_is_accounted_for_from_the_document_check(smetten):
-    """The card no longer offers this route; the document check lists the text and saves the choice."""
+def test_text_that_is_no_statement_is_accounted_for_in_the_document(smetten):
     from starlette.testclient import TestClient
     from tests.production_support import application_for
     annotation, _, _, intro, env = smetten
     with TestClient(application_for(env['console'])) as client:
         client.post('/login', data={'username': 'voorstel', 'password': 'human-proposal-secret'})
         page = client.get('/annotations', params={'document': env['sid'], 'overview': 'true'}).text
-        assert 'Nog niet verantwoord bronmateriaal' in page and 'Kop of documentstructuur' in page
-        view = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'])
+        assert 'Nog niet verantwoord bronmateriaal' in page and '/annotations/source-role' not in page
+        editor = client.get('/annotations', params={'document': env['sid']}).text
+        assert 'Zonder voorstel' in editor and 'Kop of documentstructuur' in editor
+        view = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'], include_source_work=True)
+        gap = next(gap for gap in view['source_work']['ranges'] if gap['block_id'] == intro['block_id'])
         form = {'document': env['sid'], 'command_id': 'gap-1', 'expected_generation': str(view['generation']),
-                'expected_objects_revision': view['objects_revision'], 'block_id': intro['block_id'],
-                'start': str(intro['start']), 'end': str(intro['end'])}
+                'expected_objects_revision': view['objects_revision'], 'member': gap['key'],
+                'extraction_hash': view['extraction_hash']}
         refused = client.post('/annotations/source-role', data={**form, 'reason': 'structure:unknown'}, follow_redirects=False)
         assert refused.status_code == 409 and 'Kies een bronfunctie' in refused.text
         saved = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-2', 'reason': 'structure:document_structure'},
                             follow_redirects=False)
-        assert saved.status_code == 303 and saved.headers['location'].endswith('#annotation-gaps')
+        assert saved.status_code == 303 and saved.headers['location'].endswith('#annotation-source-work')
         # Repeating the same command is the same receipt, not a second annotation.
         again = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-2', 'reason': 'structure:document_structure'},
                             follow_redirects=False)
@@ -182,4 +184,84 @@ def test_text_that_is_no_statement_is_accounted_for_from_the_document_check(smet
     entries = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'])['entries']
     [entry] = [e for e in entries if e.get('disposition')]
     assert entry['status'] == 'ready' and entry['disposition'] == {'role': 'structure', 'reason': 'document_structure'}
-    assert [a['quote'] for a in entry['ranges']] == [intro['quote']]
+    assert [a['quote'] for a in entry['ranges']] == [gap['quote']]
+
+
+def test_source_group_confirmation_saves_only_current_selected_members(tmp_path, production_console):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from starlette.testclient import TestClient
+
+    from src.vorming import human_annotation_build_v1 as build
+    from src.vorming import human_annotation_v1 as annotation
+    from tests.production_support import application_for
+
+    console = production_console(root=tmp_path)
+    actor = console.create_account(username='bronrestjes', password='fixture-only',
+                                   roles=('researcher', 'reviewer'))['account_id']
+    sid = console.receive_source(
+        actor_id=actor, filename='versiebeheer.html', content_type='text/html',
+        data=(b'<p>Versie: 2.4</p><p>Datum: november 2026</p><p>Versie: 2.3</p>'
+              b'<p>Controleer de huid dagelijks. ........ 2</p>'),
+        ingest_kind='new', title='Versiebeheer', version='2.4', date='2026-11-13',
+        live_url='', class_='richtlijn', family='test', named_reviewers=[],
+        review_choice={'contract': 'review-configuration-v2', 'option': 'uploader_sole',
+                       'four_eyes_required': False, 'reviewers': [], 'readers': []},
+    )['snapshot_id']
+    annotation.prepare(console, actor_id=actor, snapshot_id=sid,
+                       expected_revision=console.objects_revision(sid))
+
+    def view():
+        return annotation.overview(console, actor_id=actor, snapshot_id=sid, include_source_work=True)
+
+    opened = view()
+    [group] = opened['source_work']['groups']
+    assert group['proposal'] == 'metadata:document_metadata'
+    assert len(group['members']) == 3
+    [clinical] = [item for item in opened['source_work']['ranges'] if not item['proposal']]
+    assert clinical['quote'].startswith('Controleer de huid')
+    assert not opened['entries']
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': 'bronrestjes', 'password': 'fixture-only'})
+        editor = client.get('/annotations', params={'document': sid})
+        assert editor.status_code == 200 and 'Voorstel: Documentgegevens (3)' in editor.text
+        assert view()['generation'] == opened['generation']
+        before = build.overview(console, actor_id=actor, snapshot_id=sid)
+        assert not before['can_finalize']
+        refused = client.post('/annotations/finalize', data={
+            'document': sid, 'command_id': 'before-confirmation', 'overview_hash': before['overview_hash'],
+            'expected_generation': str(before['generation']), 'expected_revision': before['objects_revision'],
+        }, follow_redirects=False)
+        assert refused.status_code == 409
+        assert build.overview(console, actor_id=actor, snapshot_id=sid)['current_build'] is None
+        assert not console.publication_readiness(sid)['publication_ready']
+
+        form = {'document': sid, 'command_id': 'confirm-source-group', 'group': group['key'],
+                'reason': group['proposal'], 'expected_generation': str(opened['generation']),
+                'expected_objects_revision': opened['objects_revision'], 'extraction_hash': opened['extraction_hash'],
+                'member': group['members'][:2]}
+        headers = {'Accept': 'application/json'}
+        invalid = client.post('/annotations/source-role', data={**form, 'member': [*form['member'], clinical['key']]},
+                              headers=headers)
+        assert invalid.status_code == 409 and invalid.json()['error'] == 'annotation_source_role_stale'
+        assert view()['entries'] == []
+
+        other_tab = {**form, 'command_id': 'second-tab'}
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            attempts = [(submission, executor.submit(client.post, '/annotations/source-role', data=submission, headers=headers))
+                        for submission in (form, other_tab)]
+        results = sorted(((submission, attempt.result()) for submission, attempt in attempts), key=lambda pair: pair[1].status_code)
+        (original, confirmed), (_, stale) = results
+        assert confirmed.status_code == 200, confirmed.text
+        assert stale.status_code == 409 and stale.json()['error'] == 'annotation_write_conflict'
+        assert client.post('/annotations/source-role', data=original, headers=headers).json() == confirmed.json()
+
+        after = view()
+        [saved] = after['entries']
+        assert saved['author_id'] == actor
+        assert saved['disposition'] == {'role': 'metadata', 'reason': 'document_metadata'}
+        assert [span['quote'] for span in saved['ranges']] == ['Versie: 2.4', 'Datum: november 2026']
+        assert [item['key'] for item in after['source_work']['ranges']] == [group['members'][2], clinical['key']]
+        overview = client.get('/annotations', params={'document': sid, 'overview': 'true'}).text
+        assert 'Verantwoorde restbereiken: 2' in overview and 'Open bronbereiken: 2' in overview
+        assert '/annotations/source-role' not in overview
