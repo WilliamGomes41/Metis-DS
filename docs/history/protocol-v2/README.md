@@ -12,9 +12,9 @@ This directory marks the Protocol v2 governance line as historical material for 
 
 The individual `PROTOCOL_V2_*` documents are stored here with their original bytes. Their former `docs/PROTOCOL_V2_*` paths are relative compatibility symlinks into this directory. Existing approval manifests, historical links and regression evidence can still resolve the original paths and verify the same hashes. The `data/assurance/protocol_v2_*_approval.json` manifests remain unchanged.
 
-After Protocol v3 activation, these files MUST NOT be treated as an additional current steering layer. `PROTOCOL.md` is the current norm; `ROADMAP.md` is the active change register. Historical files are consulted only for audit, provenance, regression history, or reconstruction of prior decisions.
+After Protocol v3 activation, these files MUST NOT be treated as an additional current steering layer. `PROTOCOL.md` is the current norm; open work is tracked in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues). Historical files are consulted only for audit, provenance, regression history, or reconstruction of prior decisions.
 
-Historical Protocol-v2 regression tests resolve legacy reads of the former root steering documents to these frozen snapshots. Current Protocol-v3 tests always read the live root documents.
+Historical Protocol-v2 regression tests use the frozen roadmap directly and resolve legacy protocol and governance reads to the snapshots above. Current governance tests use the active documents.
 
 ## Migration rule
 

@@ -40,7 +40,7 @@ def _read(path: Path) -> str:
 
 
 def _lock_section() -> str:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     start = roadmap.index(LOCK_HEADING)
     rest = roadmap[start:]
     next_lock = rest.find("\n## ", 1)
@@ -48,7 +48,7 @@ def _lock_section() -> str:
 
 
 def test_roadmap_records_controlled_mvp_owner_lock() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert LOCK_HEADING in roadmap
     assert "William Gomes" in _lock_section()

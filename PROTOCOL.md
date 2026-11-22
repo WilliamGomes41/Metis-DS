@@ -17,15 +17,15 @@
 
 Metis wordt gestuurd in deze volgorde:
 
-`PROTOCOL.md → ROADMAP.md → acceptatietests → code`
+`PROTOCOL.md → acceptatietests → code`
 
-`PROTOCOL.md` bevat blijvende product-, veiligheids- en governance-invarianten. `ROADMAP.md` bevat alleen actieve veranderopgaven, beslispoorten en stopvoorwaarden. Tests leveren bewijs voor de getoetste delen van de norm; code, configuratie en infrastructuur implementeren haar.
+`PROTOCOL.md` bevat blijvende product-, veiligheids- en governance-invarianten. Tests leveren bewijs voor de getoetste delen van de norm; code, configuratie en infrastructuur implementeren haar.
 
 Bij strijdigheid wint de hogere laag. Een tijdelijke workaround, deploymentvolgorde, incidentroute, experiment of implementatiegolf wordt niet automatisch protocol.
 
 Historische protocollen, delta's, roadmaps, approvals en auditrapporten zijn niet sturend voor nieuwe implementatie.
 
-Een geldende norm is geen verklaring dat alle implementatie- en acceptatiebewijzen al geleverd zijn. Een vastgestelde afwijking blijft expliciet open in `ROADMAP.md`, met verwijzing naar code en ontbrekend bewijs; bestaand gedrag verlaagt de norm niet. Aanwezigheid van code of geslaagde lokale tests bewijst geen activatie of inhoudelijke acceptatie in productie.
+Een geldende norm is geen verklaring dat alle implementatie- en acceptatiebewijzen al geleverd zijn. Een vastgestelde afwijking blijft expliciet open in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues), met verwijzing naar code en ontbrekend bewijs; bestaand gedrag verlaagt de norm niet. Aanwezigheid van code of geslaagde lokale tests bewijst geen activatie of inhoudelijke acceptatie in productie.
 
 ## 2. Productgrens
 
@@ -117,7 +117,7 @@ De expliciet geconfigureerde V3-route gebruikt versiegebonden isolatie van produ
 
 Metis vormt kennis via één vast vormingskader, aangevuld met een inhoudelijke strategie per bronsoort. Het kader is voor iedere bronsoort gelijk. Een strategie bepaalt alleen de inhoudelijke vorming en mag het kader niet wijzigen of versoepelen.
 
-Het onderstaande kader is de norm voor routevastlegging. De implementatiegraad en het resterende werk staan in `ROADMAP.md` §R4.6; opgeslagen pogingconfiguratie en afwijzing van incompatibel hervatten zijn op zichzelf geen bewijs dat routekeuze al volledig per bron wordt beheerd.
+Het onderstaande kader is de norm voor routevastlegging. Het [routeontwerp](https://github.com/WilliamGomes41/Metis-DS/issues/879) en het [projectissue voor kennisvorming en bewijs](https://github.com/WilliamGomes41/Metis-DS/issues/877) leggen het ontwerp en de vervolgstappen vast. Opgeslagen pogingconfiguratie en afwijzing van incompatibel hervatten zijn op zichzelf geen bewijs dat routekeuze al volledig per bron wordt beheerd.
 
 **Het vormingskader (geldt altijd):**
 
@@ -293,7 +293,7 @@ PostgreSQL is voor iedere ondersteunde console de enige workflowautoriteit, ook 
 
 Deployment gebeurt vanaf een identificeerbare gecontroleerde commit en met een reproduceerbaar pakket. Deployment mag runtime-data niet wissen en mag geen publicatierechten openen doordat applicatiecode of configuratie aanwezig is.
 
-De normale deploymentroute en noodprocedure staan buiten het protocol in de actuele operationele documentatie/roadmap. Een tijdelijke incidentworkaround wordt geen blijvende architectuurregel.
+De normale deploymentroute en noodprocedure staan buiten het protocol in de actuele [operationele documentatie](docs/agents/deployment-protocol.md). Volg de open uitrolvoorwaarden in [#695](https://github.com/WilliamGomes41/Metis-DS/issues/695). Een tijdelijke incidentworkaround wordt geen blijvende architectuurregel.
 
 ## 14. Test- en bewijsdiscipline
 
@@ -301,7 +301,7 @@ Een technisch afdwingbare protocolinvariant wordt waar mogelijk met een gedrags-
 
 Tests bewijzen primair gedrag en veiligheidsgrenzen. Documentcontroles mogen actuele versie-identiteit, verwijzingen en de integriteit van historische artefacten bewaken; zij vervangen geen gedragsbewijs voor bronbinding, bevoegdheden, review, publicatie of herstel. Een afstemmingsnotitie benoemt per getoetste regel de code, relevante tests, werkelijk uitgevoerde verificatie en resterende bewijsgrens. Tests die uitsluitend historische formuleringen, deltatekst of supersessiezinnen in actuele stuurdocumenten afdwingen zijn geen geldige blijvende governancevorm.
 
-Historische protocoltests mogen historische artefacten en approval-manifests blijven verifiëren, maar mogen niet vereisen dat V2-tekst in `PROTOCOL.md` of `ROADMAP.md` blijft staan.
+Historische protocoltests mogen historische artefacten en approval-manifests blijven verifiëren, maar mogen niet vereisen dat V2-tekst in `PROTOCOL.md` blijft staan.
 
 ## 15. Wijzigingsgovernance vanaf V4
 
@@ -313,7 +313,7 @@ Een blijvende wijziging in product- of veiligheidsinvarianten volgt deze route:
 2. directe wijziging van de actuele `PROTOCOL.md`;
 3. passende tests aanpassen of toevoegen;
 4. de vorige protocolstand als onveranderde historische snapshot bewaren;
-5. actieve vervolgstappen in `ROADMAP.md` bijwerken.
+5. actieve vervolgstappen in het bijbehorende GitHub-issue bijwerken.
 
 Een implementatie die afwijkt van deze wijzigingsroute wordt als afwijking verantwoord met het oorspronkelijke besluit, beschikbaar bewijs en open acceptatie. Achteraf documenteren levert geen ontbrekend experimentbewijs en verleent geen publicatie- of uitroltoestemming.
 

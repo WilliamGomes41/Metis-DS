@@ -32,7 +32,7 @@ def test_v219_approval_manifest_matches_protocol_bytes() -> None:
 def test_v219_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -52,7 +52,7 @@ def test_v219_delta_exists_and_is_the_live_baseline() -> None:
 def test_v219_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -67,7 +67,7 @@ def test_v219_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v219_researchers_must_not_open_2008_inhoud_cards() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Researchers MUST NOT be required to open 2008 Inhoud cards one by one" in delta
     assert "That is the same fail as 4000 unclassified: fatigue, not assurance" in delta
     assert "Koppen 78 / Inhoud 2008" in delta
@@ -84,7 +84,7 @@ def test_v219_researchers_must_not_open_2008_inhoud_cards() -> None:
 def test_v219_koppen_batch_confirm_as_structure() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Koppen MAY and MUST be batch-confirmable as structure, never as advice" in delta
     assert "Protocol v2.15 / v2.16 on this point are unchanged" in delta
     assert "There MUST NOT be a researcher control “zwaar/licht” or “snel/langzaam”" in delta
@@ -95,7 +95,7 @@ def test_v219_koppen_batch_confirm_as_structure() -> None:
 def test_v219_slow_review_is_recommendation_condition_exception_high_risk() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The researcher-required slow review on a freeze is: proposed `recommendation`, plus `condition` / `exception` / any high-risk object" in delta
     assert "Those bound the advice. That is what they MUST do by hand" in delta
     assert "MUST NOT auto-confirm types" in delta
@@ -109,7 +109,7 @@ def test_v219_slow_review_is_recommendation_condition_exception_high_risk() -> N
 def test_v219_remaining_unclassified_must_not_be_presented_duty() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Remaining `unclassified` MUST NOT be presented as equal one-by-one work of thousands of cards" in delta
     assert "Unclassified is never served (`supported` / handelingsadvies), so 2000 clicks on it do not add assurance" in delta
     assert "`definition` / `explanation` MAY exist and MAY later answer non-advice questions once confirmed" in delta
@@ -124,7 +124,7 @@ def test_v219_remaining_unclassified_must_not_be_presented_duty() -> None:
 def test_v219_v218_held_and_2008_remains_a_fail() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Protocol v2.16 tiny-objects, Protocol v2.17 chrome, and Protocol v2.18 no-duplicate-sentence / trailing-clause / identical `clean_text` stay in force" in delta
     assert "2008 unclassified/Inhoud cards on one richtlijn remains a fail of this review surface" in delta
     assert "it looks better" in delta
@@ -136,7 +136,7 @@ def test_v219_v218_held_and_2008_remains_a_fail() -> None:
 def test_v219_unpublished_continentie_reextract_and_no_hiding() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "unpublished Continentie MAY be re-extracted after this law" in delta
     assert "source SHA-256 stays" in delta or "Source SHA-256 stays" in delta
     assert "unpublished identities MAY be replaced" in delta
@@ -176,7 +176,7 @@ def test_v219_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_g
 
 def test_v219_records_queue_duty_wave_then_g2_and_does_not_implement_product_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.18 conflict on which implementation is next, this delta governs" in delta
     assert "Koppen batch stays" in delta

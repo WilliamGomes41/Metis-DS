@@ -38,7 +38,7 @@ def _read(path: Path) -> str:
 
 
 def _lock_section() -> str:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     start = roadmap.index(LOCK_HEADING)
     rest = roadmap[start:]
     next_lock = rest.find("\n## ", 1)
@@ -46,7 +46,7 @@ def _lock_section() -> str:
 
 
 def test_roadmap_records_duty_first_home_owner_lock() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert LOCK_HEADING in roadmap
     assert "William Gomes" in _lock_section()
@@ -66,7 +66,7 @@ def test_roadmap_records_duty_first_home_owner_lock() -> None:
 
 def test_roadmap_supersedes_sketch_b_as_locked_home() -> None:
     section = _lock_section()
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     live = roadmap[roadmap.index("Wat nu de code stuurt:") : roadmap.index("### Historische supersessie-index")]
     assert "SUPERSEDES sketch B" in section or "superseded" in section.lower()
@@ -110,7 +110,7 @@ def test_roadmap_locks_duty_first_home_copy_and_cards() -> None:
 
 def test_roadmap_locks_post_auth_home_and_documenten_unchanged() -> None:
     section = _lock_section()
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     live = roadmap[roadmap.index("Wat nu de code stuurt:") : roadmap.index("### Historische supersessie-index")]
     assert "Post-auth" in section or "post-auth" in section.lower()

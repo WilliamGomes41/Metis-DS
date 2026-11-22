@@ -33,7 +33,7 @@ Use short imperative messages, for example:
 
 ## Documentation
 
-Keep the repository root as the operating surface. Historical step, audit and repair writeups belong in `docs/history/`, not the root. Do not add another steering layer; the hierarchy remains `PROTOCOL.md → ROADMAP.md → tests → code`. Read current progress from merged code, tests, CI and commit history on `main`.
+Keep the repository root as the operating surface. Historical step, audit and repair writeups belong in `docs/history/`, not the root. Do not add another steering layer; the hierarchy remains `PROTOCOL.md → acceptance tests → code`. Track open work in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues). Read current progress from merged code, tests, CI and commit history on `main`.
 
 ## Safety rules
 

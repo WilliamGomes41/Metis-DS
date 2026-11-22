@@ -32,7 +32,7 @@ def test_v220_approval_manifest_matches_protocol_bytes() -> None:
 def test_v220_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -54,7 +54,7 @@ def test_v220_delta_exists_and_is_the_live_baseline() -> None:
 def test_v220_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -69,7 +69,7 @@ def test_v220_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v220_protocol_is_every_guideline_law_not_continentie_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`PROTOCOL.md` is the law of V&VN Data Services for every guideline, not a Continentie-only protocol" in delta
     assert "Continentie appears in Protocol v2.16–v2.19 as live evidence of fails" in delta
     assert "stamp words as Koppen; 2008 Inhoud cards" in delta
@@ -95,7 +95,7 @@ def test_v220_does_not_strip_v216_v219_continentie_evidence() -> None:
 def test_v220_unpublished_snapshots_may_be_deleted_by_console_operator() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Unpublished captured snapshots MAY be removed from the operations console by an authorized console operator" in delta
     assert "named researcher or reviewer account, not a secret engineer path" in delta
     assert "This is owner-authorized cleanup of unpublished capture, not publication, not G2" in delta
@@ -107,7 +107,7 @@ def test_v220_unpublished_snapshots_may_be_deleted_by_console_operator() -> None
 def test_v220_must_have_real_delete_control_with_confirm() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "MUST have a real delete control on the document card / Review chooser for unpublished snapshots only" in delta
     assert "The label MUST be researcher Dutch, for example **Verwijder unpublished document**" in delta
     assert "The control MUST confirm before it runs. Delete is destructive." in delta
@@ -121,7 +121,7 @@ def test_v220_must_have_real_delete_control_with_confirm() -> None:
 def test_v220_after_delete_lists_objects_envelope_audit() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "that snapshot MUST NOT appear on Inleveren, Review or Documentenhierarchie lists" in delta
     assert "Stored objects and the envelope for that `snapshot_id` are gone" in delta
     assert "Freeze bytes of that unpublished source MAY be removed with it" in delta
@@ -137,7 +137,7 @@ def test_v220_after_delete_lists_objects_envelope_audit() -> None:
 def test_v220_must_not_delete_published_or_hide_fragments() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "MUST NOT delete a published projection or anything that has been published" in delta
     assert "`publish()` stays G2-BLOCKED" in delta
     assert "There is no published Continentie" in delta
@@ -153,7 +153,7 @@ def test_v220_must_not_delete_published_or_hide_fragments() -> None:
 def test_v220_must_not_ssh_wipe_home_data() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "MUST NOT SSH or wipe `/home/data` as the product path" in delta
     assert "The console action is the path" in delta
     assert "MUST NOT SSH/wipe van `/home/data` als productpad" in root_protocol
@@ -164,7 +164,7 @@ def test_v220_must_not_ssh_wipe_home_data() -> None:
 def test_v220_four_eyes_not_required_for_unpublished_delete() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Four-eyes is not required to delete unpublished capture" in delta
     assert "The uploader MAY delete unpublished they captured" in delta
     assert "A second named reviewer is not required for delete. Delete is not type-confirm." in delta
@@ -205,7 +205,7 @@ def test_v220_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_g
 
 def test_v220_records_unpublished_delete_wave_then_g2_and_does_not_implement_product_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.19 conflict on which implementation is next, this delta governs" in delta
     assert "MUST a real delete control on the document card / Review chooser for unpublished snapshots only" in delta

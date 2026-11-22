@@ -32,7 +32,7 @@ def test_v215_approval_manifest_matches_protocol_bytes() -> None:
 def test_v215_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -49,7 +49,7 @@ def test_v215_delta_exists_and_is_the_live_baseline() -> None:
 def test_v215_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -103,7 +103,7 @@ def test_v215_date_and_version_are_freeze_metadata_not_object_version_or_v214() 
 def test_v215_heading_proposal_is_review_lane_prerequisite() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Extract MUST propose `heading` for real source headings / TOC / structural crumbs so they do not all land as `unclassified`" in delta
     assert "this delta makes that proposal a review-lane prerequisite" in delta
     assert "Everything that is not a real heading MUST still start `unclassified`" in delta
@@ -116,7 +116,7 @@ def test_v215_heading_proposal_is_review_lane_prerequisite() -> None:
 def test_v215_review_list_must_show_source_snippet_not_type_name() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The review list MUST NOT use the type name (`unclassified`) as the row title" in delta
     assert "Each row MUST show a source-passage snippet (the freeze text of that object)" in delta
     assert "The numeric object id MAY remain secondary" in delta
@@ -128,7 +128,7 @@ def test_v215_review_list_must_show_source_snippet_not_type_name() -> None:
 def test_v215_fast_lane_batch_confirm_and_slow_lane_one_object() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "There MUST NOT be a separate researcher control “zwaar/licht” or “snel/langzaam”" in delta
     assert "Fast lane MUST support batch-confirm of proposed headings as structure, not advice, so a researcher does not open 4000 cards" in delta
     assert "Slow lane stays one-object (type + relations + high-risk four-eyes)" in delta
@@ -139,7 +139,7 @@ def test_v215_fast_lane_batch_confirm_and_slow_lane_one_object() -> None:
 def test_v215_four_thousand_unclassified_is_a_fail_and_does_not_resplit() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Four thousand unclassified cards on one richtlijn is a fail of this delta's review surface, not a workload to accept" in delta
     assert "MUST NOT silently re-split existing ingested objects in this protocol" in delta
     assert "Identity of already-hashed objects stays" in delta
@@ -177,7 +177,7 @@ def test_v215_is_c3_spanning_ingest_provenance_owner_approved_and_does_not_reope
 
 def test_v215_records_console_wave_then_g2_and_does_not_implement_product_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and the 2026-08-29 lock conflict on which implementation is next, this delta governs" in delta
     assert "ingest date calendar + ISO store + required" in delta

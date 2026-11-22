@@ -2,7 +2,7 @@
 
 Change class: C (onderzoek). Rewrite risk: none. Touches lifecycle invariants: no.
 Geen productcode gewijzigd. Dit dossier is een werkdocument onder #878 en #877;
-het voegt geen norm toe boven `PROTOCOL.md → ROADMAP.md → acceptatietests → code`.
+het voegt geen norm toe boven `PROTOCOL.md → acceptatietests → code`.
 
 ## 0. Gepinde basis en bewijsgrenzen
 

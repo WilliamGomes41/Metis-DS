@@ -32,7 +32,7 @@ def test_v216_approval_manifest_matches_protocol_bytes() -> None:
 def test_v216_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -50,7 +50,7 @@ def test_v216_delta_exists_and_is_the_live_baseline() -> None:
 def test_v216_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -79,7 +79,7 @@ def test_v216_researcher_bar_first_screen() -> None:
 def test_v216_one_door_beoordeel() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "MUST NOT keep two doors **Openen** plus **Reviewen**" in delta
     assert "One document card, one primary button **Beoordeel**" in delta
     assert "Openen-as-a-second-path to the same list is forbidden" in delta
@@ -90,7 +90,7 @@ def test_v216_one_door_beoordeel() -> None:
 def test_v216_two_named_stacks_with_counts() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "**Koppen** — real table-of-contents / section titles from the freeze" in delta
     assert "**Inhoud** — `definition`, `explanation`, `condition`, `exception`, `recommendation`, and `unclassified` until typed" in delta
     assert "Counts MUST be visible on each stack" in delta
@@ -116,7 +116,7 @@ def test_v216_compact_rows() -> None:
 def test_v216_stamps_not_objects() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "DOEN / OVERWEEG / NIET DOEN are stamps, not objects" in delta
     assert "MUST NOT invent GRADE jargon on this screen" in delta
     assert "MUST NOT add a new object type" in delta
@@ -134,7 +134,7 @@ def test_v216_stamps_not_objects() -> None:
 def test_v216_no_tiny_objects_and_unpublished_continentie_reextract() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Extract MUST NOT emit a knowledge object whose confirmable text is only a list number (`1.`)" in delta
     assert "A lone trailing word of a previous sentence is forbidden" in delta
     assert "Freeze source bytes and SHA-256 stay" in delta
@@ -173,7 +173,7 @@ def test_v216_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_g
 
 def test_v216_records_review_page_wave_then_g2_and_does_not_implement_product_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.15 conflict on which implementation is next, this delta governs" in delta
     assert "one door **Beoordeel**" in delta

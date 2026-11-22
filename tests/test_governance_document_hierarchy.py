@@ -16,10 +16,19 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def test_current_documentation_points_to_github_issues_without_a_root_roadmap() -> None:
+    assert not (ROOT / "ROADMAP.md").exists()
+    issue_tracker = "https://github.com/WilliamGomes41/Metis-DS/issues"
+    for path in ("AGENTS.md", "CONTRIBUTING.md", "README.md", "PROTOCOL.md", "docs/GOVERNANCE.md",
+                 "docs/DEVELOPMENT_WORKFLOW.md", "docs/REPOSITORY_CONVENTIONS.md"):
+        document = _read(path)
+        assert issue_tracker in document, path
+        assert "ROADMAP.md" not in document, path
+
+
 def test_governance_documents_exist() -> None:
     required = (
         "PROTOCOL.md",
-        "ROADMAP.md",
         "docs/DEVELOPMENT_WORKFLOW.md",
         "docs/GOVERNANCE.md",
         "docs/history/protocol-v2/PROTOCOL_ROOT_FINAL_2026-09-10.md",
@@ -34,7 +43,7 @@ def test_protocol_has_one_current_v4_norm_and_required_hierarchy() -> None:
     protocol = _read("PROTOCOL.md")
     assert protocol.count("# V&VN Data Services — Protocol v4") == 1
     assert protocol.count("**Versie:** 4.3.1") == 1
-    assert "PROTOCOL.md → ROADMAP.md → acceptatietests → code" in protocol
+    assert "PROTOCOL.md → acceptatietests → code" in protocol
     assert "De geldende normatieve baseline is Protocol v2." not in protocol
     assert "## 16. Eerdere protocolversies zijn historie" in protocol
     assert "Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden gelezen." in protocol
@@ -50,24 +59,12 @@ def test_v2_chain_is_preserved_in_history_not_current_protocol() -> None:
     assert "docs/PROTOCOL_V2_2.md" in historical_protocol
 
 
-def test_roadmap_tracks_current_v4_evidence_gates() -> None:
-    roadmap = _read("ROADMAP.md")
-    assert roadmap.startswith("# Metis — Roadmap v4")
-    for required in ("R4.1", "R4.2", "R4.3", "R4.4", "## Stopregels"):
-        assert required in roadmap
-    assert "Historical Lifecycle Audit — read-only" in roadmap
-    assert "REAL Product API lifecycle proof — proof-only" in roadmap
-    assert "End-to-end lifecycle closure — proof-only" in roadmap
-    assert "Performance pas daarna" in roadmap
-    assert "docs/history/protocol-v3/" in roadmap
-
-
-def test_operational_governance_record_is_subordinate_not_a_fifth_layer() -> None:
+def test_operational_governance_record_has_the_same_protocol_hierarchy() -> None:
     governance = _read("docs/GOVERNANCE.md")
     protocol = _read("PROTOCOL.md")
-    assert "geen vijfde stuurlaag" in governance
-    assert "PROTOCOL.md → ROADMAP.md → acceptatietests → code" in governance
-    assert "PROTOCOL.md → ROADMAP.md → acceptatietests → code" in protocol
+    assert "Het licht de toepassing van het protocol toe." in governance
+    assert "PROTOCOL.md → acceptatietests → code" in governance
+    assert "PROTOCOL.md → acceptatietests → code" in protocol
 
 
 def test_workflow_requires_tests_before_code_and_main_as_progress_record() -> None:
@@ -82,7 +79,6 @@ def test_workflow_requires_tests_before_code_and_main_as_progress_record() -> No
 def test_repository_root_is_operating_surface_not_historical_reports() -> None:
     operating = {
         "PROTOCOL.md",
-        "ROADMAP.md",
         "README.md",
         "CONTRIBUTING.md",
         "CHANGELOG.md",
@@ -101,7 +97,7 @@ def test_repository_root_is_operating_surface_not_historical_reports() -> None:
 
     history_readme = _read("docs/history/README.md")
     assert "not steering documents" in history_readme.lower()
-    assert "PROTOCOL.md → ROADMAP.md → acceptatietests → code" in history_readme
+    assert "PROTOCOL.md → acceptatietests → code" in history_readme
     assert "docs/history/" in _read("docs/REPOSITORY_CONVENTIONS.md")
     assert (ROOT / "docs/history/STEP2_README.md").is_file()
     assert (ROOT / "docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md").is_file()
@@ -121,5 +117,4 @@ def test_audit_ids_still_resolve_to_their_registered_github_issues() -> None:
     assert len(rows) == len(expected)
     assert {audit_id: int(issue) for audit_id, issue, _ in rows} == expected
     assert all(label == target for _, label, target in rows)
-    for document in ("README.md", "ROADMAP.md"):
-        assert "](docs/audit/README.md)" in _read(document)
+    assert "](docs/audit/README.md)" in _read("README.md")

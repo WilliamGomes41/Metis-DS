@@ -31,7 +31,7 @@ def _read(path: Path) -> str:
 
 
 def test_roadmap_records_audit_tip_019978b_and_verdict() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "019978b" in roadmap
     assert "fundament aanwezig" in roadmap
@@ -42,7 +42,7 @@ def test_roadmap_records_audit_tip_019978b_and_verdict() -> None:
 
 
 def test_roadmap_publish_g2_blocked_remains_intentional() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "intentioneel, geen bug" in roadmap
     assert "`publish()` blijft G2-BLOCKED" in roadmap
@@ -52,7 +52,7 @@ def test_roadmap_publish_g2_blocked_remains_intentional() -> None:
 
 
 def test_roadmap_next_code_is_ordered_reliability_waves_after_separate_go() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Reviewopslag betrouwbaarheid" in roadmap
     assert "Ingest beschikbaarheid" in roadmap
@@ -83,7 +83,7 @@ def test_roadmap_next_code_is_ordered_reliability_waves_after_separate_go() -> N
 
 
 def test_roadmap_waves_are_backlog_not_protocol_law_and_not_this_pr() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "ROADMAP-backlog" in roadmap
     assert "geen nieuwe PROTOCOL-wet" in roadmap
@@ -103,7 +103,7 @@ def test_roadmap_waves_are_backlog_not_protocol_law_and_not_this_pr() -> None:
 
 
 def test_roadmap_sharpens_existing_five_waves_without_inventing_a_sixth() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "verscherpte acceptatiecriteria op dezelfde vijf golven" in roadmap
     assert "geen nieuwe golven" in roadmap
