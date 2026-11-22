@@ -815,6 +815,12 @@
       ]
     ],
     [
+      "/source-selection/progress",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/source-selection/publication-evidence",
       [
         "GET"

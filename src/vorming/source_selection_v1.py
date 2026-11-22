@@ -13,6 +13,11 @@ from src.vorming.processing_document_budget_v1 import projection as document_bud
 UNCHECKED = "volledigheid nog niet gecontroleerd"
 
 
+def progress_attempt_key(attempt):
+    # Older compact summaries record the start time but omit the attempt id.
+    return attempt.get("attempt_id") or attempt.get("started_at") or ""
+
+
 def authorize(console, actor_id, envelope):
     return authorize_account(console._account(actor_id, current=True), envelope)
 
@@ -241,6 +246,7 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None, 
     if state == "mislukt":
         formation_blockers += 1
     return {**document_budget_projection(attempt,now()), "snapshot_id": snapshot_id, "title": envelope["title"],
+            "attempt_key": progress_attempt_key(attempt), "attempt_started_at": attempt.get("started_at"),
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "version": envelope["version"], "bytes": (envelope.get("received_source") or {}).get("bytes"),
             "state": state, "blocked_reason": (attempt.get("dispatch") or {}).get("blocked_reason"),
@@ -280,6 +286,7 @@ def summary_projection(console, *, envelope, observations):
         remaining = [max(0, lo-elapsed), hi-elapsed]
     evidence = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
     return {**document_budget_projection(attempt,now()), "snapshot_id": envelope["snapshot_id"], "title": envelope["title"], "version": envelope["version"],
+            "attempt_key": progress_attempt_key(attempt),
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "bytes": (envelope.get("received_source") or {}).get("bytes"), "state": state, "blocked_reason": (attempt.get("dispatch") or {}).get("blocked_reason"),
             "required_action": (attempt.get("dispatch") or {}).get("required_action"),

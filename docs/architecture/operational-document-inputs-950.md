@@ -9,6 +9,9 @@ flowchart TD
     UI[Review / Vorming / publicatie] --> D[Documentstore: actuele header]
     D --> ROW[workflow.documents: scalars, pins, revision, lock]
     D --> INPUTS[document_inputs: overige metadata, vaste refs, extractieheader]
+    UI --> P[Passieve voortgang voor actieve kaarten in Vorming]
+    P --> SUMMARY[Geautoriseerde compacte status van opgevraagde snapshots]
+    P -->|Afgeronde geselecteerde poging| F
     UI --> F[Expliciete vormingscontrole]
     UI --> Q[Gerichte kwaliteitsinput]
     UI --> S[Expliciete bronlezing]

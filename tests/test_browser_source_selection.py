@@ -41,7 +41,8 @@ def test_browser_workflow_order_receipt_selection_review_mobile(workflow_postgre
             assert result["namedReviewerEnteredReview"] and result["unassignedUploaderDirectedToTrajectory"]
             assert result["blockageOpenedBeforeProcessing"] and result["blockageDownloadReadOnly"]
             assert result["blockageMobileOverflow"] is False
-            assert len(list(tmp_path.glob("*.png"))) == 5
+            assert result["progressFocusPreserved"] and result["progressManualWhilePaused"]
+            assert len(list(tmp_path.glob("*.png"))) == 6
         finally:
             server.terminate()
             server.wait(timeout=15)

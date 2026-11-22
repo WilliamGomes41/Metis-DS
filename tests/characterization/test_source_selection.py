@@ -21,6 +21,7 @@ def test_source_overview_running_golden(tmp_path, production_console, golden, di
     install(app, console, lambda request: console._account(ACTOR), lambda body: body, lambda *_: '', html.escape)
     response = TestClient(app).get('/source-selection')
     assert response.status_code == 200
-    assert 'window.location.reload()' in response.text
+    assert '/source-selection/progress' in response.text
+    assert 'window.location.reload()' not in response.text
     assert 'action="/source-selection/start"' not in response.text
     golden('source_selection', dispatch_state, {'html': response.text})

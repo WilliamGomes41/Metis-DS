@@ -2,6 +2,7 @@
 from src.request_diagnostics_v1 import diagnostic_phase
 
 import asyncio
+import json
 import re
 from html import escape
 import uuid
@@ -12,7 +13,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
 from src.review.beslisboom_path_v1 import review_path_for_klasse
-from src.vorming.source_selection_v1 import UNCHECKED, comparable_observations, projection
+from src.vorming.source_selection_v1 import (
+    UNCHECKED, comparable_observations, progress_attempt_key, projection, summary_projection,
+)
 from src.vorming.knowledge_materialisation_v1 import source_reconstruction_scope
 
 
@@ -499,9 +502,311 @@ def render_structure(console, account, document, *, conflict=False, q='', page=1
         + ui._review_conflict_html(conflict) + '<section class="review-section review-lane-fast">' + panel + '</section></section>')
 
 
+ACTIVE_PROGRESS = {"bezig", "wacht op uitvoering"}
+
+
+def _phase_label(phase):
+    return {'source_and_validation': 'Bron lezen en controleren', 'reserved': 'Gereserveerd',
+                 'extraction_started': 'Brontekst uitlezen', 'extraction_finished': 'Brontekst beschikbaar',
+                 'model_request': 'Bronpassages selecteren', 'model_response': 'Selectie controleren',
+                 'proposal_received': 'Kandidaten controleren', 'activated': 'Resultaat opgeslagen',
+                 'validation_started': 'Brongetrouwheid voorbereiden',
+                 'source_reconstructed': 'Bronpassages reconstrueren', 'response_received': 'Modelantwoord ontvangen',
+                 'proposal_parsed': 'Voorstel controleren', 'evidence_resolved': 'Bronvelden en relaties controleren',
+                 'formation_accounted': 'Brondekking controleren', 'stopped': 'Verwerking gestopt'}.get(phase, 'Bronselectie en controle')
+
+
+def _progress_html(result, esc):
+    progress = ''
+    if result['state'] == 'bezig':
+        elapsed = result['elapsed_seconds']
+        phase = _phase_label(result['phase'])
+        remaining = result['remaining_seconds']
+        progress = (f'<p>Fase: {esc(phase)} · Verstreken: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}'
+                    f'<span data-source-remaining{"" if remaining else " hidden"}>'
+                    f' · Geschat resterend: {esc(_range(remaining))}</span></p>')
+    if result.get('blocked_reason'):
+        reason = {'processing_attempt_expired':'De totale tijdslimiet is bereikt',
+                  'source_task_budget_exhausted':'Het verwerkingsbudget is uitgeput',
+                  'processing_document_call_budget_exhausted':'Het maximum aantal modelaanroepen is bereikt',
+                  'processing_configuration_changed':'De verwerkingsconfiguratie is gewijzigd',
+                  'researcher_role_required':'De uitvoeringsbevoegdheid is ingetrokken',
+                  'not_authenticated':'Het verantwoordelijke account is niet meer actief'}.get(result['blocked_reason'], 'Een verwerkingsvoorwaarde blokkeert de uitvoering')
+        progress = (f'<p>Verwerking vastgelopen: {esc(reason)}. '
+                    f'{esc(result.get("required_action") or "Los de blokkade op voordat u opnieuw start.")}</p>')
+    if result.get('document_budget'):
+        budget = result['document_budget']
+        maximum = budget['max_model_calls']
+        calls = (f"{budget['calls_reserved']} van {maximum}" if maximum is not None else "maximum volgt uit de taakplanning")
+        progress += (f'<p>Documentbudget: vier uur inclusief wachttijd. '
+            f'Resterend: {esc(_minutes(budget["remaining_seconds"]))}. Modelaanroepen gereserveerd: {esc(calls)}.</p>')
+    if result.get('budget_stopped') and not result.get('blocked_reason'):
+        counts = result.get('progress') or {}
+        done, open_ = counts.get('terminal_task_count'), counts.get('pending_task_count')
+        progress = (f'<p>Gestopt op taakbudget: {esc(done) if done is not None else "onbekend"} taken klaar, '
+                    f'{esc(open_) if open_ is not None else "onbekend"} taken open.</p>')
+    if result['state'] == 'wacht op uitvoering':
+        elapsed = result['elapsed_seconds']
+        deadline = result['deadline_seconds']
+        progress = (f'<p>Wacht op een uitvoeringsplek of conversiecapaciteit. '
+                    f'Verstreken sinds aanvraag: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}. '
+                    f'Resterende totale tijdslimiet: {esc(_minutes(deadline)) if deadline is not None else "onbekend"}.</p>'
+                    '<p>De tijdslimiet loopt vanaf de aanvraag. Verloopt deze tijdens wachten, '
+                    'dan telt deze poging mee voor de herstelgrens. De geschatte verwerkingstijd bevat ook wachttijd.</p>')
+    return progress
+
+
+def _progress_script():
+    return """<script>
+(() => {
+  const controls = document.querySelector('[data-source-poll]');
+  const cards = new Map(Array.from(document.querySelectorAll('[data-source-attempt]'),
+    card => [card.dataset.sourceDocument, card]));
+  const feedback = controls.querySelector('[data-source-feedback]');
+  const pause = controls.querySelector('[data-source-pause]');
+  const refreshLink = controls.querySelector('a');
+  const picker = document.querySelector('#source-document');
+  const timeFormat = new Intl.DateTimeFormat('nl-NL', {timeStyle:'short'});
+  let lastRead = new Date();
+  let timer;
+  let paused = false;
+  let pending = false;
+  controls.hidden = false;
+
+  function schedule() {
+    clearTimeout(timer);
+    if (!document.hidden && !paused && !pending && cards.size) timer = setTimeout(refresh, 5000);
+  }
+
+  function setStatus(card, message) {
+    const status = card.querySelector('[data-source-status]');
+    if (status.textContent !== message) status.textContent = message;
+  }
+
+  function readProgress(params) {
+    return fetch('/source-selection/progress?' + params, {
+      redirect:'error', signal:AbortSignal.timeout(10000),
+    });
+  }
+
+  async function finish(card, row, manual) {
+    const id = card.dataset.sourceDocument;
+    cards.delete(id);
+    const detail = card.querySelector('[data-source-detail-link]') || document.createElement('a');
+    detail.className = 'btn-secondary';
+    detail.href = '/source-selection?' + new URLSearchParams({document:id});
+    detail.textContent = row?.state === 'volledigheid nog niet gecontroleerd'
+      ? 'Volledigheid controleren' : 'Actuele voortgang bekijken';
+    if (!detail.isConnected) card.querySelector('.source-actions').prepend(detail);
+    if (!row || id !== controls.dataset.sourceDetail || id !== picker.value ||
+        (!manual && (document.hidden || paused))) return;
+    const response = await readProgress(new URLSearchParams({
+      snapshot:id, detail:id, attempt:row.attempt, offset:controls.dataset.sourceOffset,
+    }));
+    if (response.status === 401 || response.status === 403) {
+      hideCard(id, card);
+      return false;
+    }
+    if (!response.ok) throw Error('Detail unavailable');
+    const {rows} = await response.json();
+    const current = rows.find(item => item.snapshot === id);
+    if (!current) {
+      hideCard(id, card);
+      return false;
+    }
+    if (current.attempt !== row.attempt || !current.detail || id !== picker.value) return;
+    const template = document.createElement('template');
+    template.innerHTML = current.detail;
+    const replacement = template.content.firstElementChild;
+    if (replacement?.dataset.sourceDocument !== id) return;
+    replacement.querySelector('.source-estimate').textContent = card.querySelector('.source-estimate').textContent;
+    const replace = () => {
+      if (card.isConnected && !card.contains(document.activeElement)) card.replaceWith(replacement);
+    };
+    if (card.contains(document.activeElement)) card.addEventListener('focusout', () => setTimeout(replace, 0));
+    else replace();
+  }
+
+  function apply(card, row, manual) {
+    const progress = card.querySelector('[data-source-progress]');
+    if (row.attempt !== card.dataset.sourceAttempt) {
+      setStatus(card, 'De verwerking is overgegaan naar een andere poging.');
+      progress.replaceChildren();
+      return finish(card);
+    }
+    if (row.state !== card.dataset.sourceState || row.phase !== card.dataset.sourcePhase) {
+      setStatus(card, 'Status: ' + row.state);
+      if (row.running && row.state === 'bezig') {
+        const announcement = document.createElement('span');
+        announcement.className = 'sr-only';
+        announcement.textContent = ' · Fase: ' + row.phase_label;
+        card.querySelector('[data-source-status]').append(announcement);
+      }
+      card.dataset.sourceState = row.state;
+      card.dataset.sourcePhase = row.phase;
+    }
+    progress.innerHTML = row.progress;
+    const range = JSON.parse(card.dataset.sourceRange);
+    const remaining = progress.querySelector('[data-source-remaining]');
+    if (remaining && range && row.elapsed !== null && row.elapsed < range[1]) {
+      const minutes = seconds => seconds < 60 ? 'minder dan 1 min' : Math.ceil(seconds / 60) + ' min';
+      remaining.hidden = false;
+      remaining.textContent = ' · Geschat resterend: ongeveer ' +
+        minutes(range[0] - row.elapsed) + '–' + minutes(range[1] - row.elapsed) + ' (onzeker)';
+    }
+    if (!row.running) return finish(card, row, manual);
+  }
+
+  function hideCard(id, card) {
+    cards.delete(id);
+    card.remove();
+    Array.from(picker.options).find(option => option.value === id)?.remove();
+  }
+
+  async function refresh(manual = false) {
+    if (pending || !cards.size || (!manual && (document.hidden || paused))) return;
+    pending = true;
+    clearTimeout(timer);
+    try {
+      const active = Array.from(cards);
+      let lostAccess = false;
+      for (let start = 0; start < active.length; start += 50) {
+        if (!manual && (document.hidden || paused)) break;
+        const group = active.slice(start, start + 50);
+        const params = new URLSearchParams(group.map(([id]) => ['snapshot', id]));
+        const response = await readProgress(params);
+        if (response.status === 401 || response.status === 403) {
+          cards.forEach((card, id) => hideCard(id, card));
+          feedback.textContent = 'Toegang tot de voortgang is vervallen. Open Vorming opnieuw.';
+          return;
+        }
+        if (!response.ok) throw Error('Progress unavailable');
+        const {rows} = await response.json();
+        const current = new Map(rows.map(row => [row.snapshot, row]));
+        for (const [id, card] of group) {
+          const row = current.get(id);
+          if (row) lostAccess = (await apply(card, row, manual) === false) || lostAccess;
+          else {
+            hideCard(id, card);
+            lostAccess = true;
+          }
+        }
+      }
+      lastRead = new Date();
+      feedback.textContent = lostAccess ? 'Voor een document is de voortgang niet meer beschikbaar.'
+        : paused ? 'Automatisch bijwerken is gepauzeerd.' : '';
+    } catch {
+      feedback.textContent = 'Bijwerken niet gelukt. Laatst gelezen om ' + timeFormat.format(lastRead) +
+        '. Kies Ververs status om opnieuw te proberen.';
+    } finally {
+      pending = false;
+      schedule();
+    }
+  }
+
+  pause.addEventListener('click', () => {
+    paused = !paused;
+    pause.textContent = paused ? 'Updates hervatten' : 'Updates pauzeren';
+    feedback.textContent = paused ? 'Automatisch bijwerken is gepauzeerd.' : '';
+    schedule();
+  });
+  refreshLink.addEventListener('click', event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || !cards.size) return;
+    event.preventDefault();
+    refresh(true);
+  });
+  document.addEventListener('visibilitychange', schedule);
+  schedule();
+})();
+</script>"""
+
+
 def install(app, console, require, page, nav, esc):
     from src.vorming.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
+
+    def render_card(envelope, actor, observations, *, selected, detail, offset):
+        sid = envelope['snapshot_id']
+        # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
+        report = None
+        if detail:
+            from src.vorming.formation_problems_v1 import collect
+            report = collect(console, actor_id=actor['account_id'], snapshot_id=sid)
+        result = (projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=[],
+                             observations=observations, processing=report['processing']) if detail
+                  else summary_projection(console, envelope=envelope, observations=observations))
+        action = ''
+        active = result['state'] in ACTIVE_PROGRESS
+        if not detail:
+            label = 'Voortgang bekijken' if active else 'Document openen'
+            marker = ' data-source-detail-link' if active else ''
+            action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}"{marker}>{label}</a>'
+        elif active or result['state'] == 'voltooid':
+            pass  # Active details already show progress; completion owns Naar Review below.
+        elif result['state'] == UNCHECKED:
+            action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
+        elif envelope.get('received_source') and envelope.get('class') != 'beslisboom' and result['state'] == 'nog niet gestart':
+            action = '<a class="btn-primary" href="/annotations?' + esc(urlencode({'document':sid})) + '">Bron openen voor annotatie</a>'
+        elif result['can_start']:
+            label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
+            from src.vorming.processing_document_budget_v1 import enabled as document_budget_enabled
+            authorization = ('<p>Starten geeft één opdracht voor het volledige document, binnen vier uur inclusief wachttijd. '
+                'Het maximum aantal modelaanroepen is tweemaal het aantal geplande taken.</p>' if document_budget_enabled() else '')
+            action = authorization + (f'<form method="post" action="/source-selection/start">'
+                      f'<input type="hidden" name="document" value="{esc(sid)}">'
+                      f'<input type="hidden" name="expected_revision" value="{esc(result["revision"])}">'
+                      f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                      f'<button class="btn-primary">{label}</button></form>')
+        else:
+            action = '<p>Hervatten is nu niet beschikbaar. Bekijk de vormingsproblemen hieronder voor de vervolgstap.</p>'
+        summary = ''
+        if result['state'] in {'voltooid', 'onderbroken', 'mislukt', UNCHECKED}:
+            summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
+                       f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
+                       f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
+        if result['candidates'] is None:
+            summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
+        diagnosis_link = ('' if detail else f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid}))}#formation-problems">Vormingsproblemen</a>')
+        diagnosis_link += f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
+        if (detail and 'reviewer' in actor.get('roles', [])
+                and actor['account_id'] in envelope.get('named_reviewers', [])):
+            diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "disposition"}))}">'
+                               'Brongebruik verantwoorden</a>')
+            if review_path_for_klasse(envelope['class']) != 'boom':
+                diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "structure"}))}">'
+                                   'Koppen controleren</a>')
+        review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
+        extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
+        fragment_count = envelope.get('source_fragment_count')
+        if fragment_count is not None:
+            extent += f' · {fragment_count} opgeslagen bronfragmenten'
+        problems = ''
+        if report is not None:
+            status = report['processing']
+            work_revision_url = None
+            if (not result['can_start'] and status.get('state') != 'running' and status.get('formation_incomplete')
+                    and 'researcher' in actor['roles'] and actor['account_id'] in envelope.get('named_reviewers', [])):
+                work_revision_url = '/review/policy?' + urlencode({'document': sid})
+            # collect has already loaded this request's full envelope; the list row is compact.
+            problems = source_recovery_controls(console._envelope(sid), status, actor)
+            problems += ('<section class="formation-room" id="formation-problems">' +
+                _formation_problems_html(report, offset=offset, esc=esc, work_revision_url=work_revision_url) + '</section>')
+        key = progress_attempt_key(next(reversed(envelope.get('processing_attempts') or []), {}))
+        live = ''
+        status_markup = f'<p role="status">Status: {esc(result["state"])}</p>'
+        progress_markup = _progress_html(result, esc)
+        if active and key:
+            live = (f' data-source-attempt="{esc(key)}" data-source-phase="{esc(result["phase"])}"'
+                    f' data-source-state="{esc(result["state"])}"'
+                    f' data-source-range="{esc(json.dumps(result["estimate"]["range_seconds"]))}"')
+            status_markup = f'<p role="status" data-source-status>Status: {esc(result["state"])}</p>'
+            progress_markup = f'<div data-source-progress>{progress_markup}</div>'
+        return (f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}"'
+                f' data-selected="{str(sid == selected).lower()}"{live}>'
+                f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
+                f'{status_markup}<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
+                f'{progress_markup}{summary}'
+                f'<div class="source-actions">{action}{review}{diagnosis_link}</div>{problems}</article>'), result
 
     @app.get('/source-selection', response_class=HTMLResponse)
     def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0),
@@ -571,140 +876,60 @@ def install(app, console, require, page, nav, esc):
         # Eén keer per verzoek (PR-b): vergelijkbare metingen over alle documenten.
         observations = comparable_observations(documents)
         for envelope in visible:
-            sid = envelope['snapshot_id']
-            # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
-            from src.vorming.source_selection_v1 import summary_projection
-            detail = bool(document) and sid == document
-            report = None
-            if detail:
-                from src.vorming.formation_problems_v1 import collect
-                report = collect(console, actor_id=actor['account_id'], snapshot_id=sid)
-            result = (projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
-                                 observations=observations, processing=report['processing']) if detail
-                      else summary_projection(console, envelope=envelope, observations=observations))
-            action = ''
-            if result['state'] in {'bezig', 'wacht op uitvoering'}:
-                running_visible = True
-            if not detail:
-                label = 'Voortgang bekijken' if result['state'] in {'bezig', 'wacht op uitvoering'} else 'Document openen'
-                action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">{label}</a>'
-                if result['state'] in {'bezig', 'wacht op uitvoering'}:
-                    action += '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
-            elif result['state'] in {'bezig', 'wacht op uitvoering'}:
-                if sid == selected:
-                    # This page already polls the selected document; a link to itself only reloads.
-                    action = '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
-                    running_visible = True
-                else:
-                    action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
-            elif result['state'] == 'voltooid':
-                action = ''  # The primary Naar Review action below owns continuation.
-            elif result['state'] == UNCHECKED:
-                action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
-            elif envelope.get('received_source') and envelope.get('class') != 'beslisboom' and result['state'] == 'nog niet gestart':
-                action = '<a class="btn-primary" href="/annotations?' + esc(urlencode({'document':sid})) + '">Bron openen voor annotatie</a>'
-            elif result['can_start']:
-                label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
-                from src.vorming.processing_document_budget_v1 import enabled as document_budget_enabled
-                authorization = ('<p>Starten geeft één opdracht voor het volledige document, binnen vier uur inclusief wachttijd. '
-                    'Het maximum aantal modelaanroepen is tweemaal het aantal geplande taken.</p>' if document_budget_enabled() else '')
-                action = authorization + (f'<form method="post" action="/source-selection/start">'
-                          f'<input type="hidden" name="document" value="{esc(sid)}">'
-                          f'<input type="hidden" name="expected_revision" value="{esc(result["revision"])}">'
-                          f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
-                          f'<button class="btn-primary">{label}</button></form>')
-            else:
-                action = '<p>Hervatten is nu niet beschikbaar. Bekijk de vormingsproblemen hieronder voor de vervolgstap.</p>'
-            progress = ''
-            if result['state'] == 'bezig':
-                elapsed = result['elapsed_seconds']
-                phase = {'source_and_validation': 'Bron lezen en controleren', 'reserved': 'Gereserveerd',
-                         'extraction_started': 'Brontekst uitlezen', 'extraction_finished': 'Brontekst beschikbaar',
-                         'model_request': 'Bronpassages selecteren', 'model_response': 'Selectie controleren',
-                         'proposal_received': 'Kandidaten controleren', 'activated': 'Resultaat opgeslagen',
-                         'validation_started': 'Brongetrouwheid voorbereiden',
-                         'source_reconstructed': 'Bronpassages reconstrueren', 'response_received': 'Modelantwoord ontvangen',
-                         'proposal_parsed': 'Voorstel controleren', 'evidence_resolved': 'Bronvelden en relaties controleren',
-                         'formation_accounted': 'Brondekking controleren', 'stopped': 'Verwerking gestopt'}.get(result['phase'], 'Bronselectie en controle')
-                progress = (f'<p>Fase: {esc(phase)} · Verstreken: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}'
-                            f' · Geschat resterend: {esc(_range(result["remaining_seconds"]))}</p>')
-            if result.get('blocked_reason'):
-                reason = {'processing_attempt_expired':'De totale tijdslimiet is bereikt',
-                          'source_task_budget_exhausted':'Het verwerkingsbudget is uitgeput',
-                          'processing_document_call_budget_exhausted':'Het maximum aantal modelaanroepen is bereikt',
-                          'processing_configuration_changed':'De verwerkingsconfiguratie is gewijzigd',
-                          'researcher_role_required':'De uitvoeringsbevoegdheid is ingetrokken',
-                          'not_authenticated':'Het verantwoordelijke account is niet meer actief'}.get(result['blocked_reason'], 'Een verwerkingsvoorwaarde blokkeert de uitvoering')
-                progress = (f'<p>Verwerking vastgelopen: {esc(reason)}. '
-                            f'{esc(result.get("required_action") or "Los de blokkade op voordat u opnieuw start.")}</p>')
-            if result.get('document_budget'):
-                budget = result['document_budget']
-                maximum = budget['max_model_calls']
-                calls = (f"{budget['calls_reserved']} van {maximum}" if maximum is not None else "maximum volgt uit de taakplanning")
-                progress += (f'<p>Documentbudget: vier uur inclusief wachttijd. '
-                    f'Resterend: {esc(_minutes(budget["remaining_seconds"]))}. Modelaanroepen gereserveerd: {esc(calls)}.</p>')
-            if result.get('budget_stopped') and not result.get('blocked_reason'):
-                counts = result.get('progress') or {}
-                done, open_ = counts.get('terminal_task_count'), counts.get('pending_task_count')
-                progress = (f'<p>Gestopt op taakbudget: {esc(done) if done is not None else "onbekend"} taken klaar, '
-                            f'{esc(open_) if open_ is not None else "onbekend"} taken open.</p>')
-            if result['state'] == 'wacht op uitvoering':
-                elapsed = result['elapsed_seconds']
-                deadline = result['deadline_seconds']
-                progress = (f'<p>Wacht op een uitvoeringsplek of conversiecapaciteit. '
-                            f'Verstreken sinds aanvraag: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}. '
-                            f'Resterende totale tijdslimiet: {esc(_minutes(deadline)) if deadline is not None else "onbekend"}.</p>'
-                            '<p>De tijdslimiet loopt vanaf de aanvraag. Verloopt deze tijdens wachten, '
-                            'dan telt deze poging mee voor de herstelgrens. De geschatte verwerkingstijd bevat ook wachttijd.</p>')
-            summary = ''
-            if result['state'] in {'voltooid', 'onderbroken', 'mislukt', UNCHECKED}:
-                summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
-                           f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
-                           f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
-            if result['candidates'] is None:
-                summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
-            diagnosis_link = ('' if detail else f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid}))}#formation-problems">Vormingsproblemen</a>')
-            diagnosis_link += f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
-            if (detail and 'reviewer' in actor.get('roles', [])
-                    and actor['account_id'] in envelope.get('named_reviewers', [])):
-                diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "disposition"}))}">'
-                                   'Brongebruik verantwoorden</a>')
-                if review_path_for_klasse(envelope['class']) != 'boom':
-                    diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "structure"}))}">'
-                                       'Koppen controleren</a>')
-            review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
-            extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
-            fragment_count = envelope.get('source_fragment_count')
-            if fragment_count is not None:
-                extent += f' · {fragment_count} opgeslagen bronfragmenten'
-            problems = ''
-            if report is not None:
-                status = report['processing']
-                work_revision_url = None
-                if (not result['can_start'] and status.get('state') != 'running' and status.get('formation_incomplete')
-                        and 'researcher' in actor['roles'] and actor['account_id'] in envelope.get('named_reviewers', [])):
-                    work_revision_url = '/review/policy?' + urlencode({'document': sid})
-                # collect has already loaded this request's full envelope; the list row is compact.
-                problems = source_recovery_controls(console._envelope(sid), status, actor)
-                problems += ('<section class="formation-room" id="formation-problems">' +
-                    _formation_problems_html(report, offset=offset, esc=esc, work_revision_url=work_revision_url) + '</section>')
-            cards.append(f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-selected="{str(sid == selected).lower()}">'
-                         f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
-                         f'<p role="status">Status: {esc(result["state"])}</p>'
-                         f'<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
-                         f'{progress}{summary}<div class="source-actions">{action}{review}{diagnosis_link}</div>{problems}</article>')
+            markup, _ = render_card(envelope, actor, observations, selected=selected,
+                detail=bool(document) and envelope['snapshot_id'] == document, offset=offset)
+            cards.append(markup)
+            running_visible |= 'data-source-attempt=' in markup
         notice = '<div class="banner ok">Document veilig ontvangen. Start de bronverwerking wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
-        # Any visible running/waiting document keeps the overview current.
-        # Every refresh reads the
-        # durable authority; no browser state can start another attempt.
-        script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_visible else ''
-        script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
+        controls = ''
+        script = '<script>document.addEventListener("submit",function(event){const form=event.target;if(!form.matches("form[action=\\"/source-selection/start\\"]"))return;if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});</script>'
+        if running_visible and not scoped_document:
+            refresh_url = request.url.path + (f'?{request.url.query}' if request.url.query else '')
+            refresh = f'<a class="btn-secondary" href="{esc(refresh_url)}">Ververs status</a>'
+            controls = (f'<div data-source-poll data-source-detail="{esc(document)}" data-source-offset="{offset}" hidden>'
+                        '<div class="source-actions"><button class="btn-secondary" type="button" data-source-pause>'
+                        'Updates pauzeren</button>' + refresh + '</div>'
+                        '<p role="status" data-source-feedback></p></div><noscript>' + refresh + '</noscript>')
+            script += _progress_script()
         return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Vorming</h1>' + notice
                     + '<form method="get" class="source-picker"><label for="source-document">Document</label>'
                     + '<div class="source-picker-row"><select id="source-document" name="document">' + options + '</select>'
-                    + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>'
+                    + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>' + controls
                     + (''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) or '<p data-source-empty>Geen documenten beschikbaar voor bronverwerking.</p>') + '</section>' + script),
                             headers={'Cache-Control': 'no-store'})
+
+    @app.get('/source-selection/progress', response_class=JSONResponse)
+    def selection_progress(request: Request, snapshot: list[str] = Query(min_length=1, max_length=50),
+                           detail: str = '', attempt: str = '', offset: int = Query(0, ge=0)):
+        headers = {'Cache-Control': 'no-store'}
+        try:
+            actor = require(request)
+            scoped = actor.get('_view_document')
+            requested = list(dict.fromkeys(key for key in snapshot if not scoped or key == scoped))
+            documents = (console.source_selection_documents(actor_id=actor['account_id'], snapshot_ids=requested)
+                         if requested else [])
+            rows = []
+            for envelope in documents:
+                result = summary_projection(console, envelope=envelope, observations={})
+                sid = result['snapshot_id']
+                running = result['state'] in ACTIVE_PROGRESS
+                row = {'snapshot': sid, 'attempt': result['attempt_key'], 'state': result['state'],
+                       'phase': result['phase'], 'phase_label': _phase_label(result['phase']),
+                       'elapsed': result['elapsed_seconds'], 'progress': _progress_html(result, esc),
+                       'running': running}
+                if sid == detail and attempt and attempt == row['attempt'] and not running:
+                    card, current = render_card(envelope, actor, {}, selected=sid, detail=True, offset=offset)
+                    if (attempt in (current['attempt_key'], current['attempt_started_at'])
+                            and current['state'] not in ACTIVE_PROGRESS):
+                        row['detail'] = card
+                rows.append(row)
+        except ConsoleError as error:
+            if error.code == 'not_authenticated':
+                return JSONResponse({'error': 'not_authenticated'}, status_code=401, headers=headers)
+            if error.code in {'reviewer_not_named_on_snapshot', 'researcher_role_required'}:
+                return JSONResponse({'error': 'access_denied'}, status_code=403, headers=headers)
+            raise
+        return JSONResponse({'rows': rows}, headers=headers)
 
     @app.get('/formation-problems', response_class=HTMLResponse)
     def formation_problems_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):
