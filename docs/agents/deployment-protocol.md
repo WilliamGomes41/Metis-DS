@@ -51,4 +51,4 @@ Daarna de proef: aanmelden, "Controle na deploy" in Raad, en één bekend docume
 
 ## Afsluiten
 
-Werk Linear bij vóór de volgende stap, volgens [linear-github-handoff](linear-github-handoff.md). Het werkpakket gaat pas naar Done met gemerged + gedeployed + geverifieerd. In de handoff staat onder `production_state`: de commit, het image (digest) en het rollbackpunt (digest). De bewijsverwijzing is de regel `deployment_verified commit=<sha>` plus de uitkomst van de proef.
+Werk Linear bij vóór de volgende stap, volgens [linear-github-handoff](linear-github-handoff.md). Done = gemerged op main (met `Closes #N` + `Fixes MET-N`); deploy is geen voorwaarde voor Done. Forge zet het label `live` op het issue en het Linear-ticket na deze verificatie. In de handoff staat onder `production_state`: de commit, het image (digest) en het rollbackpunt (digest). De bewijsverwijzing is de regel `deployment_verified commit=<sha>` plus de uitkomst van de proef.
