@@ -25,7 +25,7 @@ def handoff(**changes):
 def test_incident_pr_handoff_is_supported_by_repository_bindings():
     bindings = sync.load_bindings()
     body = "Part of MET-48.\n" + handoff(linear_issue="MET-48")
-    sync.validate_pr_handoff(body, SHA, bindings)
+    sync.validate_pr_handoff(body, SHA, bindings, branch="chore/issue-proof")
     assert sync.Binding(974, "MET-48") in bindings
 
 
@@ -34,11 +34,43 @@ def test_meaning_reliability_design_has_valid_work_package_handoff():
     bindings = sync.load_bindings()
     assert sync.Binding(1098, "MET-109") in bindings
     body = "Part of MET-109.\n" + handoff(linear_issue="MET-109")
-    sync.validate_pr_handoff(body, SHA, bindings)
+    sync.validate_pr_handoff(body, SHA, bindings, branch="chore/issue-proof")
     design = (Path(__file__).resolve().parents[1]
               / "docs/change-contracts/1098-betekenisbetrouwbaarheid.md").read_text()
     assert "https://github.com/WilliamGomes41/Metis-DS/issues/1098" in design
     assert "https://linear.app/metis-phoenix/issue/MET-109/" in design
+
+
+def test_pr_template_sync_fix_has_closing_work_package_binding():
+    """#1130 / MET-131 closes with Fixes, not Part of."""
+    bindings = sync.load_bindings()
+    assert sync.Binding(1130, "MET-131") in bindings
+    body = "Closes #1130\nFixes MET-131\n" + handoff(linear_issue="MET-131", remaining_work=False)
+    sync.validate_pr_handoff(body, SHA, bindings, branch="chore/issue-proof")
+
+
+@pytest.mark.parametrize(("body", "remaining_work", "branch", "error"), [
+    ("Closes #729\nFixes MET-36", True, "feat/729-slice", "resterend werk"),
+    ("Part of MET-36", False, "feat/729-slice", "resterend werk"),
+    ("Fixes MET-36", False, "feat/729", "GitHub-issue #729"),
+    ("Closes #730\nFixes MET-36", False, "feat/729", "GitHub-issue #729"),
+    ("Closes other/repo#729\nFixes MET-36", False, "feat/729", "GitHub-issue #729"),
+    ("Closes #729\nPart of MET-36", True, "feat/729-slice", "GitHub-issue sluiten"),
+    ("Part of MET-36", True, "feat/MET-36-slice", "Linear-ID in de branchnaam"),
+    ("Part of MET-36", True, "feat/met-43-slice", "Linear-ID in de branchnaam"),
+    ("Part of MET-36\nRefs #729", True, "feat/729-slice", None),
+    ("Resolves #729\nCloses MET-36", False, "feat/met-36-finish", None),
+    ("Fix: WilliamGomes41/Metis-DS#729\nFixes met-36", False, "feat/729-finish", None),
+])
+def test_event_gate_checks_closing_and_partial_semantics(tmp_path, capsys, body, remaining_work, branch, error):
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"pull_request": {
+        "body": body + "\n" + handoff(remaining_work=remaining_work),
+        "head": {"sha": SHA, "ref": branch},
+    }}), encoding="utf-8")
+    assert sync.main(["--validate-event", str(event)]) == (1 if error else 0)
+    result = capsys.readouterr()
+    assert error in result.err if error else "exacte head" in result.out
 
 
 class GitHub:
@@ -151,8 +183,8 @@ def test_handoff_gate_rejects_missing_wrong_target_and_stale_head():
                  "Part of MET-36.\n" + handoff(next_step=""),
                  "Part of MET-36. Part of MET-43.\n" + handoff()]:
         with pytest.raises(sync.SyncError):
-            sync.validate_pr_handoff(body, SHA, bindings)
-    sync.validate_pr_handoff("Part of MET-36.\n" + handoff(), SHA, bindings)
+            sync.validate_pr_handoff(body, SHA, bindings, branch="chore/issue-proof")
+    sync.validate_pr_handoff("Part of MET-36.\n" + handoff(), SHA, bindings, branch="chore/issue-proof")
 
 
 def test_untrusted_handoff_cannot_supply_next_step_and_latest_trusted_one_wins():
@@ -168,13 +200,50 @@ def test_untrusted_handoff_cannot_supply_next_step_and_latest_trusted_one_wins()
 
 def test_explicit_remaining_package_scope_detects_false_done_without_changing_it():
     gh, linear = GitHub(), Linear()
-    gh.prs[0]["author_association"] = "OWNER"
+    gh.prs[0].update(author_association="OWNER", state="open", merged_at=None)
     linear.issue["state"] = {"name": "Done", "type": "completed"}
     before = copy.deepcopy(linear.issue)
     with pytest.raises(sync.SyncError, match="Done conflicteert"):
         sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)
     assert linear.issue == before
     assert len(linear.comments) == 1
+
+
+def test_merged_receipt_with_remaining_work_warns_instead_of_failing():
+    """A merged PR's remaining_work: true next to Done is a warning, not a SyncError."""
+    gh, linear = GitHub(), Linear()
+    gh.prs[0]["author_association"] = "OWNER"
+    linear.issue["state"] = {"name": "Done", "type": "completed"}
+    before = copy.deepcopy(linear.issue)
+    assert sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)["changed"] == 1
+    assert linear.issue == before
+    assert "Waarschuwing" in linear.comments[0]["body"]
+    assert "remaining_work" in linear.comments[0]["body"]
+
+
+def test_no_warning_without_done_or_remaining_work():
+    gh, linear = GitHub(), Linear()
+    gh.prs[0]["author_association"] = "OWNER"
+    sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)
+    assert "Waarschuwing" not in linear.comments[0]["body"]
+
+
+@pytest.mark.parametrize("keyword", ["Part of", "Fixes", "Closes", "Resolves", "fixes"])
+def test_closing_and_partial_keywords_are_one_primary_link(keyword):
+    bindings = [sync.Binding(729, "MET-36")]
+    partial = keyword == "Part of"
+    github_link = "Refs #729" if partial else "Closes #729"
+    body = f"{github_link}\n{keyword} MET-36\n" + handoff(remaining_work=partial)
+    sync.validate_pr_handoff(body, SHA, bindings, branch="chore/issue-proof")
+    gh = GitHub()
+    gh.prs[0]["body"] = body
+    assert [p["number"] for p in sync.snapshot(bindings[0], gh, gh.pulls())["pulls"]] == [945]
+
+
+def test_two_primary_links_are_rejected_even_with_mixed_keywords():
+    with pytest.raises(sync.SyncError):
+        sync.validate_pr_handoff("Fixes MET-36. Part of MET-43.\n" + handoff(), SHA,
+                                 [sync.Binding(729, "MET-36"), sync.Binding(730, "MET-43")], branch="feat/729")
 
 
 def test_stale_receipt_does_not_accuse_current_done():

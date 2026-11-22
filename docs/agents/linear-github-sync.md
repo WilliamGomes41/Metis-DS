@@ -20,8 +20,9 @@ en gebruikersacceptatie worden niet verzonnen of zelfstandig goedgekeurd.
 De aanwezigheid van JSON of een digest bewijst geen inhoudelijke correctheid.
 
 De werkkeuze en alle bestuurlijke issue-/projectvelden blijven menselijk
-eigendom. Een expliciet resterend werkpakket op een actuele PR-head naast Done
-geeft een falende run; een open GitHub-issue op zichzelf is geen bewijs van een
+eigendom. Een expliciet resterend werkpakket op de head van een nog open PR naast
+Done geeft een falende run. Uit een al gemergde PR geeft het alleen een
+waarschuwing in de projectiecomment; een open GitHub-issue op zichzelf is geen bewijs van een
 onterechte Linear-status. Handmatig beoordeling en eventuele correctie blijven
 nodig. De worker bevat geen issueUpdate-/projectmutaties.
 
