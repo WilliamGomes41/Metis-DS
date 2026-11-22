@@ -1,13 +1,14 @@
+const {withBrowserEvidence}=require('./browser_evidence.cjs');
 const {chromium}=require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
 const assert=require('node:assert/strict');const fs=require('node:fs');
 const tasks=require('./browser_annotation_tasks.cjs');
 // #1060 slice 2: the worker marks the statement, the text that belongs to it and the evidence.
 (async()=>{
  const base=process.env.METIS_BROWSER_BASE,output=process.env.METIS_BROWSER_OUTPUT;
+ await withBrowserEvidence(chromium, {base, output, label:'source-first-card',
+   launchOptions:{executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true}}, async ({newContext})=>{
  const manifest=await(await fetch(base+'/browser-manifest')).json();
- const browser=await chromium.launch({executablePath:process.env.METIS_BROWSER_EXECUTABLE,headless:true});
- try{
- const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[];
+ const context=await newContext({viewport:{width:1440,height:1000}},true),page=await context.newPage(),errors=[];
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto(base+'/login');await page.locator('[name=username]').fill(manifest.username);await page.locator('[name=password]').fill(manifest.password);
  await Promise.all([page.waitForURL(u=>u.pathname!='/login'),page.locator('button[type=submit]').click()]);
@@ -255,12 +256,22 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // Ending source selection saves and opens the document check, where the next phase starts.
  await page.locator('#annotation-saved-overview').click();
  await page.waitForURL(u=>u.searchParams.get('overview')==='true');
- // Text that is no statement is accounted for in the document check, where it shows up, not in the card.
- const gap=page.locator('.annotation-gap').filter({has:page.locator('q',{hasText:/^Smetten$/})});
- await gap.locator('select').selectOption('structure:document_structure');
- await Promise.all([page.waitForURL(u=>u.searchParams.get('overview')==='true' && u.hash==='#annotation-gaps'),gap.getByRole('button',{name:'Vastleggen'}).click()]);
- assert.equal(await page.locator('.annotation-gap q',{hasText:/^Smetten$/}).count(),0);
- assert((await read()).entries.some(e=>e.status==='ready' && e.disposition?.reason==='document_structure' && e.ranges[0].quote==='Smetten'));
+ // Open work is visible in the overview. The exact source link leads to the classification in the document.
+ const gap=page.locator('#annotation-gaps+ul li').filter({has:page.locator('q',{hasText:/^Smetten$/})});
+ await gap.getByRole('link',{name:'Beoordelen in document'}).click();
+ const sourceGap=page.locator('#annotation-source-work li').filter({has:page.locator('q',{hasText:/^Smetten$/})});
+ await sourceGap.locator('select').selectOption('structure:document_structure');
+ await sourceGap.getByRole('button',{name:'Vastleggen'}).click();
+ await sourceGap.waitFor({state:'detached'});
+ const disposition=(await read()).entries.find(e=>e.status==='ready' && e.disposition?.reason==='document_structure' && e.ranges[0].quote==='Smetten');
+ assert(disposition);
+ await block('Smetten').locator(`mark[data-annotation="${disposition.annotation_id}"]`).click();
+ await page.getByText('Geen uitspraak: kop of documentstructuur',{exact:true}).waitFor();
+ const restMark=block('Smetten').locator('mark[data-current]');
+ assert.equal(await restMark.getAttribute('data-role'),null);
+ assert.equal(await restMark.getAttribute('title'),'Geen uitspraak');
+ await page.goto(base+'/annotations?document='+sid+'&overview=true');
+ assert.equal(await gap.count(),0);
  await page.screenshot({path:output+'/document-check-gaps.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -274,5 +285,5 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.evaluate(()=>localStorage.getItem('metis-annotation-form')),null);
  assert.deepEqual(errors,[]);
  fs.writeFileSync(output+'/source-first-card-result.json',JSON.stringify({threeRows:true,derivedInBackground:true,typeQuestionOnlyOnFailure:true,errors}));
- }finally{await browser.close();}
+ });
 })().catch(e=>{console.error(e);process.exit(1)});
