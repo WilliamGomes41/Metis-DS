@@ -189,6 +189,24 @@ def test_pr_template_and_agents_use_closing_keywords_and_live_label() -> None:
     assert "al gemergde PR" in sync_doc and "waarschuwing" in sync_doc
 
 
+def test_merge_gate_is_required_ci_plus_forge_report_and_forge_sets_live() -> None:
+    """Besluit William 22-11-2026: Sherlock- en Argos-gate vervallen."""
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Merge gate = required CI checks + Forge's control report" in agents
+    assert "Forge sets the label `live` after post-deploy proof" in agents
+    assert "only after William's literal GO" in agents
+    contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
+    assert "Merge-poort = verplichte CI-checks + controlerapport van Forge" in contract
+    assert "Forge zet het label `live`" in contract
+    assert "pas na William's letterlijke GO" in contract
+    template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
+    assert "## Controlerapport Forge" in template
+    for text in (agents, contract, template):
+        assert "Argos zet" not in text and "gate-rapport van Argos" not in text
+    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
+    assert "Sherlock- en Argos-gate vervallen" in roadmap
+
+
 def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:
     contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
     for obligation in (
