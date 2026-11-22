@@ -41,6 +41,14 @@ def test_meaning_reliability_design_has_valid_work_package_handoff():
     assert "https://linear.app/metis-phoenix/issue/MET-109/" in design
 
 
+def test_pr_template_sync_fix_has_closing_work_package_binding():
+    """#1130 / MET-131 closes with Fixes, not Part of."""
+    bindings = sync.load_bindings()
+    assert sync.Binding(1130, "MET-131") in bindings
+    body = "Closes #1130\nFixes MET-131\n" + handoff(linear_issue="MET-131", remaining_work=False)
+    sync.validate_pr_handoff(body, SHA, bindings)
+
+
 class GitHub:
     def __init__(self):
         self.issue = {"number": 729, "state": "open", "html_url": sync.REPO_URL + "/issues/729", "body": ""}
