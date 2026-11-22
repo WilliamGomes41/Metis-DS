@@ -148,9 +148,11 @@ def test_deployment_protocol_is_mandatory_and_keeps_the_container_route() -> Non
     # Done needs measured verification and a recorded handoff.
     for evidence in (
         "deployment_verified commit=<sha>", "pg_stat_activity", "request_finished",
-        "linear-github-handoff.md", "gemerged + gedeployed + geverifieerd",
+        "linear-github-handoff.md", "Done = gemerged op main",
+        "Forge zet het label `live`",
     ):
         assert evidence in protocol
+    assert "gemerged + gedeployed + geverifieerd" not in protocol
 
 
 def test_non_workflow_rights_are_a_stop_gate_before_cutover_and_deployment() -> None:
