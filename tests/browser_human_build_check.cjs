@@ -18,16 +18,17 @@ const assert = require('node:assert/strict');
     await Promise.all([page.waitForURL(url => url.pathname !== '/login'), page.locator('button[type=submit]').click()]);
   }
   await login();
-  const uploaded = await page.evaluate(async () => {
+  const upload = htmlSource => page.evaluate(async html => {
     const body = new FormData();
     for (const [key,value] of Object.entries({ingest_kind:'new', title:'Menselijke ketenproef',
       version:'1.0', date:'2026-11-08', class_:'richtlijn', family:'test',
       review_mode:'choice', review_option:'uploader_sole', source_status:'established'})) body.append(key,value);
-    body.append('file',new Blob(['<html><body><p>De kwetsbare huid verklaart de pijn.</p></body></html>'],{type:'text/html'}),'human.html');
+    body.append('file',new Blob([html],{type:'text/html'}),'human.html');
     const response = await fetch('/ingest',{method:'POST',body});
-    const html = await response.text();
-    return {status:response.status,url:response.url,error:html.match(/data-error-code="([^"]+)/)?.[1]};
-  });
+    const bodyHtml = await response.text();
+    return {status:response.status,url:response.url,error:bodyHtml.match(/data-error-code="([^"]+)/)?.[1]};
+  }, htmlSource);
+  const uploaded = await upload('<html><body><p>De kwetsbare huid verklaart de pijn.</p></body></html>');
   assert.equal(uploaded.status, 200, JSON.stringify(uploaded));
   const sid = new URL(uploaded.url).searchParams.get('document');
   assert.ok(sid, uploaded.url);
@@ -37,6 +38,7 @@ const assert = require('node:assert/strict');
   await page.goto(base+'/annotations?document='+sid+'&overview=true');
   assert.equal(await page.locator('#annotation-finalize').count(),0);
   await page.getByRole('heading',{name:'Nog niet verantwoord bronmateriaal'}).waitFor();
+  assert.equal(await page.locator('form[action="/annotations/source-role"]').count(),0);
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:1000});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
@@ -116,9 +118,33 @@ const assert = require('node:assert/strict');
   }
   await page.locator('#annotation-build-review').click();
   await page.waitForURL(url => url.pathname === '/review');
+
+  const groupedUpload=await upload('<p>Versie: 2.4</p><p>Datum: november 2026</p><p>Versie: 2.3</p><p>Controleer de huid dagelijks.</p>');
+  assert.equal(groupedUpload.status,200,JSON.stringify(groupedUpload));
+  const groupedId=new URL(groupedUpload.url).searchParams.get('document');
+  await page.goto(base+'/annotations?document='+groupedId);
+  await page.getByRole('button',{name:'Bron openen voor annotatie'}).click();
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
+  assert.equal(await page.locator('.annotation-source-rest-label').count(),3);
+  await page.setViewportSize({width:390,height:1000});
+  await page.getByRole('link',{name:'Voorstel: Documentgegevens'}).first().focus();
+  await page.keyboard.press('Enter');
+  const group=page.locator('#annotation-source-work details').filter({hasText:'Voorstel: Documentgegevens (3)'});
+  await group.getByRole('checkbox',{name:'Versie: 2.3'}).uncheck();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
+  await group.getByRole('button',{name:'Bevestig geselecteerde tekst als documentgegevens'}).click();
+  await page.locator('#annotation-editor-inputs:enabled').waitFor();
+  await page.waitForFunction(() => document.querySelectorAll('.annotation-source-rest-label').length===1);
+  await page.goto(base+'/annotations?document='+groupedId+'&overview=true');
+  assert.match(await page.locator('body').innerText(), /Verantwoorde restbereiken: 2 · Open bronbereiken: 2/);
+  await page.getByRole('link',{name:'Beoordelen in document'}).last().click();
+  await page.locator('#annotation-source-work details[open]').getByText('Controleer de huid dagelijks.',{exact:true}).waitFor();
+  await page.locator('#annotation-source-work details[open]').getByRole('link',{name:'Ga naar tekst'}).click();
+  await page.locator('mark[data-source-rest-focus]').filter({hasText:'Controleer de huid dagelijks.'}).waitFor();
+  assert.equal(await page.locator('.annotation-source-rest-label').count(),1);
   assert.deepEqual(errors,[]);
   fs.writeFileSync(output+'/result.json', JSON.stringify({upload:true,ingestChoice:'uploader_sole',mouse:true,
     exactFields:true,pause:true,newSession:true,overview:true,seal:true,durableDispatch:true,
-    humanBuild:true,reviewRoute:true,widths:[1440,390]},null,2));
+    humanBuild:true,reviewRoute:true,sourceGroups:true,widths:[1440,390]},null,2));
   await browser.close();
 })().catch(async error => {console.error(error);await tasks.describeCard(globalThis.metisProofPage);process.exit(1);});
