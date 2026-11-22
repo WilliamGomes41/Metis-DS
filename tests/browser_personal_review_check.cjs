@@ -1,10 +1,12 @@
 const {chromium} = require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
+const {writeFile} = require('node:fs/promises');
 (async () => {
   const base = process.env.METIS_BROWSER_BASE;
   const m = await (await fetch(base + '/browser-manifest')).json();
   const browser = await chromium.launch({executablePath: process.env.METIS_BROWSER_EXECUTABLE, args:['--no-sandbox']});
   const page = await browser.newPage();
+  const compositor = await page.context().newCDPSession(page);
   async function login(username) {
     await page.goto(base + '/login');
     await page.locator('[name=username]').fill(username);
@@ -42,21 +44,93 @@ const assert = require('node:assert/strict');
       await passage.click();
     }
     const form = page.locator('[data-ko-assessment-form]');
+    const approve = form.locator('[name=review_action][value=approve]');
     assert.equal(await form.locator('[name=object_id]').inputValue(),d.context);
     assert.deepEqual(await state(), before, 'Landing and detail navigation must not mutate domain work');
+    assert.equal(await approve.isEnabled(),false);
+    const invalidStatus = await form.evaluate(node => {
+      node.requestSubmit(node.querySelector('[value=approve]'));
+      return node.querySelector('[data-ko-submit-status]')?.textContent ?? '';
+    });
+    assert.equal(invalidStatus, '', 'An incomplete assessment never shows the saving status');
     for (const question of ['applicable','complete','placed_correctly']) {
       assert.equal(await form.locator(`[name=${question}]:checked`).count(),0);
       await form.locator(`[name=${question}][value=yes]`).check();
     }
     await form.locator('[name=evidence_not_applicable]').check();
-    const approve = form.locator('[name=review_action][value=approve]');
     assert.equal(await approve.isEnabled(),true,'The displayed fixture proposal must be confirmable');
-    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}), approve.click()]);
+    const interaction = await form.locator('[name=interaction_id]').inputValue();
+    const postBodies = [];
+    const isReviewPost = request => request.method() === 'POST' && request.url() === base + '/review';
+    const recordSave = request => {
+      if (isReviewPost(request)) {
+        postBodies.push(new URLSearchParams(request.postData()));
+      }
+    };
+    const setPaused = async paused => {
+      assert.ok((await page.request.post(base + '/browser-review-gate?paused=' + paused)).ok());
+    };
+    await setPaused(true);
+    page.on('request', recordSave);
+    try {
+      await approve.focus();
+      const box = await approve.boundingBox();
+      const readPending = page.waitForEvent('console', message => message.text().startsWith('review-pending '));
+      await form.evaluate(node => {
+        node.addEventListener('submit', event => {
+          const button = event.submitter;
+          const status = node.querySelector('[data-ko-submit-status]');
+          const {x,y,width,height} = button.getBoundingClientRect();
+          const details = {
+            text: status?.textContent,
+            role: status?.getAttribute('role'),
+            disabled: button.getAttribute('aria-disabled'),
+            box: {x,y,width,height},
+            statusAboveButton: !!status && status.getBoundingClientRect().bottom + 6 <= y,
+            receipt: !!document.querySelector('[data-review-receipt]'),
+            repeats: [],
+          };
+          setTimeout(() => {
+            const record = repeat => details.repeats.push(repeat.defaultPrevented);
+            node.addEventListener('submit', record);
+            button.click();
+            node.requestSubmit(button);
+            node.removeEventListener('submit', record);
+            console.log('review-pending ' + JSON.stringify(details));
+          });
+        }, {once:true});
+      });
+      const firstPost = page.waitForRequest(isReviewPost);
+      if (width === 1440) await page.keyboard.press('Enter');
+      else await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await firstPost;
+      const pending = JSON.parse((await readPending).text().slice('review-pending '.length));
+      assert.deepEqual(pending, {text:'Review wordt opgeslagen…', role:'status', disabled:'true',
+        box, statusAboveButton:true, receipt:false, repeats:[true,true]});
+      assert.deepEqual(await state(), before, 'Pending copy appears before the server writes');
+      const {data} = await compositor.send('Page.captureScreenshot',{format:'png'});
+      await writeFile(`${process.env.METIS_BROWSER_OUTPUT}/personal-saving-${width}.png`, Buffer.from(data,'base64'));
+    } finally {
+      await setPaused(false);
+    }
+    await page.waitForURL(url => url.searchParams.get('receipt_interaction') === interaction,
+      {waitUntil:'domcontentloaded'});
+    page.off('request', recordSave);
+    assert.equal(postBodies.length,1);
+    assert.equal(postBodies[0].get('review_action'),'approve');
+    assert.equal(postBodies[0].get('interaction_id'),interaction);
     assert.equal(await page.locator('[data-review-receipt]').count(),1);
     assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
     assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);
+    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Review opgeslagen');
+    await proof('personal-saved-receipt',width);
     const after = await state();
-    assert.notDeepEqual(after,before,'Real review POST must commit');
+    const decisions = after.events.filter(event => event.object_id === d.context &&
+      event.event_type.endsWith('_review_approve') &&
+      event.details?.review_interaction?.interaction_id === interaction);
+    assert.equal(decisions.length,1,'One real review decision is committed');
+    await page.reload();
+    assert.deepEqual(await state(),after,'Refreshing the receipt must not repeat review');
     await page.goto(base + '/review');
     assert.equal(await card.locator('[data-personal-open]').innerText(),'1');
     assert.equal(await action.innerText(),'Verder beoordelen');

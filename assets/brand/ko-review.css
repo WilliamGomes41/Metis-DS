@@ -68,6 +68,9 @@
 .ko-adjustment { display: none; font-size: 13px; }
 .ko-assessment-form:has(input[value=adjust]:checked) .ko-adjustment { display: block; }
 .ko-actions { border-top: 1px solid var(--line); display: flex; align-items: center; gap: 22px; padding-top: 22px; margin-top: 12px; }
+.ko-assessment-form .ko-actions { position: relative; padding-block-start: 28px; }
+.ko-submit-status { position: absolute; inset-block-start: 2px; inset-inline-start: 0; margin: 0; font-size: 14px; line-height: 1.3; }
+.ko-assessment-form button[aria-disabled="true"] { cursor: progress; }
 .ko-primary { background: var(--paars); border: 1px solid var(--paars); color: var(--wit); border-radius: 8px; padding: 12px 20px; font-weight: 700; font-size: 14px; cursor: pointer; }
 .ko-primary:disabled { opacity: .45; cursor: not-allowed; }
 .ko-text-button { padding: 5px 0; border: 0; background: none; color: var(--paars); font: inherit; cursor: pointer; }

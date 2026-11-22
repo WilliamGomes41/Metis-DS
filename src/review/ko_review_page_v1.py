@@ -434,7 +434,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + _question('placed_correctly', 'Staat dit op de juiste plek?', draft.get('placed_correctly'), subline=place)
             + ('' if annotation else '<p class="ko-adjustment">Wil je iets aanpassen? <a href="' + escape(repair, quote=True) + '">'
                'Open de gerichte correctie</a>.</p>')
-            + '<div class="ko-actions"><button class="ko-primary" type="submit" name="review_action" value="approve"'
+            + '<div class="ko-actions"><p class="ko-submit-status" data-ko-submit-status role="status"></p>'
+            + '<button class="ko-primary" type="submit" name="review_action" value="approve"'
             + ('' if can_approve else ' disabled') + '>Goedkeuren en opslaan</button>'
             '<a href="' + escape(repair, quote=True) + '">'
             + ('Aanpassen in de kaart' if annotation else 'Correctie nodig') + '</a>'
@@ -447,12 +448,35 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
 def _assessment_script():
     return '''<script>
 for (const form of document.querySelectorAll('[data-ko-assessment-form]')) {
-  const approve = form.querySelector('[value="approve"]');
+  const submitters = form.querySelectorAll('button[name="review_action"]');
+  const approve = form.querySelector('button[value="approve"]');
+  const status = form.querySelector('[data-ko-submit-status]');
+  let submitting = false;
   const update = () => {
     const yes = ['applicable','complete','placed_correctly'].every(name => form.querySelector(`input[name="${name}"]:checked`)?.value === 'yes');
     approve.disabled = form.dataset.canApprove !== 'true' || !yes;
   };
   form.addEventListener('change', update);
+  form.addEventListener('submit', event => {
+    if (submitting) {
+      event.preventDefault();
+      return;
+    }
+    if (event.defaultPrevented || !event.submitter) return;
+    submitting = true;
+    // Keep the pressed button enabled for the native POST's review_action value.
+    submitters.forEach(button => button.setAttribute('aria-disabled', 'true'));
+    status.textContent = event.submitter.value === 'later'
+      ? 'Volgende passage wordt geopend…'
+      : 'Review wordt opgeslagen…';
+  });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted || !submitting) return;
+    submitting = false;
+    submitters.forEach(button => button.removeAttribute('aria-disabled'));
+    status.textContent = '';
+    update();
+  });
   update();
 }
 </script>'''
