@@ -2,7 +2,7 @@
 
 Change class: C
 Promise: G1 vereist één teststatus die alleen slaagt na volledig productiegericht testbewijs, het bestaande browserbewijs en de gerichte Python 3.12-proeven.
-Proof: Gedragstests voor de eindcheck en de omschakeling, een CI-run op de exacte PR-head en native readback na aanpassing van G1.
+Proof: Gedragstests voor de eindcheck en de omschakeling, versiecontroles over de releasepaden, de echte Docling-imageproef op de exacte PR-head en native readback na aanpassing van G1.
 Touches lifecycle invariants: no
 Rewrite risk: none
 
@@ -10,7 +10,11 @@ Werkpakket [GitHub #1135](https://github.com/WilliamGomes41/Metis-DS/issues/1135
 
 ## Eén uitslag
 
-De vier suiteshards, preflight en het bestaande browserbewijs draaien op Python 3.13, de versie van de console en Product API. De bestaande characterization-job draait op Python 3.12 en controleert daar ook het Docling-contract en de Product API-contractguard. De afzonderlijke echte Docling-acceptatie blijft beschikbaar in de bestaande Docling-workflow. [CI-workflow](../../.github/workflows/ci.yml) · [Docling-acceptatie](../../.github/workflows/docling-acceptance.yml)
+De vier suiteshards, preflight en het bestaande browserbewijs draaien op Python 3.13. Het releasecommando in `scripts/build_azure_release_image.sh` selecteert `Dockerfile.docling --target runtime`. Die stage en de daarvan afgeleide acceptance-stage gebruiken Python 3.13, net als het losse Docling-acceptatieimage, de Docling-testhost en het Product API-image. De ZIP-route accepteert `PYTHON|3.13`. Daarom gebruikt de job `package` Python 3.13, selecteert de ZIP-bouwer `cp313`- en compatibele `abi3`-wheels en draait de importproef op Python 3.13.
+
+De characterization-job draait op Python 3.12 en controleert daar de workercompatibiliteit, het Docling-contract en de Product API-contractguard. De echte Docling-proef MOET op Python 3.13 de vastgelegde CPU-wheels, het lockbestand, `pip check`, de modelvoorbereiding, Chromium en de verpakte PDF-keten uitvoeren. Als die proef faalt, MOET de geaggregeerde `test` ook de volledige vier suiteshards, het browserbewijs en de PostgreSQL-proeven op Python 3.12 vereisen. [CI-workflow](../../.github/workflows/ci.yml) · [Docling-acceptatie](../../.github/workflows/docling-acceptance.yml)
+
+**OPENVRAAG** De actuele Azure-hosting is niet geverifieerd. De repository beschrijft een afzonderlijke eerste containerovergang met eigen rollback- en capaciteitsbewijs. [Azure-releaseprocedure](../AZURE_RELEASE_RUNBOOK.md)
 
 De enkelvoudige job `test` accepteert uitsluitend vier geslaagde afhankelijkheden. Daarna controleert hij het volledige suiteshardbewijs en de bestaande PostgreSQL-bewijsexport. Het browserbewijs omvat de bestaande Review- en Vorming-proeven. Nieuwe gedragsproeven uit het UX-ontwerp horen bij de wijzigingen die dat productgedrag realiseren. De twee tijdelijke contextnamen geven precies de uitslag van `test` door. Daarmee blijven de huidige vereiste contextnamen beschikbaar tijdens de overstap.
 
