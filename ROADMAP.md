@@ -32,8 +32,8 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 - B1: PostgreSQL is de enige bron van waarheid. Spiegels worden alleen na een geslaagde commit uit PG herbouwd, door één writer. Geen herstel uit kopieën, geen write vóór commit.
 - Al het werk staat in GitHub-issues; het kritieke pad krijgt het label `critical-path`.
 - Eén PR tegelijk.
-- Per Class A-PR doet Lex alleen de aanvalsronde en Sherlock de begrensde review. Alleen bewezen blockers houden een merge tegen; de rest wordt een opvolgissue.
-- Geen merge-GO-verzoek zonder gate-rapport van Argos. Merge of deploy alleen op Williams eigen GO in de chat van de uitvoerende agent.
+- Per Class A-PR doet Lex alleen de aanvalsronde. Alleen bewezen blockers houden een merge tegen; de rest wordt een opvolgissue. (De Sherlock-review is vervangen door het besluit van 2026-11-22 hieronder.)
+- Merge of deploy alleen op Williams eigen GO in de chat van de uitvoerende agent. (De eis van een Argos-gate-rapport is vervangen door het besluit van 2026-11-22 hieronder.)
 - **Besluit William 2026-11-22:** de Sherlock- en Argos-gate vervallen. Merge-poort = verplichte CI-checks + controlerapport van Forge; Forge zet het label `live` na post-deploy-bewijs. Merge blijft alleen op Williams eigen GO ([linear-github-handoff](docs/agents/linear-github-handoff.md)).
 - Scout is gepauzeerd, de war room is buiten gebruik (agents direct benaderen), Cartograph draait wekelijks of op verzoek.
 
