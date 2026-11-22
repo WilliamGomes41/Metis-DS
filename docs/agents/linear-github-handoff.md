@@ -27,8 +27,9 @@ Nooit in GitHub: private bronteksten, ruwe provider-uitvoer, secrets, of persoon
 ## In Linear
 
 - **Werkpakket:** een issue onder het projectparent, met het GitHub-nummer in de titel of de beschrijving.
-- **Status:** Backlog → In Progress → Done. **Done = gemerged + (waar nodig) gedeployed + geverifieerd.**
-- **Geverifieerd** vraagt een verwijzing naar concreet bewijs in de afsluitende comment of in het change contract:
+- **Status:** Backlog → In Progress → Done. **Done = gemerged op main met `Closes #N` en `Fixes MET-N`.** Linear zet het ticket bij die merge op Done. Deploy en live verificatie zijn het label `live` (Argos zet het na het post-deploy-bewijs), geen voorwaarde voor Done.
+- **Deel-PR:** `Part of MET-N` + `Refs #N`; die sluit niets. Zet geen `met-N` in de branchnaam (bijv. `feat/1060-slice5`): Linear sluit het ticket anders bij de merge.
+- **Done** vraagt een verwijzing naar concreet bewijs in de afsluitende comment of in het change contract:
   - een CI- of testrun (PR-nummer en head-SHA);
   - een health-check (`deployment_verified commit=…`);
   - of een handmatige check met wat, wie, wanneer en de gemeten uitkomst.
@@ -81,18 +82,24 @@ De worker projecteert GitHub-feiten in één herkenbare Linear-comment per
 gekoppeld werkpakket. Hij wijzigt geen status, prioriteit, werkkeuze, eigenaar,
 projectindeling of dependencies. Een open of gesloten GitHub-issue en een merge
 zijn afzonderlijke feiten; een gemergde deelslice sluit niet het hele werkpakket.
-Een expliciete verklaring van resterend werk op een actuele PR-head naast Done
-laat de run falen en vraagt beoordeling, zonder zelf bestuurlijke status te kiezen.
+Een expliciete verklaring van resterend werk op de head van een nog open PR naast
+Done laat de run falen en vraagt beoordeling, zonder zelf bestuurlijke status te
+kiezen. Komt die verklaring uit een al gemergde PR, dan geeft de run een
+waarschuwing in de projectiecomment en faalt hij niet.
 Ongestructureerde teksten worden niet door een taalmodel als sluitingsbewijs
 geïnterpreteerd. Legacy zonder gestructureerde overdracht wordt als onbekend
 zichtbaar; het wordt niet uit een groene CI-run gereconstrueerd.
 
-Elke PR noemt precies één primaire `Part of MET-…`-koppeling en bevat de volgende
+Elke PR noemt precies één primaire koppeling: `Fixes MET-…` (afrondend; `Closes`
+en `Resolves` werken ook) óf `Part of MET-…` (deelslice). Hij bevat de volgende
 overdracht met de **echte head-SHA**. `remaining_work` gaat over het volledige
 werkpakket, niet alleen de gemergde deelslice. Zet het alleen op false als de
 afgesproken volledige belofte met bewijs kan worden beoordeeld; de worker sluit
 ook dan geen issue. Deze compacte PR-overdracht vervangt de sessie-YAML hierboven
 niet: die bevat extra productie-, herstel- en besliscontext.
+
+Afrondende PR: `Closes #963` en `Fixes MET-47` in plaats van `Part of MET-47`,
+met `"remaining_work":false`. Deel-PR:
 
 ```text
 Part of MET-47.

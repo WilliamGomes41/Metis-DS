@@ -35,7 +35,7 @@ For setup and test-database configuration, use [STACK_SETUP_BASELINE.md](docs/ST
 
 Report the actual check results and tested commit, remaining uncertainty and next step. For UI changes, add rendered/browser evidence at relevant widths.
 A missing or failed required check is not PASS. Do not weaken or delete tests to hide a regression; justify actual contract changes.
-Record evidence and the session handoff under the [GitHub–Linear contract](docs/agents/linear-github-handoff.md). A merge alone does not prove deployment or acceptance.
+Record evidence and the session handoff under the [GitHub–Linear contract](docs/agents/linear-github-handoff.md). A merge alone does not prove deployment or acceptance. Done in Linear = merged on main; deployment/acceptance = label `live`.
 
 ## Stop and surface the decision
 

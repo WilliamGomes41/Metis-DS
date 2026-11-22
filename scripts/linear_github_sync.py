@@ -21,7 +21,8 @@ MARKER = "<!-- metis-github-linear-sync-v1 -->"
 CONFIG = Path(__file__).resolve().parents[1] / "config/linear_github_sync.v1.json"
 TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
 HANDOFF = re.compile(r"<!--\s*metis-linear-handoff-v1\s*\n(.*?)\n\s*-->", re.S)
-PRIMARY = re.compile(r"\bPart of\s+(MET-[1-9][0-9]*)\b", re.I)
+# Fixes/Closes/Resolves close the Linear ticket on merge; Part of links a partial slice only.
+PRIMARY = re.compile(r"\b(?:Part of|Fixes|Closes|Resolves)\s+(MET-[1-9][0-9]*)\b", re.I)
 
 
 class SyncError(Exception):
@@ -82,7 +83,7 @@ def read_handoff(body: str, identifier: str) -> dict | None:
 def validate_pr_handoff(body: str, head: str, bindings: list[Binding]) -> None:
     targets = PRIMARY.findall(body)
     if len(targets) != 1 or targets[0] not in {b.linear_issue for b in bindings}:
-        raise SyncError("PR vereist precies één geconfigureerde Part of MET-koppeling")
+        raise SyncError("PR vereist precies één geconfigureerde Fixes/Closes/Resolves/Part of MET-koppeling")
     handoff = read_handoff(body, targets[0])
     if handoff is None or handoff["head"] != head:
         raise SyncError("PR-overdracht ontbreekt of head is achterhaald")
@@ -247,6 +248,8 @@ def render(value: dict) -> str:
                   *[f"Bewijs: {url}" for url in handoff["evidence"]]]
     else:
         lines += ["", "Geen machineleesbare overdracht gevonden; lees de bestaande bron/handoff."]
+    if value.get("warning"):
+        lines += ["", "Waarschuwing: " + value["warning"]]
     lines += ["", "Een merge is geen volledige oplevering. CI, deployment en gebruikersacceptatie "
               "zijn hier niet zelfstandig bewezen. Status, werkkeuze, prioriteit en eigenaar worden niet gewijzigd."]
     return "\n".join(lines)
@@ -269,9 +272,14 @@ def reconcile(bindings: list[Binding], github, linear, *, apply: bool) -> dict[s
             raise SyncError("Linear-team buiten scope")
         receipt = value["handoff"]
         if (issue.get("state", {}).get("type") == "completed" and receipt
-                and receipt["remaining_work"]
-                and receipt["head"] in {p["head"] for p in value["pulls"]}):
-            contradictions.append(binding.linear_issue)
+                and receipt["remaining_work"]):
+            heads = {p["head"]: p["state"] for p in value["pulls"]}
+            if heads.get(receipt["head"]) == "open":
+                contradictions.append(binding.linear_issue)
+            elif heads.get(receipt["head"]) == "gemerged":
+                # A merged slice's stale remaining_work must not keep the sync red.
+                value["warning"] = ("Done naast remaining_work: true uit een al gemergde PR; "
+                                    "beoordeel of het werkpakket echt af is.")
         prepared.append((binding, issue, owned(comments), render(value)))
     counts = {"changed": 0, "unchanged": 0}
     for binding, issue, previous, body in prepared:
