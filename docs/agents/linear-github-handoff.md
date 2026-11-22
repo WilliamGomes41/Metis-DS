@@ -27,7 +27,8 @@ Nooit in GitHub: private bronteksten, ruwe provider-uitvoer, secrets, of persoon
 ## In Linear
 
 - **Werkpakket:** een issue onder het projectparent, met het GitHub-nummer in de titel of de beschrijving.
-- **Status:** Backlog → In Progress → Done. **Done = gemerged op main met `Closes #N` en `Fixes MET-N`.** Linear zet het ticket bij die merge op Done. Deploy en live verificatie zijn het label `live` (Argos zet het na het post-deploy-bewijs), geen voorwaarde voor Done.
+- **Status:** Backlog → In Progress → Done. **Done = gemerged op main met `Closes #N` en `Fixes MET-N`.** Linear zet het ticket bij die merge op Done. Deploy en live verificatie zijn het label `live`: Forge zet het label `live` na het post-deploy-bewijs. Het is geen voorwaarde voor Done.
+- **Merge-poort = verplichte CI-checks + controlerapport van Forge** (sectie in het PR-sjabloon). De Sherlock- en Argos-gate vervallen (besluit William 22-11-2026). Mergen gebeurt pas na William's letterlijke GO.
 - **Deel-PR:** `Part of MET-N` + `Refs #N`; die sluit niets. Zet geen `met-N` in de branchnaam (bijv. `feat/1060-slice5`): Linear sluit het ticket anders bij de merge.
 - **Done** vraagt een verwijzing naar concreet bewijs in de afsluitende comment of in het change contract:
   - een CI- of testrun (PR-nummer en head-SHA);

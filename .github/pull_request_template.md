@@ -64,6 +64,16 @@ If anything other than `None` applies:
 - **onzekerheid**:
 - **advies**:
 
+## Controlerapport Forge
+
+Merge-poort = verplichte CI-checks (groen op de exacte head) + dit controlerapport van Forge.
+Mergen pas na William's letterlijke GO.
+
+- **head**:
+- **verplichte CI-checks**:
+- **bevindingen / blockers**:
+- **oordeel Forge**: PASS | FAIL
+
 ## Verification
 
 - [ ] `python scripts/repository_preflight.py`

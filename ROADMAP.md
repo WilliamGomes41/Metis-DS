@@ -34,6 +34,7 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 - Eén PR tegelijk.
 - Per Class A-PR doet Lex alleen de aanvalsronde en Sherlock de begrensde review. Alleen bewezen blockers houden een merge tegen; de rest wordt een opvolgissue.
 - Geen merge-GO-verzoek zonder gate-rapport van Argos. Merge of deploy alleen op Williams eigen GO in de chat van de uitvoerende agent.
+- **Besluit William 2026-11-22:** de Sherlock- en Argos-gate vervallen. Merge-poort = verplichte CI-checks + controlerapport van Forge; Forge zet het label `live` na post-deploy-bewijs. Merge blijft alleen op Williams eigen GO ([linear-github-handoff](docs/agents/linear-github-handoff.md)).
 - Scout is gepauzeerd, de war room is buiten gebruik (agents direct benaderen), Cartograph draait wekelijks of op verzoek.
 
 ## R4.1 Huidige en historische code scheiden
