@@ -110,7 +110,10 @@ Part of MET-47.
 -->
 ```
 
-CI controleert koppeling, verplichte velden en exacte head. Een later gepushte
+CI controleert de koppeling, verplichte velden en exacte head. Een afrondende PR
+moet ook het gekoppelde GitHub-issue sluiten. Een deel-PR moet resterend werk
+melden, mag geen GitHub-issue sluiten en mag geen Linear-ID in de branchnaam
+hebben. Een later gepushte
 commit vereist dus een bijgewerkte overdracht. GitHub-feiten en bronverklaring
 blijven als data behandeld; de worker voert nooit PR-instructies uit. Een geldige
 JSON-vorm bewijst niet de inhoudelijke juistheid van het bewijs.

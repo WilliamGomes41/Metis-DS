@@ -32,7 +32,7 @@ def test_v217_approval_manifest_matches_protocol_bytes() -> None:
 def test_v217_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -51,7 +51,7 @@ def test_v217_delta_exists_and_is_the_live_baseline() -> None:
 def test_v217_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -104,7 +104,7 @@ def test_v217_empty_onderwerp_on_fresh_ingest() -> None:
 def test_v217_bronpassage_is_readable_prose_not_raw_html() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The researcher right column MUST show the same readable sentence as the knowledge object" in delta
     assert "MUST NOT show raw HTML freeze slices" in delta
     assert "Protocol v2.11 freeze bytes and locators stay exact" in delta
@@ -120,7 +120,7 @@ def test_v217_bronpassage_is_readable_prose_not_raw_html() -> None:
 def test_v217_site_chrome_must_not_be_objects_or_koppen() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Extract MUST NOT emit kennisplatform chrome as knowledge objects" in delta
     assert "MUST NOT land that chrome in Koppen" in delta
     assert "Home, Richtlijnen, Meedenken, Kennisinstituut V&VN, Tools, Veelgestelde vragen" in delta
@@ -134,7 +134,7 @@ def test_v217_site_chrome_must_not_be_objects_or_koppen() -> None:
 def test_v217_unclassified_bar_unchanged_and_unpublished_continentie_reextract() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "2641 unclassified on one richtlijn remains a fail of the review surface" in delta
     assert "The Protocol v2.15 / v2.16 bar is unchanged" in delta
     assert "a new extract of the same freeze bytes is REQUIRED" in delta
@@ -174,7 +174,7 @@ def test_v217_is_c3_spanning_review_surface_owner_approved_and_does_not_reopen_g
 
 def test_v217_records_researcher_surface_wave_then_g2_and_does_not_implement_product_code() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.16 conflict on which implementation is next, this delta governs" in delta
     assert "researcher copy without slogans" in delta
@@ -203,7 +203,7 @@ def test_v217_records_researcher_surface_wave_then_g2_and_does_not_implement_pro
 def test_v217_one_word_site_chrome_must_not_be_an_object() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "One-word site chrome MUST NOT be an object" in delta
     assert "One-word chrome remains a fail under Protocol v2.16 tiny-objects **and** this chrome rule" in delta
     assert "Tools, Home, Richtlijnen, Meedenken and the rest of kennisplatform nav MUST NOT be knowledge objects" in delta
@@ -217,7 +217,7 @@ def test_v217_one_word_site_chrome_must_not_be_an_object() -> None:
 def test_v217_recommendation_strength_ui_only_on_recommendation() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Recommendation-strength UI (**Sterkte van de aanbeveling**, the DOEN/OVERWEEG/NIET DOEN picker) MUST NOT appear except on type `recommendation`" in delta
     assert "A nav word MUST NOT get a recommendation-strength control" in delta
     assert "Stamps exist only on type `recommendation`" in delta
@@ -230,7 +230,7 @@ def test_v217_recommendation_strength_ui_only_on_recommendation() -> None:
 def test_v217_relation_checkbox_and_label_must_be_adjacent() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "The relation label MUST sit immediately next to its checkbox" in delta
     assert "MUST NOT stretch checkbox and target title to opposite edges of the viewport" in delta
     assert "That bar MUST also bind relation checkboxes on the object card" in delta
@@ -243,7 +243,7 @@ def test_v217_relation_checkbox_and_label_must_be_adjacent() -> None:
 def test_v217_bronpassage_prose_rule_is_per_object_whole_freeze() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This bronpassage prose rule is **per-object / whole freeze**, not a one-off on one card" in delta
     assert "Same law for every object and every section" in delta
     assert "Researcher bronpassage MUST be the readable sentence, never tags" in delta
@@ -257,7 +257,7 @@ def test_v217_bronpassage_prose_rule_is_per_object_whole_freeze() -> None:
 def test_v217_inleiding_doel_doelgroep_aanleiding_are_examples_not_a_closed_list() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "**Inleiding**, **Doel**, **Doelgroep** and **Aanleiding** are examples of sections the law covers, not a closed list" in delta
     assert "These rules (no slogans, no one-word chrome, compact relation checkboxes, bronpassage prose not HTML, recommendation-strength UI only on `recommendation`) apply to the **whole freeze / every object / every section**" in delta
     assert "Ik zie inleiding, doel, doelgroep en aanleiding vaker voorkomen" in delta

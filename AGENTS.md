@@ -3,7 +3,7 @@
 ## Goal
 
 Metis turns source documents into traceable knowledge for human review, controlled publication and retrieval.
-Follow the existing hierarchy: [PROTOCOL.md](PROTOCOL.md) → [ROADMAP.md](ROADMAP.md) → acceptance tests → code.
+Follow the existing hierarchy: [PROTOCOL.md](PROTOCOL.md) → acceptance tests → code. Track open work and missing evidence in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues).
 
 ## Where to look
 

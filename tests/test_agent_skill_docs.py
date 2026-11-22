@@ -205,8 +205,6 @@ def test_merge_gate_is_required_ci_plus_forge_report_and_forge_sets_live() -> No
     assert "## Controlerapport Forge" in template
     for text in (agents, contract, template):
         assert "Argos zet" not in text and "gate-rapport van Argos" not in text
-    roadmap = (ROOT / "ROADMAP.md").read_text(encoding="utf-8")
-    assert "Sherlock- en Argos-gate vervallen" in roadmap
 
 
 def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:

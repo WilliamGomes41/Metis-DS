@@ -2,7 +2,7 @@
 
 Deze map bevat gedateerd technisch bewijs. Actuele voortgang staat in de
 [GitHub-issues](https://github.com/WilliamGomes41/Metis-DS/issues); productregels
-staan in het [protocol](../../PROTOCOL.md) en open werk in de [roadmap](../../ROADMAP.md).
+staan in het [protocol](../../PROTOCOL.md).
 
 - [Bronherstel na cacheverlies](a10-source-repair-code-acceptance.md).
 - [Vervanging van de beslisboomroute](decision-tree-route-replacement.md).

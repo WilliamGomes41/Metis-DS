@@ -1,11 +1,9 @@
 """Shared pytest configuration.
 
-Historical Protocol-v2 contract tests remain executable audit evidence after the
-Protocol-v3 cutover. Those tests were written when ``PROTOCOL.md``,
-``ROADMAP.md`` and ``docs/GOVERNANCE.md`` also acted as an accumulating history
-log. During historical tests only, reads of those three paths are therefore
-resolved to the frozen pre-v3 snapshots. Current/V3 tests always read the live
-root documents.
+Historical Protocol-v2 contract tests read the frozen roadmap directly. During
+historical tests only, legacy reads of ``PROTOCOL.md`` and
+``docs/GOVERNANCE.md`` resolve to the frozen pre-v3 snapshots. Current tests
+read the active documents.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: slop
@@ -186,12 +184,10 @@ def production_environment(tmp_path, complete_postgres, monkeypatch):
 
 
 _V2_PROTOCOL = ROOT / "docs" / "history" / "protocol-v2" / "PROTOCOL_ROOT_FINAL_2026-09-10.md"
-_V2_ROADMAP = ROOT / "docs" / "history" / "protocol-v2" / "ROADMAP_PRE_V3_2026-09-10.md"
 _V2_GOVERNANCE = ROOT / "docs" / "history" / "protocol-v2" / "GOVERNANCE_PRE_V3_2026-09-10.md"
 
 _LIVE_TO_HISTORY = {
     (ROOT / "PROTOCOL.md").resolve(): _V2_PROTOCOL,
-    (ROOT / "ROADMAP.md").resolve(): _V2_ROADMAP,
     (ROOT / "docs" / "GOVERNANCE.md").resolve(): _V2_GOVERNANCE,
 }
 

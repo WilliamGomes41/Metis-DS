@@ -32,7 +32,7 @@ def test_v213_approval_manifest_matches_protocol_bytes() -> None:
 def test_v213_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -57,7 +57,7 @@ def test_v213_does_not_redesign_the_four_layers_or_invent_a_fifth() -> None:
 def test_v213_architecture_principle_is_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "One knowledge object MUST be one confirmable meaning" in delta
     assert "Context MUST live in reviewed relations, not in a blob" in delta
     assert "The canonical store MUST be the only source of truth" in delta
@@ -133,7 +133,7 @@ def test_v213_per_type_classification_rules_and_human_judgement() -> None:
 def test_v213_open_original_is_review_law_without_a_new_locator_scheme() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "From every knowledge object the reviewer MUST be able to open the exact source passage" in delta
     assert "Type confirmation without that flow is not acceptable" in delta
     assert "this delta MUST NOT invent a locator scheme" in delta
@@ -202,7 +202,7 @@ def test_v213_is_c3_spanning_c5_owner_approved_and_does_not_reopen_gd03() -> Non
 
 def test_v213_records_kernel_then_g2_and_does_not_write_v214() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.12 §10 conflict on which implementation is next, this delta governs" in delta
     assert "atomic split" in delta
@@ -225,7 +225,7 @@ def test_v213_records_kernel_then_g2_and_does_not_write_v214() -> None:
 
 
 def test_v213_roadmap_locks_seven_clusters_and_maps_ten_epics() -> None:
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "de zeven clusters zijn de lock en de sequentie" in roadmap
     assert "De tien architectuurepics zijn de kaart" in roadmap
     assert "Semantisch kennismodel (Protocol v2.13, deze PR)" in roadmap

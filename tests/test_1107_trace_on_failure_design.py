@@ -25,7 +25,7 @@ def test_issue_1107_is_bound_to_met_113_and_the_design_names_both():
     body = ('Part of MET-113.\n<!-- metis-linear-handoff-v1\n' + json.dumps({
         'version': 1, 'linear_issue': 'MET-113', 'head': SHA, 'remaining_work': True,
         'next_step': 'Beoordeel het ontwerp.', 'evidence': []}) + '\n-->')
-    sync.validate_pr_handoff(body, SHA, bindings)
+    sync.validate_pr_handoff(body, SHA, bindings, branch="chore/issue-proof")
     text = design()
     assert 'https://github.com/WilliamGomes41/Metis-DS/issues/1107' in text
     assert 'https://linear.app/metis-phoenix/issue/MET-113' in text

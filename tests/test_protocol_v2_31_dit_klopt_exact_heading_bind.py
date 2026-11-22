@@ -32,7 +32,7 @@ def test_v231_approval_manifest_matches_protocol_bytes() -> None:
 def test_v231_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -50,7 +50,7 @@ def test_v231_delta_exists_and_is_the_live_baseline() -> None:
 def test_v231_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "frozen source → source passage → knowledge object → human review → published projection" in delta
@@ -84,7 +84,7 @@ def test_v231_exact_bind_norms() -> None:
 def test_v231_preventie_and_screening_regressions() -> None:
     delta = _read(DELTA)
     changelog = _read(ROOT / "CHANGELOG.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     root_protocol = _read(ROOT / "PROTOCOL.md")
     assert "Preventie van vallen" in delta
     assert "MUST NOT bind the prefix when the exact longer title exists" in delta
@@ -109,7 +109,7 @@ def test_v231_keeps_v228_v230_phase14_unchanged() -> None:
 
 def test_v231_next_code_is_forge_exact_bind_not_this_pr() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "resolve_found_under_parent" in delta
     assert "tests-before-code" in delta
@@ -124,7 +124,7 @@ def test_v231_next_code_is_forge_exact_bind_not_this_pr() -> None:
 def test_v231_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -139,7 +139,7 @@ def test_v231_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v231_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap

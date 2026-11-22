@@ -32,7 +32,7 @@ def test_v221_approval_manifest_matches_protocol_bytes() -> None:
 def test_v221_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -54,7 +54,7 @@ def test_v221_delta_exists_and_is_the_live_baseline() -> None:
 def test_v221_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -69,7 +69,7 @@ def test_v221_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v221_maps_existing_law_and_does_not_rewrite_v216_v220() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "It MAPS, and does NOT rewrite, existing law" in delta
     assert "Protocol v2.16–v2.18 already forbid tiny objects, stamp-as-heading/object, truncated/trailing clauses, chrome objects, and identical `clean_text`" in delta
     assert "Protocol v2.19 is duty-queue" in delta
@@ -83,7 +83,7 @@ def test_v221_maps_existing_law_and_does_not_rewrite_v216_v220() -> None:
 def test_v221_protocol_md_is_every_guideline_law_and_keeps_continentie_evidence() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`PROTOCOL.md` is every-guideline law, not Continentie-only (Protocol v2.20)" in delta
     assert "Historical Continentie evidence sentences in Protocol v2.16–v2.19 MUST remain" in delta
     assert "stamp words as Koppen; 2008 Inhoud cards" in delta
@@ -99,7 +99,7 @@ def test_v221_protocol_md_is_every_guideline_law_and_keeps_continentie_evidence(
 def test_v221_g2_readiness_and_pr82_stay_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "G2-readiness (PR #69) already pinned `azure-identity==1.25.3` / `azure-storage-blob==12.30.1`" in delta
     assert "G2 is still BLOCKED" in delta
     assert "`publish()` remains G2-BLOCKED" in delta
@@ -116,7 +116,7 @@ def test_v221_g2_readiness_and_pr82_stay_blocked() -> None:
 def test_v221_order_a_then_b_then_c_then_d_and_cloud_shell_off() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Order MUST be A then B then C then D" in delta
     assert "Cloud Shell / production ZIP stay off until wave A is on a controlled SHA" in delta
     assert "Owner paused Cloud Shell and locked a four-wave program" in delta
@@ -131,7 +131,7 @@ def test_v221_order_a_then_b_then_c_then_d_and_cloud_shell_off() -> None:
 def test_v221_wave_a_splitter_and_reject_function() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Implement a context-aware splitter plus a testable reject function" in delta
     assert "An inhoudelijk knowledge object MUST be one complete, independently readable meaning unit" in delta
     assert "It MUST have bronpassage plus locator to the freeze" in delta
@@ -168,7 +168,7 @@ def test_v221_wave_a_splitter_and_reject_function() -> None:
 def test_v221_wave_a_continentie_regression_fixtures() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "stamps plus advice sentence" in delta
     assert "Eventueel met hulp van de mantelzorger." in delta
     assert "list numbers" in delta
@@ -188,7 +188,7 @@ def test_v221_wave_a_continentie_regression_fixtures() -> None:
 def test_v221_wave_b_g2_status_evidence() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "G2 status MUST NOT depend on a stale static JSON field" in delta
     assert "Blob container reachable" in delta
     assert "managed identity usable" in delta
@@ -208,7 +208,7 @@ def test_v221_wave_b_g2_status_evidence() -> None:
 def test_v221_wave_c_pipeline_and_pr82_faults() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Finish PR #82. Do not activate until a test App Service exists" in delta
     assert "Invoke the packaging script via bash or make it executable" in delta
     assert "The Azure ZIP MUST build dependencies or the artifact MUST be fully deployable" in delta
@@ -236,7 +236,7 @@ def test_v221_wave_c_pipeline_and_pr82_faults() -> None:
 def test_v221_wave_d_backup_recoverability() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Inventory of `/home/data/metis-console`" in delta
     assert "accounts / roles" in delta
     assert "document snapshots" in delta
@@ -259,7 +259,7 @@ def test_v221_wave_d_backup_recoverability() -> None:
 def test_v221_next_implementation_is_wave_a_only() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Where this delta and Protocol v2.20 conflict on which implementation is next, this delta governs" in delta
     assert "The next implementation after this protocol merges MUST be the Implementation engineer on the existing kernel/extract for exactly wave A only" in delta

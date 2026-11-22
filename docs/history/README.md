@@ -4,7 +4,7 @@ These files are one-off step, audit and repair writeups from the 2026 pilot. The
 
 Current work is read in this order:
 
-`PROTOCOL.md → ROADMAP.md → acceptatietests → code`
+`PROTOCOL.md → acceptatietests → code`
 
 The only current protocol is root `PROTOCOL.md` (v4.3.1). Technical documentation stays in `docs/`. New step, audit or repair writeups belong here, not at the repository root.
 

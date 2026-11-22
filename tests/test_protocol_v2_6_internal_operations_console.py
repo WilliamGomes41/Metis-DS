@@ -29,7 +29,7 @@ def test_v26_approval_manifest_matches_protocol_bytes() -> None:
 def test_v26_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -57,7 +57,7 @@ def test_v26_hierarchy_remains_a_listed_baseline_component() -> None:
 def test_v26_scoped_supersession_keeps_care_frontend_forbidden() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "scoped supersession" in delta
     assert "no product frontend in this repository" in delta
     assert "An **internal operations console** MAY live in this repository" in delta
@@ -170,7 +170,7 @@ def test_v26_records_identity_without_closing_g8() -> None:
 
 def test_v26_places_console_after_bron2_storage_not_instead() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "after bron 2 storage is at least capturable" in delta
     assert "not instead of Fase 2" in delta
     assert "Do not claim the console exists in code" in delta

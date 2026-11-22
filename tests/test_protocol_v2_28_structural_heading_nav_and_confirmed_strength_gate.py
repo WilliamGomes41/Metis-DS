@@ -24,7 +24,7 @@ def _block_a_text() -> str:
         (
             _read(DELTA),
             _read(ROOT / "PROTOCOL.md"),
-            _read(ROOT / "ROADMAP.md"),
+            _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md"),
             _read(ROOT / "CHANGELOG.md"),
         )
     )
@@ -36,7 +36,7 @@ def _block_b_text() -> str:
         (
             _read(DELTA),
             _read(ROOT / "PROTOCOL.md"),
-            _read(ROOT / "ROADMAP.md"),
+            _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md"),
             _read(ROOT / "CHANGELOG.md"),
         )
     )
@@ -56,7 +56,7 @@ def test_v228_approval_manifest_matches_protocol_bytes() -> None:
 def test_v228_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -85,7 +85,7 @@ def test_v228_delta_exists_and_is_the_live_baseline() -> None:
 def test_v228_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -126,8 +126,8 @@ def test_v228_block_a_marks_toc_separately_and_uses_body_headings() -> None:
     assert "Recognize and mark table-of-contents (inhoudsopgave) items separately from body headings" in text
     assert "Parent-choice / heading navigation list MUST primarily use headings from the **document body**" in text
     assert "document body" in _read(ROOT / "PROTOCOL.md") or "documentlichaam" in _read(ROOT / "PROTOCOL.md")
-    assert "inhoudsopgave" in _read(ROOT / "ROADMAP.md")
-    assert "documentlichaam" in _read(ROOT / "ROADMAP.md") or "document body" in _read(ROOT / "ROADMAP.md")
+    assert "inhoudsopgave" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
+    assert "documentlichaam" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md") or "document body" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
 
 def test_v228_block_a_outline_hierarchy_and_fallback() -> None:
@@ -135,7 +135,7 @@ def test_v228_block_a_outline_hierarchy_and_fallback() -> None:
     assert "`5` → `5.4` → `5.4.1` → `5.4.2`" in text
     assert "Source/extract order remains fallback for headings without a reliable outline number" in text
     assert "5.4.1" in _read(ROOT / "PROTOCOL.md")
-    assert "5.4.1" in _read(ROOT / "ROADMAP.md")
+    assert "5.4.1" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "5.4.1" in _read(ROOT / "CHANGELOG.md")
 
 
@@ -157,7 +157,7 @@ def test_v228_block_a_structural_parent_validity() -> None:
     assert "heading `5.4.1` MUST NOT get heading `2` as parent merely because it was extracted nearby" in text
     assert "Invalid parent proposals MUST NOT bind / MUST NOT be offered as default structure" in text
     assert "structureel geldig" in _read(ROOT / "PROTOCOL.md") or "structurally valid" in _read(ROOT / "PROTOCOL.md")
-    assert "5.4.1" in _read(ROOT / "ROADMAP.md") and "ouder" in _read(ROOT / "ROADMAP.md")
+    assert "5.4.1" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md") and "ouder" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
 
 def test_v228_block_a_product_rule_is_body_structure_not_extract_order() -> None:
@@ -177,7 +177,7 @@ def test_v228_block_b_proposed_recommendation_must_not_show_sterkte() -> None:
     assert "A machine proposal `recommendation` MUST NOT activate/show Sterkte" in text
     assert "Sterkte" in _read(ROOT / "PROTOCOL.md")
     assert "machinevoorstel" in _read(ROOT / "PROTOCOL.md") or "machine proposal" in _read(ROOT / "PROTOCOL.md")
-    assert "Sterkte" in _read(ROOT / "ROADMAP.md")
+    assert "Sterkte" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Sterkte" in _read(ROOT / "CHANGELOG.md")
 
 
@@ -185,7 +185,7 @@ def test_v228_block_b_sterkte_only_on_stored_confirmed_type() -> None:
     text = _block_b_text()
     assert "Sterkte visible and active ONLY when **stored/confirmed** type is Aanbeveling (`recommendation`) OR an actionable boom `outcome`" in text
     assert "stored/confirmed" in _read(ROOT / "PROTOCOL.md") or "opgeslagen/bevestigd" in _read(ROOT / "PROTOCOL.md")
-    assert "Aanbeveling" in _read(ROOT / "ROADMAP.md") or "recommendation" in _read(ROOT / "ROADMAP.md")
+    assert "Aanbeveling" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md") or "recommendation" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "outcome" in _read(ROOT / "CHANGELOG.md")
 
 
@@ -193,7 +193,7 @@ def test_v228_block_b_live_ui_before_submit() -> None:
     text = _block_b_text()
     assert "On type change in the browser, Sterkte MUST appear/disappear **before submit** (live UI)" in text
     assert "before submit" in _read(ROOT / "PROTOCOL.md") or "vóór submit" in _read(ROOT / "PROTOCOL.md")
-    assert "live UI" in _read(ROOT / "ROADMAP.md") or "live-UI" in _read(ROOT / "ROADMAP.md")
+    assert "live UI" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md") or "live-UI" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
 
 def test_v228_block_b_type_change_away_clears_active_strength() -> None:
@@ -214,7 +214,7 @@ def test_v228_block_b_supersedes_proposed_type_stamp_gate() -> None:
     assert "This SUPERSEDES any reading of Protocol v2.16/v2.17 that stamp UI MAY appear based solely on `proposed_object_type` without human type confirm" in text
     assert "v2.16/v2.17 stamp-on-recommendation law remains; the gate becomes confirmed/stored type" in text
     assert "proposed_object_type" in _read(ROOT / "PROTOCOL.md")
-    assert "proposed_object_type" in _read(ROOT / "ROADMAP.md")
+    assert "proposed_object_type" in _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "proposed_object_type" in _read(ROOT / "CHANGELOG.md")
 
 
@@ -226,7 +226,7 @@ def test_v228_block_b_supersedes_proposed_type_stamp_gate() -> None:
 def test_v228_first_code_wave_is_forge_blocks_a_and_b_not_this_pr() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "Next code after this protocol" in delta
     assert "MUST be Forge for exactly Blocks A+B with separate acceptance tests" in delta
@@ -243,7 +243,7 @@ def test_v228_first_code_wave_is_forge_blocks_a_and_b_not_this_pr() -> None:
 
 def test_v228_roadmap_states_both_next_waves() -> None:
     delta = _read(DELTA)
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "v2.27 delete wave may already be in flight under separate Metis GO" in delta
     assert "this delta's next Forge wave is A+B after its own GO" in delta
@@ -258,7 +258,7 @@ def test_v228_roadmap_states_both_next_waves() -> None:
 def test_v228_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -273,7 +273,7 @@ def test_v228_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v228_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -283,7 +283,7 @@ def test_v228_handoff_must_not_be_recreated() -> None:
 def test_v228_keeps_v227_delete_lock_and_v226_klasse_and_v225_boom() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "v2.27 unpublished-delete Documentenhiërarchie + type-to-confirm remains law" in delta or "v2.27 unpublished-delete Documentenhiërarchie only + type-to-confirm remains UNCHANGED" in delta
     assert "v2.25 boom path UNCHANGED" in delta or "v2.25 boom path remains UNCHANGED" in delta
     assert "Klasse wijzigen" in root_protocol

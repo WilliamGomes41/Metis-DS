@@ -29,7 +29,7 @@ def test_v24_approval_manifest_matches_protocol_bytes() -> None:
 def test_v24_remains_an_approved_component_of_current_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert "**Status:** Approved for project use" in delta
     assert "**Protocol delta version:** 2.4.0" in delta

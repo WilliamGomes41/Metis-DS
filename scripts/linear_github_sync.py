@@ -21,8 +21,16 @@ MARKER = "<!-- metis-github-linear-sync-v1 -->"
 CONFIG = Path(__file__).resolve().parents[1] / "config/linear_github_sync.v1.json"
 TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}
 HANDOFF = re.compile(r"<!--\s*metis-linear-handoff-v1\s*\n(.*?)\n\s*-->", re.S)
-# Fixes/Closes/Resolves close the Linear ticket on merge; Part of links a partial slice only.
-PRIMARY = re.compile(r"\b(?:Part of|Fixes|Closes|Resolves)\s+(MET-[1-9][0-9]*)\b", re.I)
+# Closing keywords close the ticket on merge; Part of links a partial slice only.
+CLOSING_KEYWORDS = r"close[sd]?|fix(?:e[sd])?|resolve[sd]?"
+KEYWORD_SEPARATOR = r"\s*:?\s+"
+PRIMARY = re.compile(r"\b(Part of|Fixes|Closes|Resolves)\s+(MET-[1-9][0-9]*)\b", re.I)
+LINEAR_BRANCH_ISSUE = re.compile(r"(?<![a-z0-9])MET-[1-9][0-9]*(?![a-z0-9])", re.I)
+GITHUB_CLOSING = re.compile(
+    rf"\b(?:{CLOSING_KEYWORDS}){KEYWORD_SEPARATOR}"
+    r"((?:[\w.-]+/[\w.-]+)?#[1-9][0-9]*|https://github\.com/[\w.-]+/[\w.-]+/issues/[1-9][0-9]*)\b",
+    re.I,
+)
 
 
 class SyncError(Exception):
@@ -80,13 +88,34 @@ def read_handoff(body: str, identifier: str) -> dict | None:
         raise SyncError("Overdracht bevat ongeldig JSON/type") from exc
 
 
-def validate_pr_handoff(body: str, head: str, bindings: list[Binding]) -> None:
+def validate_pr_handoff(body: str, head: str, bindings: list[Binding], *, branch: str) -> None:
     targets = PRIMARY.findall(body)
-    if len(targets) != 1 or targets[0] not in {b.linear_issue for b in bindings}:
+    by_identifier = {binding.linear_issue: binding for binding in bindings}
+    if len(targets) != 1 or targets[0][1].upper() not in by_identifier:
         raise SyncError("PR vereist precies één geconfigureerde Fixes/Closes/Resolves/Part of MET-koppeling")
-    handoff = read_handoff(body, targets[0])
+    keyword, identifier = targets[0]
+    binding = by_identifier[identifier.upper()]
+    handoff = read_handoff(body, binding.linear_issue)
     if handoff is None or handoff["head"] != head:
         raise SyncError("PR-overdracht ontbreekt of head is achterhaald")
+    if not isinstance(branch, str) or not branch.strip():
+        raise SyncError("PR-branchnaam ontbreekt")
+
+    partial = keyword.casefold() == "part of"
+    if partial != handoff["remaining_work"]:
+        raise SyncError("PR-koppeling en resterend werk spreken elkaar tegen")
+    closing_targets = {target.casefold() for target in GITHUB_CLOSING.findall(body)}
+    if partial:
+        if closing_targets:
+            raise SyncError("Een deel-PR mag geen GitHub-issue sluiten")
+        if LINEAR_BRANCH_ISSUE.search(branch):
+            raise SyncError("Een deel-PR mag geen Linear-ID in de branchnaam hebben")
+        return
+
+    issue = binding.github_issue
+    matching_targets = {f"#{issue}", f"{REPOSITORY.casefold()}#{issue}"}
+    if not closing_targets.intersection(matching_targets):
+        raise SyncError(f"Een afrondende PR moet het gekoppelde GitHub-issue #{issue} sluiten")
 
 
 class Api:
@@ -207,7 +236,8 @@ class Linear:
 
 def snapshot(binding: Binding, github, pulls: list[dict]) -> dict:
     issue, comments = github.issue_and_comments(binding.github_issue)
-    relevant = [p for p in pulls if binding.linear_issue in PRIMARY.findall(p.get("body") or "")]
+    relevant = [p for p in pulls if any(identifier.upper() == binding.linear_issue
+                                      for _, identifier in PRIMARY.findall(p.get("body") or ""))]
     receipts = []
     for comment in sorted(comments, key=lambda c: c.get("updated_at", ""), reverse=True):
         if comment.get("author_association") in TRUSTED:
@@ -315,7 +345,7 @@ def main(argv=None) -> int:
         if args.validate_event:
             event = json.loads(args.validate_event.read_text(encoding="utf-8"))
             pr = event["pull_request"]
-            validate_pr_handoff(pr.get("body") or "", pr["head"]["sha"], bindings)
+            validate_pr_handoff(pr.get("body") or "", pr["head"]["sha"], bindings, branch=pr["head"]["ref"])
             print("PR-overdracht geldig op exacte head")
         elif args.check_config:
             print(f"Scope en {len(bindings)} unieke koppelingen geldig")

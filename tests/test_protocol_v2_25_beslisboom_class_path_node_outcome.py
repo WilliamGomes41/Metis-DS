@@ -41,7 +41,7 @@ def test_v225_approval_manifest_matches_protocol_bytes() -> None:
 def test_v225_delta_exists_and_is_the_live_baseline() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
 
     assert DELTA.is_file()
     assert "**Status:** Approved for project use" in delta
@@ -68,7 +68,7 @@ def test_v225_delta_exists_and_is_the_live_baseline() -> None:
 def test_v225_mentions_beslisboom_path_node_outcome() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "beslisboom" in delta
     assert "`path`" in delta
@@ -91,7 +91,7 @@ def test_v225_mentions_beslisboom_path_node_outcome() -> None:
 def test_v225_does_not_redesign_the_four_layers_or_write_v214() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "This delta MUST NOT invent a fifth layer" in delta
     assert "MUST NOT collapse those four" in delta
     assert "source/evidence → canonical knowledge → governance → product" in delta
@@ -106,7 +106,7 @@ def test_v225_does_not_redesign_the_four_layers_or_write_v214() -> None:
 def test_v225_supersedes_v27_boom_out_of_mvp_as_knowledge_class() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "kennisplatform `story.html` boom players MUST stay entirely out of the MVP / first console **as a knowledge class**" in delta
     assert "beslisboom class is in the MVP for researcher ingest+review" in delta
@@ -129,7 +129,7 @@ def test_v225_no_unqualified_claim_story_html_wholly_out_of_mvp() -> None:
     out of MVP without the v2.25 supersession pointer."""
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     governance = _read(ROOT / "docs" / "GOVERNANCE.md")
 
@@ -160,7 +160,7 @@ def test_v225_no_unqualified_claim_story_html_wholly_out_of_mvp() -> None:
 def test_v225_klasse_includes_beslisboom_and_selects_review_path() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "SUPERSEDES any reading that Inleveren needs a separate path control distinct from Klasse" in delta
     assert "Closed Klasse set MUST include `beslisboom`" in delta
@@ -226,7 +226,7 @@ def test_v225_relations_applies_if_and_no_silent_fusion() -> None:
 def test_v225_review_functions_and_empty_outcomes() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Confirm `path` as structure (batch OK)" in delta
     assert "Confirm `node` (slow if it gates advice)" in delta
     assert "Confirm `outcome` as advice" in delta
@@ -264,7 +264,7 @@ def test_v225_freeze_locator_and_not_live_rest_as_sole_truth() -> None:
 def test_v225_class_axis_lighter_than_richtlijn() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "lighter/derived class than `richtlijn`" in delta
     assert "Heavier class MUST NOT be filled by lighter class" in delta
     assert "Promoting or substituting boom `outcome`s for unpublished or missing guideline `recommendation`s MUST NOT happen silently" in delta
@@ -277,7 +277,7 @@ def test_v225_class_axis_lighter_than_richtlijn() -> None:
 def test_v225_console_not_nurse_tree_player_reviewing_allowed() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "MUST NOT become a nurse-facing interactive tree player" in delta
     assert "still true for console UX" in delta
     assert "Reviewing beslisboom objects as researchers is allowed" in delta
@@ -288,7 +288,7 @@ def test_v225_console_not_nurse_tree_player_reviewing_allowed() -> None:
 def test_v225_next_code_is_forge_beslisboom_path_not_this_pr() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "The next **code** MUST be Forge (Implementation engineer) on the existing kernel/console for **exactly** the beslisboom path wave" in delta
     assert "Klasse includes beslisboom; Klasse choice selects review path" in delta
@@ -308,7 +308,7 @@ def test_v225_next_code_is_forge_beslisboom_path_not_this_pr() -> None:
 def test_v225_g2_stays_blocked_publish_stays_blocked() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     changelog = _read(ROOT / "CHANGELOG.md")
     assert "G2 remains BLOCKED" in delta or "G2 stays BLOCKED" in delta
     assert "`publish()` stays G2-BLOCKED" in delta or "`publish()` remains G2-BLOCKED" in delta
@@ -323,7 +323,7 @@ def test_v225_g2_stays_blocked_publish_stays_blocked() -> None:
 def test_v225_handoff_must_not_be_recreated() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "`HANDOFF.md` MUST NOT be recreated" in delta
     assert "HANDOFF.md MUST NOT opnieuw worden aangemaakt" in root_protocol
     assert "HANDOFF.md" in roadmap
@@ -333,7 +333,7 @@ def test_v225_handoff_must_not_be_recreated() -> None:
 def test_v225_keeps_continentie_evidence_and_every_guideline_law() -> None:
     delta = _read(DELTA)
     root_protocol = _read(ROOT / "PROTOCOL.md")
-    roadmap = _read(ROOT / "ROADMAP.md")
+    roadmap = _read(ROOT / "docs/history/protocol-v2/ROADMAP_PRE_V3_2026-09-10.md")
     assert "Historical Continentie evidence sentences in Protocol v2.16–v2.19 MUST remain" in delta
     assert "PROTOCOL.md is every-guideline law" in delta or "PROTOCOL.md is wet voor iedere richtlijn" in root_protocol
     assert "PROTOCOL.md is wet voor iedere richtlijn, niet Continentie-only" in root_protocol

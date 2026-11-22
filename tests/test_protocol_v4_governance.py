@@ -24,7 +24,6 @@ def test_v4_is_current_and_v3_is_frozen() -> None:
     assert "**Versie:** 4.3.1" in current
     assert old.startswith("# V&VN Data Services — Protocol v3")
     assert "**Versie:** 3.0.0" in old
-    assert read("ROADMAP.md").startswith("# Metis — Roadmap v4")
     assert read("docs/history/protocol-v3/ROADMAP.md").startswith("# Metis — Roadmap v3")
     assert "Protocol v4.3.1" in read("docs/GOVERNANCE.md")
 
@@ -111,8 +110,8 @@ def test_v4_3_is_vigerend_while_implementation_gaps_remain_explicit() -> None:
     assert protocol.startswith("# V&VN Data Services — Protocol v4.3.1\n")
     assert "**Status:** Vigerend — enige actuele protocolnorm" in protocol
     assert "**Versie:** 4.3.1" in protocol
-    assert "## R4.6 Vormingskader per bron invoeren" in read("ROADMAP.md")
-    assert "norm vastgelegd; implementatie open" in read("ROADMAP.md")
+    assert "https://github.com/WilliamGomes41/Metis-DS/issues/877" in protocol
+    assert "https://github.com/WilliamGomes41/Metis-DS/issues/695" in protocol
     workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
     assert "product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.3.1)" in workflow
     assert "Alle v2.6–v2.11-regels blijven van kracht" not in workflow
