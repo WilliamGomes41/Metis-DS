@@ -442,9 +442,8 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
         notice = ""
         if document and not rows:
             notice = (
-                '<div class="banner warn publication-missing-document" role="status">'
-                'Dit document is niet beschikbaar. '
-                '<a href="/publish">Terug naar Publicatieoverzicht</a></div>'
+                '<div class="banner warn" role="status">Dit document is niet beschikbaar.'
+                '<div><a href="/publish">Terug naar Publicatieoverzicht</a></div></div>'
             )
         elif request.query_params.get("published") == "yes":
             notice = '<div class="banner ok">Publicatie voltooid.</div>'

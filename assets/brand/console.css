@@ -2325,7 +2325,6 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
 .source-handled-mark { font-weight: 600; }
 
 .publication-room > .doc-list { gap: var(--space-6); }
-.publication-missing-document > a { display: inline-block; }
 .publication-room .doc-card {
   padding: var(--space-5);
   min-width: 0;
