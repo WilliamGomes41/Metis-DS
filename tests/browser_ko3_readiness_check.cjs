@@ -24,10 +24,15 @@ const path = require('node:path');
     await Promise.all([target.waitForURL(url => url.pathname !== '/login'),
       target.locator('button[type=submit]').click()]);
   }
+  const missing = page.getByRole('status').filter({hasText: 'Dit document is niet beschikbaar.'});
   const card = slug => `[data-publish-document="${manifest.documents[slug].snapshot_id}"]`;
   const open = async slug => {
     await page.goto(base + '/publish?document=' + manifest.documents[slug].snapshot_id);
     await page.locator(card(slug)).scrollIntoViewIfNeeded();
+    assert.equal(await page.locator(card(slug)).count(), 1, 'selected snapshot appears once');
+    assert.equal(await page.locator('[data-publish-document]').first().getAttribute('data-publish-document'),
+      manifest.documents[slug].snapshot_id, 'selected snapshot comes first');
+    assert.equal(await missing.count(), 0);
   };
   const shoot = async name => {
     const scroll = await page.evaluate(() => ({x: scrollX, y: scrollY}));
@@ -45,13 +50,27 @@ const path = require('node:path');
   };
   await login(page, 'publisher');
   if (phase === 'before') {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({width, height: 844});
+      const unavailable = await page.goto(base + '/publish?document=stale-publication-snapshot');
+      assert.equal(unavailable.status(), 200);
+      assert.equal(await missing.isVisible(), true, 'a stale document link explains why the selection is missing');
+      const back = missing.getByRole('link', {name: 'Terug naar Publicatieoverzicht', exact: true});
+      assert.equal(await back.getAttribute('href'), '/publish');
+      assert.equal(await page.locator('[data-publish-form], [data-withdraw-form]').count(), 0);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await shoot('missing-document-' + width);
+      await back.focus();
+      await Promise.all([page.waitForURL(base + '/publish'), page.keyboard.press('Enter')]);
+      assert.equal(await missing.count(), 0);
+      assert.equal(await page.locator('[data-publish-document]').count(), Object.keys(manifest.documents).length);
+    }
+    await page.setViewportSize({width: 1440, height: 1000});
     const observations = {};
     for (const slug of ['main', 'second', 'source', 'conflict']) {
       const before = await proof(slug);
       assert.deepEqual(before.blockers, manifest.documents[slug].expected_blockers);
       await open(slug);
-      assert.equal(await page.locator('[data-publish-document]').first().getAttribute('data-publish-document'),
-        manifest.documents[slug].snapshot_id, 'selected document comes first');
       const others = page.locator('.publication-other-documents');
       assert.equal(await others.getAttribute('open'), null, 'other documents start collapsed');
       await others.locator('summary').focus();
