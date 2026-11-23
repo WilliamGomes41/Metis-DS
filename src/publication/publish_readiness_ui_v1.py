@@ -439,6 +439,15 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             )["presentation_status"]
             rows.append(_card(envelope, view, display_status))
 
+        notice = ""
+        if document and not rows:
+            notice = (
+                '<div class="banner warn" role="status">Dit document is niet beschikbaar.'
+                '<div><a href="/publish">Terug naar Publicatieoverzicht</a></div></div>'
+            )
+        elif request.query_params.get("published") == "yes":
+            notice = '<div class="banner ok">Publicatie voltooid.</div>'
+
         if rows and other_rows:
             rows.append('<details class="publication-other-documents"><summary>Andere documenten ('
                         + str(len(other_rows)) + ')</summary><div class="doc-list">'
@@ -446,18 +455,13 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
         else:
             rows.extend(other_rows)
 
-        success = ""
-        if request.query_params.get("published") == "yes":
-            success = (
-                '<div class="banner ok">Publicatie voltooid.</div>'
-            )
         return _page(
             f'''
             {_nav(account, "publish")}
             <section class="room publication-room">
               <h1>Publiceren</h1>
               {_task_links("publish")}
-              {success}
+              {notice}
               <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten. Een ingeleverd document verschijnt hier; publiceren kan zodra de review is afgerond.</p>'}</div>
             </section>
             '''
