@@ -417,7 +417,16 @@ def test_ci_reuses_full_suite_for_native_proof_artifacts() -> None:
     import re
     workflow = (ROOT / ".github/workflows/ci.yml").read_text().split("\n  test:\n", 1)[1]
     proof_commands = re.findall(r"export_test_evidence.py ([^\n]+)", workflow)
-    assert len(proof_commands) == 7
+    outputs = [command.split("--output ", 1)[1].split()[0] for command in proof_commands]
+    assert len(set(outputs)) == len(outputs)
+    assert set(outputs) == {
+        "output/pg-without-mirrors.xml", "output/reprocessing-708.xml", "output/blockage-diagnostics.xml",
+        "output/refusal-postgres.xml", "output/a10-native.xml", "output/a08-native.xml",
+        "output/processing-trace.xml", "output/publication-references.xml",
+    }
+    reference_command = proof_commands[outputs.index("output/publication-references.xml")]
+    assert reference_command.endswith(" tests/test_publication_references_v1.py")
+    assert "python scripts/check_publication_reference_evidence.py output/publication-references.xml" in workflow
     for command in proof_commands:
         assert "--source output/d6a-after.xml" in command
     # A timing-gate failure still leaves executed JUnit evidence. Every native
