@@ -17,6 +17,7 @@ def verify_active_publication_sources(
     *,
     canonical_store: Any,
     source_store: Any,
+    snapshot_proofs: dict[str, dict] | None = None,
 ) -> int:
     """Verify each unique active source snapshot by fresh Blob read-back.
 
@@ -38,7 +39,8 @@ def verify_active_publication_sources(
         if snapshot_id in verified:
             continue
         try:
-            release = canonical_store.release_for_snapshot(snapshot_id)
+            release = (canonical_store.release_for_snapshot(snapshot_id) if snapshot_proofs is None
+                       else snapshot_proofs.get(snapshot_id))
         except CanonicalPublicationStoreError as exc:
             raise ProductSourceAuthorityError("product_source_lineage_unavailable") from exc
         except Exception as exc:
