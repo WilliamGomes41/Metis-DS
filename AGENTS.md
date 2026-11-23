@@ -53,6 +53,7 @@ Read the selected skill before using it; choose only what the task needs. Skills
 | --- | --- |
 | [Impeccable](.agents/skills/impeccable/SKILL.md) | Agents MUST read and apply it for every frontend creation or change without the user naming it. Follow the [Metis integration](docs/agents/impeccable.md). |
 | [pstack (Poteto)](docs/agents/shared-skills.md) | Explicit requests for how/why, impact or a decision trail; use `principle-explain-the-number` before reporting or acting on measured numbers. |
+| [summarize-pr](.agents/skills/summarize-pr/SKILL.md) | Use for every requested GitHub pull request review and for explicit requests for a PR overview. Deliver a validated local HTML overview and, for reviews, the code-review findings. Respect a requested findings-only format. |
 | [Emil Kowalski](docs/agents/emil-design-skills.md) | Relevant interaction detail, worst-case data or phone behavior; motion-opportunity analysis is read-only. Complements mandatory Impeccable. |
 | [Stitch](https://github.com/WilliamGomes41/stitch-skills) | Compare variants before implementing new screens or substantial redesigns. Requires an installed plugin and MCP/account connection; see the [shared skill index](docs/agents/shared-skills.md#external-stitch-plugin). |
 | [Matt Pocock](.agents/skills/improve-codebase-architecture/SKILL.md) | Only on an explicit request for an architecture survey; do not start unsolicited scans or refactors. |
