@@ -65,8 +65,8 @@ def verify_package(directory, *, commit, repository, run_id, attempt):
 
 def seal_package(directory, *, commit, repository, run_id, attempt):
     validate_identity(commit, repository, run_id, attempt)
-    if sys.version_info[:2] != (3, 12):
-        raise ValueError('Azure package smoke requires Python 3.12')
+    if sys.version_info[:2] != (3, 13):
+        raise ValueError('Azure package smoke requires Python 3.13')
     directory = Path(directory)
     archive = directory/'metis-console.zip'
     if marker(archive) != commit:

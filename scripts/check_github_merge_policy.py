@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check a G1 API snapshot or print a strengthening-only PUT plan; no API writes."""
+"""Check a G1 API snapshot or print a scoped PUT plan without making API writes."""
 from __future__ import annotations
 
 import argparse
@@ -53,13 +53,15 @@ def validate_ruleset(snapshot: dict, policy: dict) -> list[str]:
             errors.append(f"missing required check: {name}")
         elif current[name].get("integration_id") != expected["integration_id"]:
             errors.append(f"required check must come from GitHub Actions: {name}")
+    for retired in policy.get("retired_status_checks", []):
+        if retired["context"] in current:
+            errors.append(f"retired check is still required: {retired['context']}")
     if review["required_review_thread_resolution"] is not True:
         errors.append("review threads must be resolved")
     return errors
 
 
-def plan_ruleset(snapshot: dict, policy: dict) -> dict:
-    rule_parameters(snapshot, policy)
+def plan_ruleset(snapshot: dict, policy: dict, *, retire_legacy_test_checks: bool = False) -> dict:
     planned = deepcopy(snapshot)
     checks, review = rule_parameters(planned, policy)
     checks["strict_required_status_checks_policy"] = True
@@ -73,6 +75,16 @@ def plan_ruleset(snapshot: dict, policy: dict) -> dict:
             raise ValueError(f"unexpected check integration: {expected['context']}")
         else:
             existing["integration_id"] = expected["integration_id"]
+    if retire_legacy_test_checks:
+        retired = {
+            check["context"]: check["integration_id"] for check in policy["retired_status_checks"]
+        }
+        for name, integration in retired.items():
+            if name in current and current[name].get("integration_id") != integration:
+                raise ValueError(f"unexpected legacy check integration: {name}")
+        checks["required_status_checks"] = [
+            check for check in checks["required_status_checks"] if check["context"] not in retired
+        ]
     review["required_review_thread_resolution"] = True
     return {key: planned[key] for key in WRITABLE}
 
@@ -81,12 +93,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ruleset", type=Path, required=True, help="fresh GitHub GET response")
     parser.add_argument("--plan", action="store_true", help="print PUT JSON; never apply it")
+    parser.add_argument(
+        "--retire-legacy-test-checks", action="store_true",
+        help="explicitly replace the two verified legacy contexts in a cutover plan",
+    )
     args = parser.parse_args(argv)
+    if args.retire_legacy_test_checks and not args.plan:
+        parser.error("--retire-legacy-test-checks requires --plan")
     try:
         policy = json.loads(POLICY.read_text(encoding="utf-8"))
         snapshot = json.loads(args.ruleset.read_text(encoding="utf-8"))
         if args.plan:
-            print(json.dumps(plan_ruleset(snapshot, policy), indent=2))
+            payload = plan_ruleset(snapshot, policy, retire_legacy_test_checks=args.retire_legacy_test_checks)
+            print(json.dumps(payload, indent=2))
             print("PLAN ONLY: apply separately, then GET and validate live state.", file=sys.stderr)
             return 0
         errors = validate_ruleset(snapshot, policy)

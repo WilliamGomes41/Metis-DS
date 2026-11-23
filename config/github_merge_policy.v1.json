@@ -3,8 +3,11 @@
   "repository": "WilliamGomes41/Metis-DS",
   "ruleset_id": 21686159,
   "required_status_checks": [
-    {"context": "test (3.12)", "integration_id": 15368},
-    {"context": "test (3.13)", "integration_id": 15368},
+    {"context": "test", "integration_id": 15368},
     {"context": "handoff-contract", "integration_id": 15368}
+  ],
+  "retired_status_checks": [
+    {"context": "test (3.12)", "integration_id": 15368},
+    {"context": "test (3.13)", "integration_id": 15368}
   ]
 }

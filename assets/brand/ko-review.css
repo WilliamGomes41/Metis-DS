@@ -68,6 +68,11 @@
 .ko-adjustment { display: none; font-size: 13px; }
 .ko-assessment-form:has(input[value=adjust]:checked) .ko-adjustment { display: block; }
 .ko-actions { border-top: 1px solid var(--line); display: flex; align-items: center; gap: 22px; padding-top: 22px; margin-top: 12px; }
+.ko-assessment-form .ko-actions { flex-wrap: wrap; padding-block-start: 2px; row-gap: 8px; }
+.ko-submit-feedback { display: grid; flex: 0 0 100%; min-width: 0; font-size: .875rem; line-height: 1.3; overflow-wrap: anywhere; }
+.ko-submit-feedback > * { grid-area: 1 / 1; min-width: 0; margin: 0; }
+.ko-submit-feedback > span { visibility: hidden; }
+.ko-assessment-form button[aria-disabled="true"] { cursor: progress; }
 .ko-primary { background: var(--paars); border: 1px solid var(--paars); color: var(--wit); border-radius: 8px; padding: 12px 20px; font-weight: 700; font-size: 14px; cursor: pointer; }
 .ko-primary:disabled { opacity: .45; cursor: not-allowed; }
 .ko-text-button { padding: 5px 0; border: 0; background: none; color: var(--paars); font: inherit; cursor: pointer; }

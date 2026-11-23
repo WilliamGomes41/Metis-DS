@@ -26,8 +26,8 @@ CONSOLE_REQUIREMENTS_NAME = "requirements-console.txt"
 DEPLOY_COMMIT_MARKER = "config/deployed_commit.txt"
 AZURE_MANYLINUX_PLATFORM = "manylinux2014_x86_64"
 AZURE_ABI3_PLATFORM = "manylinux_2_28_x86_64"
-AZURE_PYTHON_VERSION = "3.12"
-AZURE_PYTHON_ABI = "cp312"
+AZURE_PYTHON_VERSION = "3.13"
+AZURE_PYTHON_ABI = "cp" + AZURE_PYTHON_VERSION.replace(".", "")
 INCLUDE_DIRS = (
     "src",
     "scripts",

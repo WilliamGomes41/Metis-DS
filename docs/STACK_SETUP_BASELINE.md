@@ -37,8 +37,8 @@ The G0 local operations console MVP is implemented in this repository (`vvn-data
 | Capability | Current implementation | Target / production implication | Required by | Cost/setup exposure | Status |
 |---|---|---|---|---|---|
 | Authoritative code | GitHub repository `WilliamGomes41/VENVN-DS` (public during the declared MVP period under Protocol v2.5) | After MVP restore private hosting or an organization plan that can protect a private default branch | G1 | Current free personal plan cannot protect a private default branch (403); public MVP is the accepted workaround | **Implemented:** G1 technical protection is ON |
-| CI | GitHub Actions, Python 3.12/3.13; isolated Playwright 1.58.2 + Chromium review checks on 3.12 | Continue clean lockfile install, preflight, compile and tests; browser tooling is ephemeral and uses only synthetic fixtures | G1 | Existing GitHub usage; browser checks add runner minutes and package downloads, no hosted service or product runtime dependency; monitor quota/plan | Implemented |
-| Runtime language | Python `>=3.12,<3.14` | Pin supported runtime in deployed container | G1/G8 | No separate service cost | Implemented |
+| CI | GitHub Actions; complete suite and isolated Playwright 1.58.2 + Chromium checks on 3.13; targeted compatibility checks on 3.12 | Continue clean lockfile install, preflight, compile and tests; browser tooling is ephemeral and uses only synthetic fixtures | G1 | Existing GitHub usage; browser checks add runner minutes and package downloads, no hosted service or product runtime dependency; monitor quota/plan | Implemented |
+| Runtime language | Python `>=3.12,<3.14`; release container, Product API image and ZIP target Python 3.13 | Pin the release runtimes to the same version tested by CI | G1/G8 | No separate service cost | Implemented |
 | Packaging/runtime image | Docker, `python:3.13-slim` | A managed Azure container/web runtime must be selected before Azure DEV | G8 | **New hosting cost likely** | Decision open |
 | Container image registry | None required locally | May be needed depending selected Azure deployment route | G8 | Possible registry/storage cost | Decision open; do not assume ACR until runtime is chosen |
 | Product API | FastAPI + Uvicorn | Externally reachable machine-to-machine API | G8 | Included in runtime; network/ingress may add cost | Implemented locally |
@@ -57,6 +57,11 @@ The G0 local operations console MVP is implemented in this repository (`vvn-data
 | Backup/recovery | Existing PostgreSQL workflow and publication-chain backup, restore and integrity owners; immutable source bytes retain their source-store authority. See `docs/RUNTIME_DATA_RECOVERY.md` | Configure and verify backup storage, retention and recovery for the selected deployment; local files are not workflow/publication authority | G8 | Storage/retention cost | Recovery implementation exists; operational configuration and verification remain deployment-specific |
 | Domain/TLS | Local API endpoints | Azure-managed endpoint may suffice for pilot; custom domain/DNS/certificate only if governance/product requires it | G8 if externally exposed | Conditional | Not yet required |
 | Infrastructure as code | No Bicep/Terraform/`azd` deployment baseline found | Deployment resources/configuration should become reproducible before production | G8 | Engineering/setup effort; service costs captured above | Not implemented |
+
+**G1-doelchecks** zijn `test` en `handoff-contract`.
+
+**Tijdelijke G1-checks** zijn `test (3.12)` en `test (3.13)`. Ze volgen de
+uitslag van `test` tijdens de overstap.
 
 ### Optional Bend development experiment
 
