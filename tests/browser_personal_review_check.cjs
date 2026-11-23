@@ -156,7 +156,9 @@ const {writeFile} = require('node:fs/promises');
     assert.equal(await page.locator('[data-review-receipt]').count(),1);
     assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
     assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);
-    assert.equal(await page.evaluate(() => document.activeElement.textContent), 'Review opgeslagen');
+    // Chromium can apply autofocus after DOMContentLoaded.
+    await page.locator('[data-review-receipt] h1:focus', {hasText: /^Review opgeslagen$/})
+      .waitFor({state:'visible', timeout:5000});
     await proof('personal-saved-receipt',width);
     const after = await state();
     const decisions = after.events.filter(event => event.object_id === d.context &&
