@@ -20,7 +20,7 @@ from src.publication.canonical_publication_postgres_v1 import (
     PostgresCanonicalConfig,
 )
 
-VALID_SCOPES = frozenset(
+DEFAULT_SCOPES = frozenset(
     {
         "retrieve",
         "knowledge:read",
@@ -30,6 +30,9 @@ VALID_SCOPES = frozenset(
     }
 )
 VALID_CONTENT_SCOPES = frozenset({"ALL_PUBLISHED", "RESOURCE_SET"})
+CHECK_SCOPE = "publication-references:check"
+VALID_SCOPES = DEFAULT_SCOPES | {CHECK_SCOPE}
+
 REQUIRED_TABLES = frozenset(
     {
         "tenants",
@@ -137,6 +140,7 @@ class ApiAccessPrincipal:
     requests_per_minute: int
     max_top_k: int
     allowed_topics: frozenset[str] = frozenset({"*"})
+    policy_versions: tuple[int, int] | None = None
 
     def has_scope(self, scope: str) -> bool:
         return scope in self.scopes
@@ -1321,11 +1325,14 @@ class PostgresApiAccessStore:
         digest = hash_api_key(supplied)
         try:
             with self._connect() as con:
+                con.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                 row = con.execute(
                     """
                     SELECT
                         c.credential_id,
                         c.state AS credential_state,
+                        t.policy_version AS tenant_policy_version,
+                        a.policy_version AS application_policy_version,
                         a.application_id,
                         a.state AS application_state,
                         a.content_scope AS application_content_scope,
@@ -1402,6 +1409,7 @@ class PostgresApiAccessStore:
             application_id=str(row["application_id"]),
             credential_id=str(row["credential_id"]),
             scopes=effective_scopes,
+            policy_versions=(row["tenant_policy_version"], row["application_policy_version"]),
             allowed_document_ids=docs,
             requests_per_minute=min(int(row["tenant_rpm"]), int(row["application_rpm"])),
             max_top_k=min(int(row["tenant_max_top_k"]), int(row["application_max_top_k"])),

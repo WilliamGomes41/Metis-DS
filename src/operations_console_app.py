@@ -25,7 +25,7 @@ from starlette.concurrency import run_in_threadpool
 
 from src.documents.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.review.four_eyes_v1 import requires_four_eyes
-from src.settings.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
+from src.settings.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, DEFAULT_SCOPES, VALID_SCOPES
 from src.review.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
 from src.vorming.heading_parent_list_v1 import (
     heading_visible_text,
@@ -4120,14 +4120,8 @@ def create_console_app(
 
         form = ""
         if "publisher" in account["roles"]:
-            scope_boxes = "".join(
-                f'<label class="check"><input type="checkbox" name="application_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
-                for scope in sorted(VALID_SCOPES)
-            )
-            tenant_scope_boxes = "".join(
-                f'<label class="check"><input type="checkbox" name="tenant_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
-                for scope in sorted(VALID_SCOPES)
-            )
+            scope_boxes = _scope_boxes("application_scopes", sorted(DEFAULT_SCOPES))
+            tenant_scope_boxes = _scope_boxes("tenant_scopes", sorted(DEFAULT_SCOPES))
             form = f"""
               <form method="post" action="/settings/api-access/provision" class="stack">
                 <div class="sections">

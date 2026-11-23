@@ -14,6 +14,7 @@ from src.console_performance_v1 import connect_postgres
 
 import json
 import os
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
@@ -789,6 +790,16 @@ class PostgresCanonicalPublicationStore:
             for row in rows
         }
 
+    def publication_reference_observation(self, selectors: list[tuple[str, str, str, str]]):
+        from src.publication.publication_reference_read_v1 import observe
+
+        try:
+            return observe(self, selectors)
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("publication_reference_read_failed") from exc
+
     def active_registry_summary(self, snapshot_id: str) -> list[dict[str, Any]]:
         """Stored registry metadata only; no canonical-content/integrity preflight."""
         try:
@@ -812,10 +823,10 @@ class PostgresCanonicalPublicationStore:
         except Exception as exc:
             raise CanonicalPublicationStoreError("canonical_postgres_read_failed") from exc
 
-    def active_publication_rows(self) -> list[dict[str, Any]]:
+    def active_publication_rows(self, *, connection: Any = None) -> list[dict[str, Any]]:
         """Read the complete active publication set used to derive API projection."""
         try:
-            with self._connect() as con:
+            with (nullcontext(connection) if connection is not None else self._connect()) as con:
                 rows = con.execute(
                     """
                     SELECT c.canonical_json,
