@@ -85,6 +85,28 @@ def test_publisher_can_provision_consumer_and_secret_is_only_in_issue_response(a
     assert len(access.store.list_consumers())==1
 
 
+def test_new_status_scope_requires_explicit_selection_on_both_grants(access):
+    from html.parser import HTMLParser
+
+    class Defaults(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.boxes = {}
+
+        def handle_starttag(self, tag, attributes):
+            attrs = dict(attributes)
+            if tag == "input" and attrs.get("type") == "checkbox":
+                self.boxes[(attrs.get("name"), attrs.get("value"))] = "checked" in attrs
+
+    response = access.client().get("/settings/api-access")
+    assert response.status_code == 200
+    defaults = Defaults()
+    defaults.feed(response.text)
+    for name in ("tenant_scopes", "application_scopes"):
+        assert defaults.boxes[(name, "retrieve")] is True
+        assert defaults.boxes[(name, "publication-references:check")] is False
+
+
 def test_non_publisher_cannot_provision_api_access(access):
     response = access.client('researcher.rik').post('/settings/api-access/provision', data=_provision_payload())
     assert response.status_code==403

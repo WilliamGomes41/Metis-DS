@@ -396,6 +396,19 @@ jobs:
           name: suite-timing-3.13
           path: output/d6a-*
           if-no-files-found: warn
+      - name: Require publication reference behavior on the tested commit
+        if: ${{ !cancelled() }}
+        run: |
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/publication-references.xml tests/test_publication_references_v1.py
+          python scripts/check_publication_reference_evidence.py output/publication-references.xml
+      - name: Upload publication reference evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: publication-references-3.13
+          path: output/publication-references.xml
+          overwrite: true
+          if-no-files-found: error
       - name: D5 PostgreSQL lifecycle without disk mirrors
         if: ${{ !cancelled() }}
         run: |

@@ -23,13 +23,14 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, ConfigDict, Field
 
 from .abstain_catalog_v1 import sentence_for
-from .settings.api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
+from .settings.api_access_v1 import CHECK_SCOPE, ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
 from .retrieval.answerability_gate_v1 import AnswerabilityConfig
 from .publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from .g2_source_store import AzureBlobSourceStore
 from .retrieval.hybrid_retrieval_v1 import HybridConfig
 from .retrieval.lexical_retrieval_v1 import RetrievalConfig
 from .object_taxonomy_v1 import serving_block_reason
+from .product_publication_references_v1 import ReferenceBatch, ReferenceCheckResponse, evaluate
 from .product_security_v1 import SlidingWindowRateLimiter, TenantPolicy, TenantRegistry
 from .product_source_authority_v1 import ProductSourceAuthorityError, verify_active_publication_sources
 from .retrieval.retrieval_projection_v2 import build_projection
@@ -500,11 +501,39 @@ class ProductState:
             raise HTTPException(status_code=429, detail={"code": "rate_limit_exceeded"}, headers={"Retry-After": str(retry_after)})
         return tenant
 
+    def check_references(self, principal, credential, batch, request_id):
+        store = self.canonical_publication_store
+        for _ in range(2):
+            if (not isinstance(principal, ApiAccessPrincipal) or not principal.policy_versions
+                    or CHECK_SCOPE not in principal.scopes):
+                raise HTTPException(403, detail={"code": "scope_denied", "required_scope": CHECK_SCOPE})
+            if self.mode != "real" or store is None:
+                raise HTTPException(503, detail={"code": "publication_reference_authority_unavailable"})
+            try:
+                selectors = list(dict.fromkeys(ref.selector() for ref in batch.references))
+                observation = store.publication_reference_observation(selectors)
+                verify_active_publication_sources(observation.active, canonical_store=store,
+                                                  source_store=self.immutable_source_store,
+                                                  snapshot_proofs=observation.sources)
+                results = evaluate(observation, batch, principal,
+                                   lambda record, docs: self._record_is_entitled(principal, record, docs))
+                current = self.access_authenticator.authenticate(credential)
+            except (CanonicalPublicationStoreError, ProductSourceAuthorityError, ApiAccessStoreError, ValueError) as exc:
+                raise HTTPException(503, detail={"code": "publication_reference_authority_unavailable"}) from exc
+            if current is None:
+                raise HTTPException(401, detail={"code": "invalid_api_key"}, headers={"WWW-Authenticate": "Bearer"})
+            if current == principal:
+                return ReferenceCheckResponse(api_version=API_VERSION, request_id=request_id,
+                                              observed_at=observation.observed_at, results=results)
+            principal = current
+        raise HTTPException(503, detail={"code": "publication_reference_access_unstable"})
+
     def require_scope(self, tenant: ProductAccessPrincipal, scope: str) -> None:
         if not tenant.has_scope(scope):
             raise HTTPException(status_code=403, detail={"code": "scope_denied", "required_scope": scope})
 
-    def _record_is_entitled(self, tenant: ProductAccessPrincipal, record: dict[str, Any]) -> bool:
+    def _record_is_entitled(self, tenant: ProductAccessPrincipal, record: dict[str, Any],
+                            object_documents: dict[str, str] | None = None) -> bool:
         """Authorize all published evidence represented inside one derived record.
 
         Retrieval text may embed reviewed context from related canonical
@@ -516,7 +545,8 @@ class ProductState:
         if not tenant.allows_document(document_id) or not tenant.allows_topics(md.get("topic") or []):
             return False
         for context_object_id in md.get("context_object_ids") or []:
-            context_document_id = self._object_document_ids.get(str(context_object_id))
+            documents = self._object_document_ids if object_documents is None else object_documents
+            context_document_id = documents.get(str(context_object_id))
             if not context_document_id:
                 # REAL mode builds this map from every active canonical object,
                 # including non-searchable context. Synthetic fixture files may
@@ -845,9 +875,12 @@ def create_product_app(
     app.openapi = product_openapi
     bearer = HTTPBearer(auto_error=False, scheme_name="VVNApiKeyBearer", description="Tenant API key as Bearer token")
 
-    def current_tenant(credentials: HTTPAuthorizationCredentials | None = Security(bearer), header_credential: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> ProductAccessPrincipal:
+    def presented_credential(credentials: HTTPAuthorizationCredentials | None = Security(bearer), header_credential: str | None = Header(default=None, alias="X-API-Key", include_in_schema=False)) -> str | None:
         authorization = f"Bearer {credentials.credentials}" if credentials else None
-        return state.auth(_read_presented_credential(authorization, header_credential))
+        return _read_presented_credential(authorization, header_credential)
+
+    def current_tenant(credential: str | None = Depends(presented_credential)) -> ProductAccessPrincipal:
+        return state.auth(credential)
 
     def logged_response(*, request_id: str, tenant: ProductAccessPrincipal, endpoint: str, started: float, status_code: int, behavior: str | None = None, query: str | None = None, object_ids: list[str] | None = None) -> None:
         state.ledger.record(request_id=request_id, tenant_id=tenant.tenant_id, endpoint=endpoint, status_code=status_code, behavior=behavior, result_count=len(object_ids or []), query=query, result_object_ids=object_ids, latency_ms=(time.perf_counter() - started) * 1000.0, synthetic_fixture=state.synthetic)
@@ -877,6 +910,19 @@ def create_product_app(
     def retrieve(req: RetrieveRequest, request: Request, tenant: ProductAccessPrincipal = Depends(current_tenant)) -> dict[str, Any]:
         started = time.perf_counter(); result = state.retrieve(tenant, req); result["request_id"] = request.state.request_id; result["tenant_id"] = tenant.tenant_id
         ids = [x["knowledge_object_id"] for x in result["results"]]; logged_response(request_id=request.state.request_id, tenant=tenant, endpoint="/v1/retrieve", started=started, status_code=200, behavior=result["status"], query=req.query, object_ids=ids); return result
+
+    @app.post("/v1/publication-references/check", response_model=ReferenceCheckResponse,
+              responses=_product_responses(ReferenceCheckResponse, 401, 403, 429, 503),
+              openapi_extra={"x-metis-required-scope": CHECK_SCOPE})
+    def check_references(batch: ReferenceBatch, request: Request, response: Response,
+                         tenant: ProductAccessPrincipal = Depends(current_tenant),
+                         credential: str | None = Depends(presented_credential)):
+        started = time.perf_counter()
+        result = state.check_references(tenant, credential, batch, request.state.request_id)
+        response.headers["Cache-Control"] = "no-store"
+        logged_response(request_id=request.state.request_id, tenant=tenant,
+                        endpoint="/v1/publication-references/check", started=started, status_code=200)
+        return result
 
     @app.get("/v1/decision-graphs/{snapshot_id}", response_model=None,
              responses=_product_responses(DecisionGraphResponse, 401, 403, 404, 429, 503),

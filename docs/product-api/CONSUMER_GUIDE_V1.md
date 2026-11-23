@@ -180,3 +180,28 @@ python scripts/product_api_contract.py --check --base-ref origin/main
 The compatibility check generates the base revision's contract from the base code and rejects incompatible `/v1` changes. PR3 bootstraps once from the historical OpenAPI artifact because earlier revisions did not yet contain the generator.
 
 Consumer-specific contract variants are not supported.
+
+### Check a previously used object reference
+
+Keep the release ID, knowledge object ID, object version and canonical content hash returned by the originating read. Keep the association with your own lesson or product revision locally. This endpoint checks one published object at a time within a batch. A lesson, recommendation with separate conditions, or decision graph can depend on additional references.
+
+Send 1–100 references to `POST /v1/publication-references/check`. Use `origin: "knowledge"` for a direct read or `"retrieve"` for an object returned by retrieval.
+
+```json
+{"references":[{"origin":"knowledge","release_id":"release-a","knowledge_object_id":"ko-7","object_version":"1","content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}
+```
+
+```json
+{"api_version":"v1","request_id":"example","observed_at":"2026-11-23T09:00:00Z","results":[{"index":0,"state":"withdrawn"}]}
+```
+
+| State | How to handle the affected local revision |
+|---|---|
+| `active` | Confirm this exact reference as of the observation time. |
+| `superseded` | Reassess affected products against the latest accessible publication. |
+| `withdrawn` | Remove confirmation and reassess every product depending on this reference. |
+| `unconfirmed` | Withhold confirmation. Evidence or current access is insufficient to disclose a status. |
+
+Duplicates retain their input positions. Scope `publication-references:check` must be expressly granted to the tenant and application under PostgreSQL access management. Each reference also requires the current originating read scope and entitlement to all its evidence documents. A reference conveys no entitlement. Results apply to the indicated publication observation. Separate batches can have different observation times.
+
+A missing or revoked credential returns 401, a missing check scope 403, invalid input 422, rate limiting 429 with `Retry-After`, and unavailable authority or persistently changing permissions 503. A failed call provides no observation. Keep the previous observation time and retry. Discard responses for an older product revision or observation. See [local reconciliation example](../../examples/publication_reference_consumer.py).

@@ -277,6 +277,8 @@ Een ondersteund resultaat blijft herleidbaar tot het gepubliceerde kennisobject 
 
 Ranking of retrieval mag publicatiestatus, menselijke review of bronbinding niet omzeilen.
 
+Een toepassing met het expliciete tenant- én toepassingsrecht `publication-references:check` mag de status van een aangeleverde, exact releasegebonden objectreferentie controleren. Metis toetst ook het actuele leesrecht voor de opgegeven herkomst en de betrokken bron- en contextdocumenten. Alleen de status van een aantoonbaar geactiveerde historische binding mag als `superseded` of `withdrawn` worden verstrekt. Bij onvoldoende bewijs of objectrecht is het antwoord `unconfirmed`. De controle levert uitsluitend status per invoerpositie en een gemeenschappelijk peilmoment. Historische inhoud, opvolger en reden blijven buiten de respons. Productafhankelijkheden blijven bij de afnemer.
+
 ### 12.1 Compiled knowledge
 
 Post-publication compiled knowledge is een afgeleide, rebuildable projectie en nooit canonieke kennis of serving authority. Een compiled-knowledge/wiki-route mag uitsluitend actieve gepubliceerde kennis verwerken en moet iedere materiële afgeleide claim herleidbaar houden tot de onderliggende gepubliceerde kennisobjecten en bronprovenance.
