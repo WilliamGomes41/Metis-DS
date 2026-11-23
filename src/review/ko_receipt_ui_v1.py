@@ -327,7 +327,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
     stage_note = ('<p class="ko-saved-version">Je eigen eerste akkoord bevestigt geen eventueel vereiste onafhankelijke tweede beoordeling.</p>'
                   if approved and kind != 'second_review_approve' else '')
     body = ('<div data-review-receipt><header class="ko-receipt-heading"><span class="ko-result-mark">' + check
-        + '</span><div><h1>Review opgeslagen</h1><p>' + heading + '</p></div></header>'
+        + '</span><div><h1 tabindex="-1" autofocus>Review opgeslagen</h1><p>' + heading + '</p></div></header>'
         + source_breadcrumb(snapshot_id, obj, title=receipt.document_title) + current_note
         + '<div class="ko-result-layout"><section class="ko-result-main"><dl class="ko-result-metadata">'
         '<div><dt>Kennisobject</dt><dd><strong>' + escape((obj.get('structure') or {}).get('section_path', [''])[-1] if (obj.get('structure') or {}).get('section_path') else _object_type_label(str(obj.get('confirmed_object_type') or obj.get('object_type') or '')))
