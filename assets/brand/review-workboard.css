@@ -1,0 +1,34 @@
+.review-workboard-filter-summary:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-4);
+  margin-block-end: var(--space-3);
+}
+
+.review-workboard-filter-summary p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+#review-filters-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-inline-start: auto;
+}
+
+#review-filters-link:focus-visible,
+#review-filters:focus {
+  outline: 2px solid var(--paars);
+  outline-offset: 3px;
+}
+
+#review-filters {
+  scroll-margin-block-start: var(--space-3);
+}
+
+@media (max-width: 860px) {
+  #review-filters { margin-block-start: var(--space-6); }
+}
