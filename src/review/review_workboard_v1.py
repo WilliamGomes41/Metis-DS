@@ -577,6 +577,26 @@ def _workboard_card(item: dict[str, Any], *, started: bool = False,
             '<p class="muted" data-count-scope>' + _esc(scope) + '</p>' + summary + action + source_notice + evidence + '</article>')
 
 
+_WORKBOARD_FILTER_LAYOUT = """<script>
+(() => {
+  const form = document.getElementById('review-filters');
+  const summary = document.getElementById('review-filters-link').parentElement;
+  const mobilePosition = document.currentScript;
+  const wide = matchMedia('(min-width: 861px)');
+  const layout = () => {
+    const focused = document.activeElement;
+    if (wide.matches) summary.before(form);
+    else if (form.nextElementSibling !== mobilePosition) mobilePosition.before(form);
+    summary.hidden = wide.matches;
+    if (form.contains(focused) && focused !== document.activeElement) focused.focus();
+    else if (wide.matches && summary.contains(focused)) form.focus();
+  };
+  wide.addEventListener('change', layout);
+  layout();
+})();
+</script>"""
+
+
 @diagnostic_phase("review_render")
 def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
                     snapshot_id: str = '', q: str = '', page: int = 1, theme: str = '') -> str:
@@ -598,11 +618,10 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
     by_envelope = {row['snapshot_id']: row for row in envelopes}
     if snapshot_id and snapshot_id not in by_envelope:
         raise ConsoleError('reviewer_not_named_on_snapshot')
-    visible, controls = console_ui._document_list_page(envelopes, q=q, page=page, path='/review')
+    visible, pagination = console_ui._document_list_page(envelopes, q=q, page=page, path='/review')
     from src.review.review_participation_ui_v1 import filters
-    controls = controls[controls.index('<nav '):]
-    controls = controls.replace('/review?', '/review?' + _esc(urlencode({'work': 'mine', 'theme': theme})) + '&amp;')
-    controls = filters(console, work='mine', theme=theme, q=q, rows=envelopes) + controls
+    pagination = pagination[pagination.index('<nav '):]
+    pagination = pagination.replace('/review?', '/review?' + _esc(urlencode({'work': 'mine', 'theme': theme})) + '&amp;')
     if snapshot_id and not any(row['snapshot_id'] == snapshot_id for row in visible):
         visible = [by_envelope[snapshot_id], *visible]
     if summaries is not None:
@@ -646,8 +665,18 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
     if not visible:
         body += ('<p class="review-empty" data-personal-empty>Geen documenten gevonden.</p>' if q else
                  '<p class="review-empty" data-personal-empty>Geen aan jou toegewezen reviewdocumenten. Nieuw werk verschijnt hier zodra iemand je als reviewer kiest.</p>')
-    return _page(_nav(account, 'review') + '<section class="room review-room"><h1>Review</h1>' +
-                 console_ui._task_links('review') + controls + body + '</section>', title='Review — Metis')
+    active_filters = ' · '.join(f'{label}: {_esc(value)}'
+                                for label, value in (('Thema', theme), ('Zoekterm', q.strip())) if value)
+    filter_summary = ('<div class="review-workboard-filter-summary">'
+                      + (f'<p class="muted">{active_filters}</p>' if active_filters else '')
+                      + '<a id="review-filters-link" href="#review-filters">Filters wijzigen</a></div>')
+    filter_form = filters(console, work='mine', theme=theme, q=q, rows=envelopes, form_id='review-filters')
+    return _page(
+        _nav(account, 'review') + '<section class="room review-room"><h1>Review</h1>'
+        + console_ui._task_links('review') + filter_summary + pagination + body + filter_form
+        + _WORKBOARD_FILTER_LAYOUT + '</section>',
+        title='Review — Metis', stylesheets=('review-workboard.css',),
+    )
 
 
 def _review_path_of(envelope: dict[str, Any]) -> str:

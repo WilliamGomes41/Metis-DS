@@ -20,8 +20,78 @@ const {writeFile} = require('node:fs/promises');
     assert.equal(await page.locator('form form').count(), 0);
     await page.screenshot({path:`${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.png`, fullPage:true});
   }
+  async function checkWorkboardLayout(width) {
+    const filter = page.locator('form.review-filters');
+    const group = page.locator('[data-personal-group="review"]');
+    const firstAction = group.locator('[data-personal-review-action]').first();
+    const layout = await page.evaluate(() => ({
+      viewport: innerHeight,
+      scroll: scrollY,
+      firstActionBottom: document.querySelector('[data-personal-review-action]').getBoundingClientRect().bottom,
+    }));
+    await writeFile(`${process.env.METIS_BROWSER_OUTPUT}/personal-layout-${width}.json`, JSON.stringify(layout));
+    assert.equal(await filter.count(), 1, 'one shared filter form');
+    if (width === 1440) {
+      assert.ok((await filter.boundingBox()).y < (await group.boundingBox()).y, 'filters precede cards on desktop');
+      assert.equal(new Set(await filter.locator('select, input, button').evaluateAll(
+        fields => fields.map(field => Math.round(field.getBoundingClientRect().bottom)))).size, 1,
+      'desktop filter controls share a row');
+      return;
+    }
+    assert.equal(layout.scroll, 0);
+    assert.ok(layout.firstActionBottom <= layout.viewport,
+      `The first review action is below the viewport: ${JSON.stringify(layout)}`);
+    assert.ok(await firstAction.isVisible());
+    assert.ok((await group.boundingBox()).y < (await filter.boundingBox()).y, 'open work precedes filters on mobile');
+    const edit = page.getByRole('link', {name: 'Filters wijzigen', exact: true});
+    await edit.focus();
+    await page.keyboard.press('Enter');
+    assert.ok(await filter.evaluate(form => form === document.activeElement), 'filter link focuses the form');
+    await filter.locator('[name=theme]').selectOption('personal');
+    const query = filter.locator('[name=q]');
+    await query.fill('Gemengd2');
+    await Promise.all([
+      page.waitForURL(url => url.searchParams.get('q') === 'Gemengd2'),
+      filter.getByRole('button', {name:'Filteren', exact:true}).click(),
+    ]);
+    const active = edit.locator('..');
+    assert.match(await active.innerText(), /Thema: personal/);
+    assert.match(await active.innerText(), /Zoekterm: Gemengd2/);
+    assert.equal(await page.locator('[data-workboard-document]').count(), 1);
+    assert.equal(await query.inputValue(), 'Gemengd2');
+    assert.equal(await filter.locator('[name=theme]').inputValue(), 'personal');
+    await proof('personal-filtered',width);
+
+    await query.focus();
+    await query.fill('geen-passend-reviewdocument');
+    await page.setViewportSize({width:1440,height:1000});
+    await page.waitForFunction(() => !document.querySelector('#review-filters-link').getClientRects().length);
+    assert.equal(await query.inputValue(), 'geen-passend-reviewdocument');
+    assert.ok(await query.evaluate(input => input === document.activeElement), 'resize keeps the focused filter field');
+    await page.setViewportSize({width,height:844});
+    await edit.waitFor();
+    await Promise.all([
+      page.waitForURL(url => url.searchParams.get('q') === 'geen-passend-reviewdocument'),
+      filter.getByRole('button', {name:'Filteren', exact:true}).click(),
+    ]);
+    assert.equal(await page.locator('[data-personal-empty]').innerText(), 'Geen documenten gevonden.');
+    assert.equal(await edit.isVisible(), true);
+    await page.goto(base + '/review');
+
+    const fallback = await browser.newContext({
+      javaScriptEnabled: false, viewport: {width, height: 844}, storageState: await page.context().storageState(),
+    });
+    try {
+      const noScript = await fallback.newPage();
+      await noScript.goto(base + '/review');
+      await noScript.getByRole('link', {name: 'Filters wijzigen'}).press('Enter');
+      assert.ok(await noScript.getByRole('form', {name: 'Reviewfilters'}).evaluate(form => form === document.activeElement));
+    } finally {
+      await fallback.close();
+    }
+  }
   for (const [index,width] of [1440,390].entries()) {
-    await page.setViewportSize({width,height:1000});
+    await page.setViewportSize({width,height:width === 390 ? 844 : 1000});
     await login(m.username);
     const d = m.documents[index ? 'Gemengd2' : 'Gemengd'];
     const before = await state();
@@ -35,6 +105,7 @@ const {writeFile} = require('node:fs/promises');
     assert.equal(await page.locator('[data-personal-group="waiting"]').count(), 1);
     assert.equal(await page.locator('[data-personal-group="complete"]').count(), 1);
     await proof('personal-landing',width);
+    await checkWorkboardLayout(width);
     await action.focus();
     await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),page.keyboard.press('Enter')]);
     assert.equal(new URL(page.url()).searchParams.get('task'), 'contextual');

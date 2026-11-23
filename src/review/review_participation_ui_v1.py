@@ -103,10 +103,11 @@ def _roster(env, names):
     return '<p>Reviewdeelname: ' + esc('; '.join(text)) + '</p>'
 
 
-def filters(console, *, work, theme, q='', rows=None):
+def filters(console, *, work, theme, q='', rows=None, form_id=''):
     rows = console.list_document_cards() if rows is None else rows
     themes = sorted({str(e.get('family') or '') for e in rows} - {''})
-    return ('<form method="get" action="/review" class="review-filters"><label>Werk<select name="work">' +
+    target = f' id="{esc(form_id)}" tabindex="-1" aria-label="Reviewfilters"' if form_id else ''
+    return (f'<form method="get" action="/review" class="review-filters"{target}><label>Werk<select name="work">' +
             options([('mine', 'Mijn werk'), ('all', 'Alle reviewtrajecten')], work) +
             '</select></label><label>Thema<select name="theme">' +
             options([('', 'Alle thema’s'), *[(t, t) for t in themes]], theme) +
