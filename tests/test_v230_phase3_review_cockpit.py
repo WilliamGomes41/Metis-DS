@@ -166,7 +166,13 @@ def _client(console: OperationsConsole, *, production_app) -> TestClient:
 
 def _card(html: str, object_id: str) -> str:
     if 'class="ko-review-layout"' in html and object_id in html:
-        return re.search(r'<main class="ko-page">(.*?)</main>', html, re.S).group(1)
+        main = re.search(
+            r'<main(?=\s)[^>]*\sclass="(?:[^"]*\s)?ko-page(?:\s[^"]*)?"[^>]*>(.*?)</main>',
+            html,
+            re.S,
+        )
+        assert main is not None, "focused review main not found"
+        return main.group(1)
     match = re.search(
         rf'<article class="[^"]*review-card[^"]*"[^>]*>.*?</article>',
         html,

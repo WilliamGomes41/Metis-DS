@@ -1680,6 +1680,80 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
   .who { text-align: left; }
 }
 
+.console-skip-link {
+  position: fixed;
+  inset: var(--space-3) auto auto var(--space-3);
+  z-index: 1100;
+  padding: var(--space-3) var(--space-4);
+  border-radius: 8px;
+  background: var(--wit);
+  outline: 3px solid var(--paars);
+  font-weight: 700;
+}
+.console-skip-link:not(:focus) { clip-path: inset(50%); }
+:is(#hoofdinhoud, #uitleg-inhoud):focus {
+  outline: 2px solid var(--paars);
+  outline-offset: 4px;
+  scroll-margin-block-start: 10rem;
+}
+.console-menu-toggle { display: none; }
+.console-menu-panel { display: contents; }
+
+@media (861px <= width < 1360px) {
+  .topbar .rooms { order: 0; flex-basis: auto; margin-left: 0; }
+}
+
+@media (max-width: 860px) {
+  .topbar:has(.console-menu-toggle:not([hidden])) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-3);
+    padding: 0 0 var(--space-3);
+    margin-block-end: var(--space-6);
+    position: static;
+  }
+  .topbar .metis-brand { min-width: 0; gap: var(--space-2); }
+  .topbar .metis-mark-frame { width: 56px; height: 44px; }
+  .console-menu-toggle:not([hidden]) {
+    display: grid;
+    justify-items: start;
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--wit);
+    color: var(--paars);
+    text-align: left;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+  .console-menu-toggle:hover, .console-menu-toggle[aria-expanded="true"] { background: var(--water-soft); }
+  .console-menu-toggle:focus-visible { outline: 3px solid var(--rood); outline-offset: 2px; }
+  .console-menu-room { color: var(--text); font-weight: 400; }
+  .console-menu-toggle:not([hidden]) + .console-menu-panel {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-2) var(--space-3);
+    align-items: center;
+  }
+  .console-menu-toggle[aria-expanded="false"]:not([hidden]) + .console-menu-panel { display: none; }
+  .console-menu-panel .rooms {
+    display: grid;
+    grid-column: 1 / -1;
+    margin: 0;
+    order: 0;
+  }
+  .console-menu-panel .rooms a, .console-menu-panel .rooms button {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    width: 100%;
+  }
+  .console-menu-panel .who { order: 0; text-align: left; }
+  :is(#hoofdinhoud, #uitleg-inhoud):focus { scroll-margin-block-start: var(--space-3); }
+}
+
 /* Readable headings (docs/change-contracts/console-heading-contrast.md).
    Work-page headings use a darker shade of Water (#237f99, 4.6:1 on white).
    The landing page and the login card keep the brand Water. */

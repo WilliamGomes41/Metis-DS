@@ -6,22 +6,12 @@ from src.review.review_cockpit_v1 import found_under_path, knowledge_review_proj
 
 
 def review_page_shell(account, body, *, title='Review'):
-    from src.operations_console_app import _page, _metis_mark, _session_warning
-    links = ''.join(f'<a href="{url}"' + (' aria-current="page"' if label == 'Review' else '')
-                    + f'>{label}</a>' for url, label in (
-                        ('/ingest', 'Inleveren'), ('/source-selection', 'Vorming'),
-                        ('/review', 'Review'), ('/publish', 'Publicatie'), ('/tree', 'Documenten')))
-    person = escape(str(account.get('display_name') or account.get('username') or ''))
-    roles = escape(' · '.join(account.get('roles') or []))
-    nav = ('<header class="ko-topbar"><a class="ko-brand" href="/">'
-           + _metis_mark() + '<span><strong>Metis</strong><small>V&amp;VN Data Services</small></span></a>'
-           '<nav aria-label="Werkplekken">' + links + '</nav>'
-           '<button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">'
-           '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg></button>'
-           '<details class="ko-account"><summary>' + person + '<small>' + roles + '</small></summary>'
-           '<a href="/settings">Instellingen</a><form method="post" action="/logout"><button type="submit">Uitloggen</button></form></details></header>')
-    return _page(nav + _session_warning() + '<main class="ko-page">' + body + '</main>',
-                 title=title + ' · Metis', stylesheets=('ko-review.css',))
+    from src.operations_console_app import _nav, _page
+    return _page(
+        _nav(account, 'review', include_care=False)
+        + '<main class="ko-page" id="hoofdinhoud" tabindex="-1">' + body + '</main>',
+        title=title + ' · Metis', stylesheets=('ko-review.css',), main_id='hoofdinhoud',
+    )
 
 
 def source_breadcrumb(snapshot_id, obj, *, title='', task='', overview_url=''):

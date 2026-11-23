@@ -109,6 +109,7 @@ const fs = require('fs');
   if (reviewURL.searchParams.get('document')!==sid) throw Error('review lost selected source '+page.url());
   console.log('BROWSER_REVIEW_URL='+page.url());
   if (reviewURL.pathname !== '/review/trajectory') throw Error('unassigned uploader bypassed review assignment');
+  await page.getByRole('button',{name:/^Menu/}).click();
   await page.getByRole('button',{name:'Uitloggen',exact:true}).click();
   await page.goto(base+'/login');
   await page.locator('[name=username]').fill('reviewer');

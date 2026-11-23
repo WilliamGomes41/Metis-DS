@@ -46,6 +46,20 @@ const {writeFile} = require('node:fs/promises');
     const form = page.locator('[data-ko-assessment-form]');
     if (width === 390) {
       await page.setViewportSize({width:320,height:844});
+      await page.reload();
+      const skip = page.getByRole('link', {name:'Naar hoofdinhoud', exact:true});
+      await page.keyboard.press('Tab');
+      assert.ok(await skip.evaluate(link => link === document.activeElement), 'first Tab skips the Review navigation');
+      await page.keyboard.press('Enter');
+      const main = page.getByRole('main');
+      assert.equal(await main.count(), 1);
+      assert.ok(await main.evaluate(node => node === document.activeElement));
+      const menu = page.getByRole('button', {name:'Menu Review'});
+      await menu.click();
+      assert.equal(await menu.getAttribute('aria-expanded'), 'true');
+      assert.equal(await page.locator('header').getByRole('link', {name:'Instellingen', exact:true}).isVisible(), true);
+      await page.keyboard.press('Escape');
+      assert.equal(await menu.getAttribute('aria-expanded'), 'false');
       const textZoom = await page.addStyleTag({content:
         '.ko-submit-feedback, .ko-actions > .ko-submit-status { font-size: 28px !important; }'});
       await form.locator('[value=later]').scrollIntoViewIfNeeded();

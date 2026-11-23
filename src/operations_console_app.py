@@ -522,9 +522,20 @@ def _brand_stylesheet_url(name: str) -> str:
     return url
 
 
+_CONSOLE_NAV_END = "<!-- end of Metis console navigation -->"
+
+
 def _page(body: str, *, title: str | None = None, light: bool = False,
-          stylesheets: tuple[str, ...] = ()) -> str:
+          stylesheets: tuple[str, ...] = (), main_id: str | None = None) -> str:
     from src.console_release_v1 import console_release
+    # Existing route renderers compose the shared navigation before their body.
+    # Its explicit boundary keeps navigation and persistent controls out of main.
+    navigation, boundary, content = body.partition(_CONSOLE_NAV_END)
+    if not boundary:
+        navigation, content = "", body
+    if main_id is None:
+        main_id = "hoofdinhoud"
+        content = f'<main id="{main_id}" tabindex="-1">{content}</main>'
     release = console_release()
     page_title = title or "V&amp;VN Data Services — Interne operations console"
     stylesheet_url = _brand_stylesheet_url("console.css")
@@ -550,7 +561,8 @@ try {{
 <body>
 <div class="shell">
 <div class="canvas">
-{body}
+<a class="console-skip-link" href="#{_esc(main_id)}">Naar hoofdinhoud</a>
+{navigation}{content}
 <footer class="console-release" aria-label="Metis-versie">
   <span data-product-version>{_esc(release['label'])}</span>
   <a class="quiet release-notes-link" href="/wat-is-nieuw">Wat is nieuw?</a>
@@ -657,6 +669,20 @@ if (sessionWarning) {{
   }}, 1000);
 }}
 
+const consoleMenu = document.querySelector('[data-console-menu]');
+if (consoleMenu) {{
+  consoleMenu.hidden = false;
+  consoleMenu.addEventListener('click', () => {{
+    consoleMenu.setAttribute('aria-expanded', String(consoleMenu.getAttribute('aria-expanded') !== 'true'));
+  }});
+  consoleMenu.closest('header').addEventListener('keydown', (event) => {{
+    if (event.key !== 'Escape' || event.defaultPrevented ||
+        consoleMenu.getAttribute('aria-expanded') !== 'true' || !consoleMenu.getClientRects().length) return;
+    event.preventDefault();
+    consoleMenu.setAttribute('aria-expanded', 'false');
+    consoleMenu.focus();
+  }});
+}}
 document.querySelectorAll('[data-theme-toggle]').forEach((button) => {{
   const sync = () => {{
     const dark = document.documentElement.dataset.theme === 'dark';
@@ -844,9 +870,9 @@ def _session_warning() -> str:
 </div>'''
 
 
-def _nav(account: dict[str, Any] | None, current: str = "") -> str:
+def _nav(account: dict[str, Any] | None, current: str = "", *, include_care: bool = True) -> str:
     who = (
-        f'<span class="who-name">{_esc(account.get("display_name"))}</span>'
+        f'<span class="who-name">{_esc(account.get("display_name") or account.get("username"))}</span>'
         f'<span class="who-roles"><span class="sr-only">rollen: </span>'
         f'{" · ".join(_esc(r) for r in account.get("roles") or [])}</span>'
         if account
@@ -862,9 +888,12 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
         ("settings", "/settings", "Instellingen"),
     ]
     links = []
+    active_room = ""
+    current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about", "audit"} else current
     for key, href, label in rooms:
-        current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about", "audit"} else current
         current_attr = ' aria-current="page"' if current_key == key else ""
+        if current_attr:
+            active_room = f'<span class="console-menu-room">{label}</span>'
         links.append(f'<a href="{href}"{current_attr}>{label}</a>')
     links.append('<form method="post" action="/logout"><button class="quiet" type="submit">Uitloggen</button></form>')
     return f"""
@@ -876,15 +905,20 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
           <span>V&amp;VN Data Services</span>
         </span>
       </a>
-      <nav class="rooms">{"".join(links)}</nav>
-      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus" title="Donkere modus">
-        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
-        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
-      </button>
-      <div class="who">{who}</div>
+      <button class="console-menu-toggle" type="button" data-console-menu hidden
+              aria-expanded="false" aria-controls="console-menu-panel">Menu{active_room}</button>
+      <div class="console-menu-panel" id="console-menu-panel">
+        <nav class="rooms">{"".join(links)}</nav>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus" title="Donkere modus">
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <div class="who">{who}</div>
+      </div>
     </header>
     {_session_warning() if account else ""}
-    {_care_companion(current) if account else ""}
+    {_care_companion(current) if account and include_care else ""}
+    {_CONSOLE_NAV_END}
     """
 
 
@@ -4546,6 +4580,7 @@ def create_console_app(
             """,
             title="Metis uitgelegd — V&amp;VN Data Services",
             stylesheets=("metis-explained.css",),
+            main_id="uitleg-inhoud",
         )
 
     @app.get("/wat-is-nieuw", response_class=HTMLResponse)
