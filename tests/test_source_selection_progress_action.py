@@ -1,10 +1,7 @@
-"""Bronselectie: 'Voortgang bekijken' only appears where it changes what is shown.
-
-The page already reloads the selected running document every five seconds, so a
-link to that same page only reloads it. A running document that is not selected
-keeps the link: it selects that document and starts polling it.
+"""Vorming updates status in place and reads only visible requested documents.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -23,9 +20,8 @@ def test_progress_link_only_for_running_documents_that_are_not_selected(tmp_path
         family='second', named_reviewers=[reviewer])['snapshot_id']
     real = ui.projection
     monkeypatch.setattr(ui, 'projection', lambda *args, **kwargs: {**real(*args, **kwargs), 'state': 'bezig'})
-    import src.vorming.source_selection_v1 as selection
-    summary = selection.summary_projection
-    monkeypatch.setattr(selection, 'summary_projection', lambda *args, **kwargs: {**summary(*args, **kwargs), 'state': 'bezig'})
+    summary = ui.summary_projection
+    monkeypatch.setattr(ui, 'summary_projection', lambda *args, **kwargs: {**summary(*args, **kwargs), 'state': 'bezig'})
     client = TestClient(production_app(console))
     client.cookies.set(COOKIE, console.authenticate('author', 'strong-test-password')['token'])
 
@@ -33,6 +29,30 @@ def test_progress_link_only_for_running_documents_that_are_not_selected(tmp_path
 
     cards = {sid: html.split(f'id="source-{sid}"', 1)[1].split('</article>', 1)[0] for sid in (first, second)}
     assert 'Voortgang bekijken' not in cards[first]
-    assert 'ververst elke 5 seconden' in cards[first]
-    assert f'href="/source-selection?document={second}">Voortgang bekijken</a>' in cards[second]
-    assert 'window.location.reload()' in html
+    assert 'data-source-attempt' in cards[first]
+    assert f'href="/source-selection?document={second}" data-source-detail-link>Voortgang bekijken</a>' in cards[second]
+    assert 'data-source-pause' in html and 'window.location.reload()' not in html
+
+    before = console._processing_history_envelope(first)['processing_attempts']
+    original = console.workflow_document_store.list_source_selection_summaries
+    scopes = []
+
+    def record_reads(*, snapshot_ids=None):
+        scopes.append(snapshot_ids)
+        return original(snapshot_ids=snapshot_ids)
+
+    monkeypatch.setattr(console.workflow_document_store, 'list_source_selection_summaries', record_reads)
+    progress = client.get('/source-selection/progress', params={'snapshot': first})
+    assert progress.status_code == 200 and progress.headers['cache-control'] == 'no-store'
+    row, = progress.json()['rows']
+    assert row['snapshot'] == first and row['running'] and row['attempt']
+    assert 'detail' not in row
+    assert scopes == [[first]]
+    assert console._processing_history_envelope(first)['processing_attempts'] == before
+
+    console.create_account(username='outside-progress', password='strong-test-password', roles=('reviewer',))
+    client.cookies.set(COOKIE, console.authenticate('outside-progress', 'strong-test-password')['token'])
+    protected = client.get('/source-selection/progress', params={'snapshot': first})
+    assert protected.json() == {'rows': []}
+    client.cookies.clear()
+    assert client.get('/source-selection/progress', params={'snapshot': first}).status_code == 401

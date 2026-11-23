@@ -536,7 +536,7 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_diagnostics_read_failed") from exc
 
-    def list_source_selection_summaries(self) -> list[dict[str, Any]]:
+    def list_source_selection_summaries(self, *, snapshot_ids: list[str] | None = None) -> list[dict[str, Any]]:
         """Read only the atomically maintained, versioned overview projection.
 
         Never fall back to the large envelope during staged migration. The
@@ -544,10 +544,12 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
         column in the same database transaction through migration 020's trigger.
         """
         try:
+            scope = "WHERE d.snapshot_id = ANY(%s)" if snapshot_ids is not None else ""
+            parameters = (snapshot_ids,) if snapshot_ids is not None else ()
             with self._connect() as con:
-                rows = con.execute("""
+                rows = con.execute(f"""
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.content_kind,
-                           d.publication_eligibility,(d.source_selection_summary || COALESCE(p.payload,'{}'::jsonb)) AS summary,
+                           d.publication_eligibility,(d.source_selection_summary || COALESCE(p.payload,'{{}}'::jsonb)) AS summary,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id)
                            = ARRAY(SELECT jsonb_array_elements_text(COALESCE(
@@ -555,8 +557,9 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                            AS reviewers_consistent
                     FROM workflow.documents d
                     LEFT JOIN workflow.processing_document_summaries p ON p.snapshot_id=d.snapshot_id
+                    {scope}
                     ORDER BY d.acquired_at,d.snapshot_id
-                """).fetchall()
+                """, parameters).fetchall()
             if any(not isinstance(row['summary'], dict)
                    or type(row['summary'].get('schema_version')) is not int
                    or row['summary'].get('schema_version') != 1 for row in rows):
@@ -939,7 +942,8 @@ class _PostgresWorkflowDocumentsMixin:
         return reads.envelopes
 
     @diagnostic_phase("document_list")
-    def source_selection_documents(self, *, actor_id: str, document: str = "") -> list[dict[str, Any]]:
+    def source_selection_documents(self, *, actor_id: str, document: str = "",
+                                   snapshot_ids: list[str] | None = None) -> list[dict[str, Any]]:
         from src.workflows.workflow_transaction_v1 import workflow_read_transaction
         from src.vorming.source_selection_v1 import authorize_account
         actor = self._account(actor_id, current=True)
@@ -947,7 +951,7 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("not_authenticated")
         try:
             with workflow_read_transaction(self.workflow_document_store):
-                documents = self.workflow_document_store.list_source_selection_summaries()
+                documents = self.workflow_document_store.list_source_selection_summaries(snapshot_ids=snapshot_ids)
             # Full payload decoding and detail authorization must not leave the
             # bounded overview transaction idle before its next SQL statement.
             selected = self._envelope(document) if document else None

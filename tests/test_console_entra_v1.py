@@ -183,6 +183,9 @@ def test_entra_session_slides_for_thirty_minutes_warns_and_keeps_eight_hour_cap(
     before = status.json()
     assert 0 < before['idle_remaining_seconds'] <= 61
     assert 7 * 60 * 60 < before['absolute_remaining_seconds'] < 8 * 60 * 60
+    progress = client.get('/source-selection/progress', params={'snapshot': 'no-visible-document'})
+    assert progress.status_code == 200 and progress.json() == {'rows': []}
+    assert client.get('/session/status').json()['idle_remaining_seconds'] <= 61
 
     # A real protected navigation renews idle time and the page carries the warning UI.
     page = client.get('/accounts', follow_redirects=False)
@@ -214,6 +217,8 @@ def test_entra_session_slides_for_thirty_minutes_warns_and_keeps_eight_hour_cap(
             (account_id,),
         )
     assert client.get('/accounts', follow_redirects=False).status_code == 303
+    assert client.get('/source-selection/progress',
+                      params={'snapshot': 'no-visible-document'}, follow_redirects=False).status_code == 401
 
 
 def test_callback_browser_state_replay_denied_and_no_header_trust(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):

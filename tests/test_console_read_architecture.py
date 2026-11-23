@@ -464,8 +464,9 @@ def test_source_overview_refreshes_running_document(tmp_path, production_console
         command_id='overview-running', expected_revision=console.objects_revision(sid))
     response = _login(console, users['researcher']['username'], production_app=production_app).get('/source-selection')
     assert response.status_code == 200
-    assert 'window.location.reload()' in response.text
-    assert 'Deze pagina ververst elke 5 seconden zolang de verwerking loopt.' in response.text
+    assert '/source-selection/progress' in response.text
+    assert 'Updates pauzeren' in response.text and 'Ververs status' in response.text
+    assert 'window.location.reload()' not in response.text
     assert 'action="/source-selection/start"' not in response.text
 
 

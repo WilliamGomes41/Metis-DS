@@ -67,7 +67,37 @@ const fs = require('fs');
     if (!response.ok) throw Error('legacy start rejected: '+response.status);
   },{sid,revision});
   await page.goto(base+'/source-selection?document='+sid);
+  const runningCard = page.locator(`[data-source-document="${sid}"][data-source-attempt]`);
+  await runningCard.locator('[data-source-progress]').getByText('Bronpassages selecteren', {exact:false}).waitFor({timeout:10000});
+  const isProgress = response => new URL(response.url()).pathname === '/source-selection/progress' && response.ok();
+  const pause = page.getByRole('button',{name:'Updates pauzeren',exact:true});
+  await pause.click();
+  await page.getByRole('button',{name:'Updates hervatten',exact:true}).waitFor();
+  const loseConnection = route => route.abort();
+  await page.route('**/source-selection/progress?**', loseConnection);
+  await page.getByRole('link',{name:'Ververs status',exact:true}).click();
+  await page.getByText('Bijwerken niet gelukt. Laatst gelezen om', {exact:false}).waitFor();
+  await page.unroute('**/source-selection/progress?**', loseConnection);
+  const result = page.waitForResponse(isProgress);
+  await page.getByRole('link',{name:'Ververs status',exact:true}).click();
+  const running = await (await result).json();
+  if (running.rows.length !== 1 || running.rows[0].snapshot !== sid || !running.rows[0].running || running.rows[0].detail) {
+    throw Error('The periodic read lost its active document or loaded a pending detail');
+  }
+  await page.getByRole('button',{name:'Updates hervatten',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  const picker = page.locator('#source-document');
+  await picker.focus();
+  if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('progress mobile overflow');
+  const before = await page.evaluate(()=>({timeOrigin:performance.timeOrigin, scroll:window.scrollY}));
+  await page.screenshot({path:output+'/progress.png',fullPage:true});
+  if (!(await page.request.post(base+'/browser-release-provider')).ok()) throw Error('Could not release processing');
   await page.getByRole('link',{name:'Naar Review',exact:true}).waitFor({timeout:15000});
+  const after = await page.evaluate(()=>({timeOrigin:performance.timeOrigin, scroll:window.scrollY, focus:document.activeElement.id}));
+  if (before.timeOrigin!==after.timeOrigin || before.scroll!==after.scroll || after.focus!=='source-document') {
+    throw Error('Progress interrupted the selected document or picker '+JSON.stringify({before,after}));
+  }
+  await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:output+'/formed.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
   await page.reload();
@@ -114,6 +144,7 @@ const fs = require('fs');
   fs.writeFileSync(output+'/browser-result.json',JSON.stringify({layout:titles,selected:sid,
     receiptDidNotStart:true,explicitStart:true,reviewOpened:true,unassignedUploaderDirectedToTrajectory:true,namedReviewerEnteredReview:true,
     blockageOpenedBeforeProcessing:true,blockageDownloadReadOnly:true,blockageMobileOverflow:false,mobileOverflow:false,
+    progressFocusPreserved:true,progressManualWhilePaused:true,
     diagnosisViewports:[320,390,1280],diagnosisKeyboardDisclosure:true,pageErrors:errors},null,2));
   await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});
