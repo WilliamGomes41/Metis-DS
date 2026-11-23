@@ -180,7 +180,7 @@ def test_native_badge_sql_and_prepared_cards_share_final_statuses(tmp_path, *, p
         assert prepared[sid]['has_open_review'] is opened
 
 
-def test_selected_publish_page_explains_open_objects_without_changing_work(tmp_path, *, production_console, production_app):
+def test_selected_publish_page_explains_open_objects_without_changing_work(tmp_path, monkeypatch, *, production_console, production_app):
     from fastapi.testclient import TestClient
 
     console, sid = _console(tmp_path, production_console=production_console)
@@ -191,10 +191,29 @@ def test_selected_publish_page_explains_open_objects_without_changing_work(tmp_p
     assert client.post('/login', data={'username': 'publisher', 'password': 'test-publisher'},
                        follow_redirects=False).status_code == 303
 
+    considered = []
+    original = console.consider_publish
+
+    def record_consider_publish(*, actor_id, snapshot_id):
+        considered.append(snapshot_id)
+        return original(actor_id=actor_id, snapshot_id=snapshot_id)
+
+    monkeypatch.setattr(console, 'consider_publish', record_consider_publish)
     overview = client.get('/publish')
+    missing_id = 'stale-publish-snapshot<&>'
+    missing = client.get('/publish', params={'document': missing_id, 'published': 'yes'})
     selected = client.get('/publish', params={'document': sid})
 
-    assert overview.status_code == selected.status_code == 200
+    assert overview.status_code == missing.status_code == selected.status_code == 200
+    assert 'Dit document is niet beschikbaar.' in missing.text
+    assert '<a href="/publish">Terug naar Publicatieoverzicht</a>' in missing.text
+    assert 'stale-publish-snapshot' not in missing.text
+    assert 'Publicatie voltooid' not in missing.text
+    assert f'data-publish-document="{sid}"' in missing.text
+    assert 'data-object-readiness' not in missing.text and 'data-publish-form' not in missing.text
+    assert 'Dit document is niet beschikbaar.' not in overview.text
+    assert 'Dit document is niet beschikbaar.' not in selected.text
+    assert considered == [sid]
     assert 'data-object-readiness' not in overview.text
     assert 'data-publish-form' not in overview.text
     assert f'data-readiness-object="{candidate["object_id"]}"' in selected.text
