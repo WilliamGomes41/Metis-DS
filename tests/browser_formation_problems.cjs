@@ -114,6 +114,7 @@ const fs = require('node:fs');
       fallbackFontZoom:{font:'DejaVu Sans',viewports:[320,390],overflow:false},
       minLightTextContrast:Math.min(...lightContrast),minDarkTextContrast:Math.min(...darkContrast),
       minTreatmentTargetHeight:Math.min(...targets),physicalDevice:false},null,2));
+    await page.getByRole('button',{name:/^Menu/}).click();
     await page.getByRole('button',{name:'Uitloggen',exact:true}).click();
     await login('reviewer');
     await page.goto(base+'/review?document='+sid+'&task=inventory');

@@ -60,9 +60,13 @@ const assert = require('node:assert/strict');
       await page.evaluate(() => scrollTo(0, 0));
       await verify('uitleg-model', width);
 
+      const menu = page.getByRole('button', {name:/^Menu/});
+      if (width === 390) await menu.click();
       await page.getByRole('button', {name: 'Wissel tussen lichte en donkere modus'}).click();
       assert.equal(await page.locator('html').getAttribute('data-theme'), 'dark');
+      if (width === 390) await menu.click();
       await verify('uitleg-model-donker', width);
+      if (width === 390) await menu.click();
       await page.getByRole('button', {name: 'Wissel tussen lichte en donkere modus'}).click();
 
       await page.goto(base + '/over-console?q=zzzonbestaand');
