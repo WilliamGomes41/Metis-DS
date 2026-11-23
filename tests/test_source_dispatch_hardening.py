@@ -198,7 +198,18 @@ def test_pdf_capacity_other_process_keeps_durable_command_pending_then_recovers(
             assert "Status: wacht op uitvoering" in screen
             assert "Verstreken sinds aanvraag:" in screen
             assert "telt deze poging mee voor de herstelgrens" in screen
-            assert 'window.location.reload' in screen and ">Hervatten</button>" not in screen
+            assert 'window.location.reload' not in screen
+            assert ">Hervatten</button>" not in screen
+
+            response = client.get("/source-selection/progress", params={"snapshot": ids[0]})
+            assert response.status_code == 200
+            row, = response.json()["rows"]
+            assert row["snapshot"] == ids[0]
+            assert row["attempt"] in {attempts[0]["attempt_id"], attempts[0]["started_at"]}
+            assert row["state"] == "wacht op uitvoering" and row["running"]
+            assert calls == []
+            for sid, attempt in zip(ids, attempts):
+                assert console._envelope(sid)["processing_attempts"] == [attempt]
     finally:
         release.set()
         process.join(5)
