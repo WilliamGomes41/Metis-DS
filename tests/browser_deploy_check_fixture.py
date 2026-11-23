@@ -9,11 +9,14 @@ from psycopg import sql
 from psycopg.rows import tuple_row
 
 from tests.browser_postgres_support import browser_application
-from tests.test_availability_repair import accounts, bind, provider
+from tests.test_availability_repair import bind, provider
 
 app = browser_application('deploy-check-browser', processing_binder=lambda state: None)
 console = app.state.operations_kernel
-author, reviewer = accounts(console)
+author = console.create_account(username='author', password='fixture-only',
+                                roles=('researcher', 'reviewer', 'publisher'))['account_id']
+reviewer = console.create_account(username='reviewer', password='fixture-only', roles=('reviewer',),
+                                  display_name='AangeslotenReviewerMetEenLangeNaamZonderSpaties')['account_id']
 bind(console, provider)
 console.ingest(actor_id=author, filename='fixture.html', content_type='text/html',
                data=b'<html><body><p>Gebruik geen zalf.</p></body></html>', ingest_kind='new',

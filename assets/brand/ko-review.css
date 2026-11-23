@@ -2,20 +2,7 @@
 .shell { padding: 10px; }
 .canvas { max-width: 1540px; margin: auto; padding: 12px 28px 32px; box-shadow: none; }
 .console-release { display: none; }
-.ko-topbar { display: flex; align-items: center; gap: 28px; min-height: 70px; border-bottom: 1px solid var(--line); padding: 0 0 12px; }
-.ko-brand { display: flex; align-items: center; gap: 12px; min-width: 245px; color: var(--text); text-decoration: none; }
-.ko-brand img { width: 76px; height: 56px; object-fit: contain; }
-.ko-brand strong { display: block; font-size: 25px; line-height: 1.1; }
-.ko-brand small { display: block; color: var(--paars); font-size: 12px; margin-top: 3px; }
-.ko-topbar nav { display: flex; gap: 18px; align-items: center; flex: 1; }
-.ko-topbar nav a { text-decoration: none; font-weight: 700; padding: 8px 10px; white-space: nowrap; }
-.ko-topbar nav [aria-current] { border: 1px solid var(--water); border-radius: 22px; background: var(--water-light); }
-.ko-topbar .theme-toggle { width: 40px; height: 40px; padding: 8px; flex: 0 0 40px; }
-.ko-topbar .theme-toggle svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-.ko-account { position: relative; min-width: 130px; text-align: right; }
-.ko-account summary { font-weight: 700; cursor: pointer; list-style: none; }
-.ko-account summary small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
-.ko-account > a, .ko-account > form { background: var(--wit); padding: 8px; }
+.topbar { position: static; padding-block-end: 12px; margin-block-end: 0; }
 .ko-page { padding: 18px 0 0; font-size: 15px; line-height: 1.4; }
 .ko-page h1 { color: var(--text); font-size: 30px; margin: 0 0 8px; }
 .ko-page h2 { font-size: 19px; color: #087e96; }
@@ -80,7 +67,7 @@
 .ko-reject { font-size: 12px; margin-top: 18px; }
 .ko-reject textarea { display: block; width: 100%; min-height: 65px; margin: 6px 0; }
 .ko-notice { padding: 10px 14px; margin: 10px 0 16px; border: 1px solid var(--alert-line); border-radius: 8px; background: var(--alert-bg); color: var(--alert-text); }
-.ko-page a:focus-visible, .ko-page button:focus-visible, .ko-page input:focus-visible, .ko-topbar a:focus-visible, .ko-topbar summary:focus-visible { outline: 3px solid var(--water); outline-offset: 3px; }
+.ko-page a:focus-visible, .ko-page button:focus-visible, .ko-page input:focus-visible { outline: 3px solid var(--water); outline-offset: 3px; }
 .ko-receipt-heading { display: flex; gap: 18px; align-items: center; margin: 10px 0 18px; }
 .ko-result-mark { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: #e1f4d7; color: #187c28; flex: 0 0 52px; }
 .ko-result-mark svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 3; }
@@ -129,11 +116,9 @@ html[data-theme="dark"] .ko-page h2,
 html[data-theme="dark"] .ko-page .ko-document-context > summary { color: var(--heading-ink); }
 html[data-theme="dark"] .ko-page .ko-document-context mark { color: #fff5d1; background: #66551f; }
 html[data-theme="dark"] .ko-type-badge { color: var(--paars); background: #3b2854; }
-@media (max-width: 1100px) { .ko-brand { min-width: 190px; } .ko-topbar { flex-wrap: wrap; gap: 12px; } .ko-topbar nav { gap: 2px; } .ko-topbar nav a { padding: 7px; font-size: 13px; } .ko-account { min-width: 95px; } .ko-question > div { gap: 12px; } .ko-actions { gap: 12px; } }
+@media (max-width: 1100px) { .ko-question > div { gap: 12px; } .ko-actions { gap: 12px; } }
 @media (max-width: 960px) {
- .canvas { padding: 12px 16px 24px; } .ko-topbar { flex-wrap: wrap; gap: 12px; }
- .ko-brand { flex: 1; } .ko-topbar nav { order: 4; flex-basis: 100%; overflow-x: auto; gap: 8px; }
- .ko-topbar .theme-toggle { margin-left: auto; } .ko-account { min-width: 80px; }
+ .canvas { padding: 12px 16px 24px; }
  .ko-page { padding-top: 18px; } .ko-page h1 { font-size: 26px; }
  .ko-review-layout, .ko-result-layout { grid-template-columns: minmax(0,1fr); }
  .ko-page .ko-source-layout { grid-template-columns: minmax(0,.65fr) minmax(0,1fr); gap: 12px; }

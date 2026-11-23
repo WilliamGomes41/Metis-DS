@@ -1,6 +1,9 @@
-"""Actual Chromium run of Raad's deploy check against the PostgreSQL console.
+"""Chromium checks for shared navigation and Raad against the PostgreSQL console.
 
-# release-control-evidence: scope/belofte releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 
 Set METIS_BROWSER_EXECUTABLE and METIS_PLAYWRIGHT_MODULE to run this test.
 """
@@ -16,8 +19,12 @@ import urllib.request
 import pytest
 
 
-@pytest.mark.skipif(not os.environ.get('METIS_BROWSER_EXECUTABLE'), reason='Chromium browser verification is opt-in')
-def test_deploy_check_names_each_failing_page_and_changes_nothing(tmp_path):
+pytestmark = pytest.mark.skipif(not os.environ.get('METIS_BROWSER_EXECUTABLE'),
+                              reason='Chromium browser verification is opt-in')
+
+
+@pytest.fixture
+def console_browser_env(tmp_path):
     root = Path(__file__).resolve().parents[1]
     with socket.socket() as port:
         port.bind(('127.0.0.1', 0))
@@ -38,10 +45,21 @@ def test_deploy_check_names_each_failing_page_and_changes_nothing(tmp_path):
                     time.sleep(.1)
             else:
                 pytest.fail((tmp_path / 'server.log').read_text())
-            subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root / 'tests/browser_deploy_check.cjs')],
-                           env=env, cwd=root, check=True, timeout=300)
-            result = json.loads((tmp_path / 'deploy-check-result.json').read_text())
-            assert result['domainUnchanged'] is True
+            yield root, env
         finally:
             server.terminate()
             server.wait(timeout=15)
+
+
+def test_deploy_check_names_each_failing_page_and_changes_nothing(tmp_path, console_browser_env):
+    root, env = console_browser_env
+    subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root / 'tests/browser_deploy_check.cjs')],
+                   env=env, cwd=root, check=True, timeout=300)
+    result = json.loads((tmp_path / 'deploy-check-result.json').read_text())
+    assert result['domainUnchanged'] is True
+
+
+def test_shared_console_header_responsive_and_keyboard_navigation(console_browser_env):
+    root, env = console_browser_env
+    subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root / 'tests/browser_console_header_check.cjs')],
+                   env=env, cwd=root, check=True, timeout=90)
