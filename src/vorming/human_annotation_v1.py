@@ -618,7 +618,7 @@ def validate_stored_selection(payload, *, fragments, annotation_id=None):
         resolve_source_selection(core, fragments=fragments)
 
 
-def overview(console, *, actor_id, snapshot_id, include_source_work=False):
+def overview(console, *, actor_id, snapshot_id, include_source_work=False, include_coverage=False):
     envelope = console._envelope(snapshot_id)
     authorize(console, actor_id, envelope)
     row, fragments = _read_set(console, snapshot_id)
@@ -630,7 +630,7 @@ def overview(console, *, actor_id, snapshot_id, include_source_work=False):
         block['locations'] = [{'page':raw[f].get('source_page'),'locator':raw[f].get('source_locator')}
             for f in block['source_fragment_ids'] if f in raw]
     by_id = {b['block_id']:b for b in blocks}
-    capture, history, pending = _capture_heads(console, snapshot_id, include_coverage=include_source_work)
+    capture, history, pending = _capture_heads(console, snapshot_id, include_coverage=include_source_work or include_coverage)
     entries = capture['entries']
     from src.vorming import confirmed_document_structure_v1 as structure
     confirmation = capture[structure.KEY]
@@ -639,9 +639,9 @@ def overview(console, *, actor_id, snapshot_id, include_source_work=False):
         from src.vorming.human_annotation_preview_v1 import inspect_for_overview, source_work
         inspection = inspect_for_overview(entries, fragments=fragments, confirmed_headings=structure.anchors(confirmation))
         coverage['source_work'] = source_work(inspection, blocks)
-        if confirmation is not None and structure.enabled():
-            from src.vorming import annotation_section_coverage_v1 as section_coverage
-            coverage[section_coverage.KEY] = section_coverage.project(confirmation, blocks, entries, capture.get(section_coverage.KEY))
+    if (include_source_work or include_coverage) and confirmation is not None and structure.enabled():
+        from src.vorming import annotation_section_coverage_v1 as section_coverage
+        coverage[section_coverage.KEY] = section_coverage.project(confirmation, blocks, entries, capture.get(section_coverage.KEY))
     for entry in entries:
         if stable_hash(entry['payload']) != entry.pop('payload_hash'):
             fail('annotation_integrity_failed')

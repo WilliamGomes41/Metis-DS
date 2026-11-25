@@ -11,6 +11,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from src.operations_console_v1 import ConsoleError
+from src.vorming import annotation_document_check_v1 as document_check
 from src.vorming import annotation_section_coverage_v1 as section_coverage
 from src.vorming import confirmed_document_structure_v1 as structure
 from src.vorming import human_annotation_v1 as domain
@@ -82,6 +83,9 @@ FINDINGS = {**ERRORS,
     'annotation_fields_required':'Wijs de noodzakelijke betekenisvelden van deze uitspraak aan.',
     'annotation_relation_target_missing':'Wijs expliciet aan bij welke uitspraak dit onderdeel hoort.',
     'annotation_structure_confirmation_required':'Bevestig eerst de inhoudsopgave op de annotatiewerkplek.',
+    'annotation_document_round_required':'Rond eerst de annotatieronde af.',
+    'annotation_document_coverage_required':'Kijk deze sectie na op gemiste uitspraken.',
+    'annotation_knowledge_required':'Leg ten minste één gereedstaande kennisannotatie vast.',
     'annotation_source_unaccounted':'Er is nog bronmateriaal niet verantwoord. De betreffende tekst staat hieronder.',
     'source_assessment_overlap':'Een bronrolvoorstel overlapt een uitspraak of ander bronrolvoorstel. Controleer beide annotaties.',
     'predicate_missing':'Wijs aan wat over het onderwerp wordt gezegd.',
@@ -187,12 +191,16 @@ def confirm_contents_html(document, basis, entries):
             f'<input id="heading-{index}" name="title" value="{escape(row["title"], quote=True)}" required maxlength="2000">'
             f'<select name="level" aria-label="Kopniveau voor kop {index}">{options}</select></li>'
         )
+    if rows:
+        body = '<h2>Klopt de inhoudsopgave?</h2><ol>' + ''.join(rows) + '</ol>'
+    else:
+        body = '<p>Deze bron bevat geen koppen. Je kunt het hele document als één sectie controleren.</p>'
     return (
-        '<section class="annotation-confirm-contents"><h2>Klopt de inhoudsopgave?</h2>'
+        '<section class="annotation-confirm-contents">'
         '<form method="post" action="/annotations/structure">'
         f'<input type="hidden" name="document" value="{escape(document, quote=True)}">'
         f'<input type="hidden" name="basis" value="{escape(basis, quote=True)}">'
-        '<ol>' + ''.join(rows) + '</ol>'
+        + body +
         '<button class="btn-primary" type="submit">Bevestig en ga annoteren</button></form></section>'
         '<style>.annotation-confirm-contents{max-width:48rem;margin:1.5rem auto}'
         '.annotation-confirm-contents ol{padding:0;list-style:none;margin:0 0 1.25rem}'
@@ -346,14 +354,21 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         def build_state():
             with console.workflow_document_store._connect() as con:
                 con.read_only = True
-                return latest_build(con, document)
+                return latest_build(con, document), document_check.read(con, document)
 
         for _attempt in range(3):
             before = build_state()
-            options = {'include_source_work': True} if include_source_work else {}
-            view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document, **options)
+            active, current_round = before
+            new_flow = current_round is not None or (document_check.enabled() and active is None)
+            view = domain.overview(console, actor_id=actor['account_id'], snapshot_id=document,
+                                   include_source_work=include_source_work and not new_flow,
+                                   include_coverage=include_source_work and new_flow)
             if build_state() == before:
-                view['current_build'] = before
+                view['current_build'] = active
+                view['document_round'] = current_round
+                view['document_check_flow'] = new_flow
+                if new_flow and include_source_work:
+                    view['source_work'] = {'groups': [], 'ranges': []}
                 for entry in view.get('entries', ()):
                     finding = domain.historical_finding(entry)
                     if finding:
@@ -364,8 +379,76 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     def confirmed_contents(state, document):
         definition = state[structure.KEY]
         coverage = state.get(section_coverage.KEY)
+        if state.get('document_check_flow') and (state.get('document_round') or {}).get('phase') != 'checking':
+            coverage = None
         editable = coverage is not None and not console.snapshot_is_published(document)
-        return source_contents_html(definition['entries'], coverage=coverage, document=document, editable=editable)
+        active = state.get('current_build')
+        if editable and state.get('document_check_flow') and active:
+            from src.review.knowledge_route_v1 import build_is_current
+            editable = active['state'] != 'running' and not (
+                active['state'] == 'succeeded' and build_is_current(state['entries'], state['object_bindings']))
+        entries = definition['entries']
+        if not entries and state.get('document_check_flow') and state['blocks']:
+            entries = [{'block_id': state['blocks'][0]['block_id'], 'title': 'Hele document', 'level': 1}]
+        return source_contents_html(entries, coverage=coverage, document=document, editable=editable)
+
+    def round_form(state, document, phase, label):
+        fields = {'document': document, 'phase': phase, 'expected_generation': str(state['generation']),
+                  'expected_round': str((state.get('document_round') or {}).get('revision', 0))}
+        hidden = ''.join(f'<input type="hidden" name="{key}" value="{esc(value)}">' for key, value in fields.items())
+        style = 'btn-primary' if phase == 'checking' else 'btn-secondary'
+        return ('<form method="post" action="/annotations/round" data-annotation-round>'
+                + hidden + f'<button type="submit" class="{style}">{label}</button></form>')
+
+    def document_check_panel(state, actor, document):
+        if not state.get('document_check_flow'):
+            return ''
+        if console.snapshot_is_published(document):
+            return ''
+        if (state.get('document_round') or {}).get('phase') != 'checking':
+            return round_form(state, document, 'checking', 'Ik ben klaar met dit document')
+        from src.vorming import human_annotation_build_v1 as build
+        checked = build.overview(console, actor_id=actor['account_id'], snapshot_id=document)
+        if (checked.get('document_round') or {}).get('phase') != 'checking':
+            return ''
+        findings = checked['inspection']['findings']
+        body = '<section class="annotation-document-check" aria-labelledby="annotation-document-check-title">'
+        body += '<h2 id="annotation-document-check-title">Documentcontrole</h2>'
+        if findings:
+            body += '<ul>'
+            for finding in findings:
+                message = FINDINGS.get(finding['code'], 'Controleer de opgeslagen annotatie en het bronbewijs.')
+                action = ''
+                if finding.get('section'):
+                    action = f' <a href="#{quote(finding["section"], safe="")}">{esc(finding["title"])}</a>'
+                elif finding.get('annotation_id'):
+                    url = '/annotations?' + urlencode({'document': document, 'annotation': finding['annotation_id']})
+                    action = f' <a href="{esc(url)}">Open annotatie</a>'
+                body += f'<li>{esc(message)}{action}</li>'
+            body += '</ul>'
+        elif not checked['current_build']:
+            body += '<p>De opgeslagen annotaties zijn klaar voor de bouw.</p>'
+        signals = [entry for entry in checked['inspection']['entries'] if entry.get('signals')]
+        if signals:
+            body += '<details><summary>Signalen voor Review</summary><ul>'
+            for entry in signals:
+                url = '/annotations?' + urlencode({'document': document, 'annotation': entry['annotation_id']})
+                messages = [SIGNALS.get(code, 'Een onderdeel is niet vastgesteld.') for code in entry['signals']]
+                body += f'<li>{esc(" ".join(messages))} <a href="{esc(url)}">Open annotatie</a></li>'
+            body += '</ul></details>'
+        active = checked['current_build']
+        if active:
+            url = '/annotations/build?' + urlencode({'document': document, 'attempt': active['attempt_id']})
+            body += f'<p><a href="{esc(url)}">Opgeslagen bouwopdracht bekijken</a></p>'
+        if checked['can_finalize']:
+            fields = {'document': document, 'command_id': str(uuid4()), 'overview_hash': checked['overview_hash'],
+                      'expected_generation': str(checked['generation']), 'expected_revision': checked['objects_revision']}
+            hidden = ''.join(f'<input type="hidden" name="{key}" value="{esc(value)}">' for key, value in fields.items())
+            body += ('<form method="post" action="/annotations/finalize" data-confirmed-document-build>'
+                     + hidden + '<button class="btn-primary" type="submit">Afronden en bouwen</button></form>')
+        if not active or active['state'] != 'running':
+            body += round_form(checked, document, 'annotating', 'Verder annoteren')
+        return body + '</section>'
 
     @app.get('/annotations', response_class=HTMLResponse)
     def editor(request: Request, document: str = '', overview: bool = False):
@@ -405,7 +488,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 '<p>Annoteren geeft geen goedkeuring. De bij ontvangst gekozen beoordeling blijft gelden.</p>'
                 '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bron openen voor annotatie</button></form></section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
         from src.vorming import human_annotation_build_v1 as build
-        state = build.overview(console, actor_id=actor['account_id'], snapshot_id=document) if overview else editor_state(actor, document, include_source_work=True)
+        state = editor_state(actor, document, include_source_work=True)
+        overview = overview and not state['document_check_flow']
+        if overview:
+            state = build.overview(console, actor_id=actor['account_id'], snapshot_id=document)
+        checking_document = (state.get('document_round') or {}).get('phase') == 'checking'
         from src.vorming.source_bound_fields_v3 import FIELDS, TYPE_FIELDS, CONTEXT_FIELDS
         from src.vorming.human_annotation_contract_v1 import CONTEXT_BINDING_FIELDS, ROLE_MAP
         from src.vorming.human_annotation_v1 import TYPE_CORE_FIELDS
@@ -421,11 +508,12 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         from src.review.knowledge_route_v1 import annotation_route, build_is_current
         from src.review.four_eyes_v1 import document_requires_second_review
         second_review = document_requires_second_review(envelope, state['entries'])
-        built = (state.get('current_build') or {}).get('state', '') if overview else ''
+        built = (state.get('current_build') or {}).get('state', '') if overview or checking_document else ''
         if built == 'succeeded' and not build_is_current(state['entries'], state.get('object_bindings') or {}):
             built = ''
-        intro += annotation_route(overview=overview, second_review=second_review,
-                                  finalized=built if built in {'running', 'succeeded'} else '')
+        intro += annotation_route(overview=overview or checking_document, second_review=second_review,
+                                  finalized=built if built in {'running', 'succeeded'} else '',
+                                  document_check_flow=state['document_check_flow'])
         if overview:
             items = []
             for entry in state['entries']:
@@ -534,7 +622,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         proposed_contents = structure.proposed(state['blocks'])
         confirmed = state.get(structure.KEY)
         needs_confirmation = False
-        if structure.enabled() and proposed_contents and confirmed is None:
+        if structure.enabled() and (proposed_contents or state['document_check_flow']) and confirmed is None:
             with console.workflow_document_store._connect() as con:
                 needs_confirmation = not structure.has_seal(con, document)
         if needs_confirmation:
@@ -558,7 +646,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <p id="annotation-source-work-status" role="status"></p>
 <p id="annotation-coverage-status" role="status"></p>
-<div class="annotation-workplace">'''+contents+'''<div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
+<div id="annotation-document-check-host">'''+document_check_panel(state, actor, document)+'''</div>
+<div class="annotation-workplace">'''+contents+'''<div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+('' if state.get('document_check_flow') else source_work_html(state, esc))+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
 <section id="annotation-offer" aria-label="Voorstel van Metis" hidden>
@@ -633,6 +722,10 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 #annotation-controls>h2:first-child{font-size:1.125rem;color:var(--text);margin-bottom:.75rem}
 #annotation-controls #annotation-simple-heading{margin:1rem 0 .5rem;font-size:1rem}
 #annotation-status:empty{display:none}
+#annotation-document-check-host:not(:empty){margin-block:1rem}
+.annotation-document-check{border-block:1px solid var(--line);padding-block:.75rem}
+.annotation-document-check h2{margin:0 0 .5rem}
+.annotation-document-check form{display:inline-block;margin:.25rem .5rem .25rem 0}
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
 .annotation-contents{min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft);padding:.75rem}
 .annotation-contents h2{font-size:1rem;color:var(--text);margin:0 0 .25rem}
@@ -691,6 +784,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 for anchor, title, level in zip(form.getlist('anchor'), form.getlist('title'), form.getlist('level'),
                                                 strict=True)
             ]
+            if not entries and not document_check.enabled():
+                domain.fail('annotation_structure_invalid')
             await asyncio.to_thread(structure.confirm, console, actor_id=actor['account_id'], snapshot_id=document,
                                     extraction_hash=str(form.get('basis') or ''), entries=entries)
         except ConsoleError as exc:
@@ -708,6 +803,32 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         return RedirectResponse('/annotations?' + urlencode({'document': document}), status_code=303)
 
 
+    @app.post('/annotations/round')
+    async def change_document_round(request: Request):
+        actor = require(request)
+        form = await request.form()
+        document = str(form.get('document') or '')
+        location = '/annotations?' + urlencode({'document': document})
+        try:
+            generation = int(str(form.get('expected_generation', '')))
+            revision = int(str(form.get('expected_round', '')))
+        except ValueError:
+            return JSONResponse({'message': 'Open de actuele werkplek en probeer opnieuw.'}, status_code=400)
+        try:
+            await asyncio.to_thread(document_check.transition, console, actor_id=actor['account_id'],
+                                    snapshot_id=document, phase=form.get('phase'),
+                                    expected_generation=generation, expected_round=revision)
+        except ConsoleError as exc:
+            if exc.code not in {'annotation_document_round_stale', 'annotation_document_round_unavailable',
+                                'annotation_document_round_invalid', 'annotation_structure_confirmation_required',
+                                'processing_attempt_in_progress'}:
+                raise
+            return JSONResponse({'message': 'De werkrevisie is gewijzigd. Open de actuele annotatiewerkplek.'},
+                                status_code=409, headers={'Cache-Control': 'no-store'})
+        if request.headers.get('accept') == 'application/json':
+            return JSONResponse({'location': location}, headers={'Cache-Control': 'no-store'})
+        return RedirectResponse(location, status_code=303)
+
     @app.post('/annotations/coverage')
     async def record_coverage(request: Request):
         actor = require(request)
@@ -724,14 +845,16 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                                     fingerprint=fingerprint)
         except ConsoleError as exc:
             if exc.code not in {'annotation_coverage_invalid', 'annotation_coverage_stale',
-                                'annotation_coverage_scope_closed'}:
+                                'annotation_coverage_scope_closed', 'annotation_coverage_build_locked'}:
                 raise
             error = exc.code
         location = '/annotations?' + urlencode({'document': document})
         if request.headers.get('accept') == 'application/json':
             state = await asyncio.to_thread(editor_state, actor, document, include_source_work=True)
             message = 'Sectie gemarkeerd als nagekeken.' if section else 'Reikwijdte opgeslagen.'
-            if error:
+            if error == 'annotation_coverage_build_locked':
+                message = 'De actieve bouw gebruikt deze reikwijdte en sectiecontroles.'
+            elif error:
                 message = 'De sectie is gewijzigd. Controleer de actuele inhoudsopgave.'
             return JSONResponse({'generation': state['generation'],
                                  'contents': confirmed_contents(state, document) if structure.KEY in state else '',
@@ -832,7 +955,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 raise
             body = '<h1>Document nog niet afgesloten</h1><p role="alert">'+esc(ERRORS.get(error.code,
                 'Afsluiten is niet gelukt. Je opgeslagen annotaties blijven bewaard. Controleer het documentoverzicht.'))+'</p>'
-            body += '<p><a href="/annotations?'+esc(urlencode({'document':document,'overview':'true'}))+'">Documentoverzicht opnieuw controleren</a></p>'
+            body += '<p><a href="/annotations?'+esc(urlencode({'document':document,'overview':'true'}))+'">Terug naar documentcontrole</a></p>'
             return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>', title='Document controleren'),
                                 status_code=409, headers={'Cache-Control':'no-store'})
         from src.vorming.worker_handover_v1 import native_attempt
@@ -905,7 +1028,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 for row in outline['definition']['entries']
             ) + '</ul></details>'
         body += '<p><a id="annotation-build-review"'+(' hidden' if status['state']!='succeeded' else '')+' href="/review?'+esc(urlencode({'document':document}))+'">Kennisobjecten en toepasselijke beoordeling openen</a></p>'
-        body += '<p><a href="/annotations?'+esc(urlencode({'document':document,'overview':'true'}))+'">Terug naar documentoverzicht</a></p>'
+        body += '<p><a href="/annotations?'+esc(urlencode({'document':document,'overview':'true'}))+'">Terug naar documentcontrole</a></p>'
         body += '<p><a href="'+esc(str(request.url))+'">Status opnieuw laden</a></p>'
         body += '<script src="/annotations/build.js" defer></script>'
         return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>', title='Opbouw van het document'), headers={'Cache-Control':'no-store'})
@@ -952,7 +1075,9 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         state = editor_state(actor, document, include_source_work=source_work)
         if source_work:
             output = {'generation': state['generation'], 'work': state['source_work'],
-                      'html': source_work_html(state, esc)}
+                      'html': '' if state.get('document_check_flow') else source_work_html(state, esc)}
+            if state.get('document_check_flow'):
+                output['document_check_html'] = document_check_panel(state, actor, document)
             if section_coverage.KEY in state:
                 output['contents'] = confirmed_contents(state, document)
             state = output

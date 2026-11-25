@@ -414,13 +414,13 @@ def test_version_ten_upgrade_keeps_input_but_never_invents_a_seal(tmp_path, prod
     from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
     from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
-    from src.workflows.formation_recovery_v1 import BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE
+    from src.workflows.formation_recovery_v1 import BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE
     console, _, _, _ = saved_source(production_console, tmp_path)
     current = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
     old = deepcopy(current)
     old['workflow_recovery_version'] = 10
     old['formation_recovery']['version'] = 3
-    for table in (*BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE):
+    for table in (*BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE):
         del old['formation_recovery']['tables'][table]
     for row in old['formation_recovery']['tables']['annotation_sets']:
         del row['current_seal_id']

@@ -41,6 +41,7 @@ import pytest
     ('tests.browser_saved_annotations_fixture', 'browser_saved_annotations_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_annotation_source_selection_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_annotation_binding_check.cjs'),
+    ('tests.browser_annotation_document_check_fixture', 'browser_annotation_document_check.cjs'),
     ('tests.browser_annotation_source_progress_fixture', 'browser_annotation_source_progress_check.cjs'),
     ('tests.browser_test_document_deletion_fixture', 'browser_test_document_deletion_check.cjs'),
     ('tests.browser_human_build_fixture', 'browser_human_build_check.cjs'),
@@ -78,6 +79,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                                     'browser_one_offer_check.cjs':2,
                                     'browser_annotation_source_selection_check.cjs':4,
                                     'browser_annotation_binding_check.cjs':2,
+                                    'browser_annotation_document_check.cjs':2,
                                     'browser_annotation_source_progress_check.cjs':2,
                                     'browser_test_document_deletion_check.cjs':5,
                                     'browser_human_build_check.cjs':10}.get(script,6)

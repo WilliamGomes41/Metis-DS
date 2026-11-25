@@ -28,7 +28,7 @@ def sections(definition, blocks):
             current = headings[anchor]
             outline.append(current)
         elif current is None:
-            current = {'block_id': anchor, 'title': 'Vóór de eerste kop', 'level': 1}
+            current = {'block_id': anchor, 'title': 'Vóór de eerste kop' if headings else 'Hele document', 'level': 1}
             outline.append(current)
         by_block[anchor] = current['block_id']
     return outline, by_block
@@ -89,7 +89,7 @@ def write(console, *, actor_id, snapshot_id, basis, scope=None, section=None, fi
     store = console.workflow_document_store
     with console._store_write_lock(), workflow_transaction(store) as con:
         envelope = annotations._locked(console, con, actor_id, snapshot_id)
-        active = con.execute('SELECT working_revision_id, extraction_hash FROM workflow.annotation_sets '
+        active = con.execute('SELECT working_revision_id, extraction_hash, generation FROM workflow.annotation_sets '
                              'WHERE snapshot_id=%s FOR UPDATE', (snapshot_id,)).fetchone()
         definition = structure.read(con, snapshot_id)
         if (not active or active['extraction_hash'] != pinned['extraction_hash']
@@ -113,6 +113,13 @@ def write(console, *, actor_id, snapshot_id, basis, scope=None, section=None, fi
             recorded['confirmations'][section] = {
                 'fingerprint': fingerprint, 'actor_id': actor_id, 'recorded_at': datetime.now(timezone.utc).isoformat(),
             }
+        attempt = con.execute("SELECT s.generation,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
+            "JOIN workflow.annotation_seals s USING(seal_id) JOIN workflow.processing_attempts a USING(attempt_id) "
+            "WHERE c.snapshot_id=%s AND s.payload ? 'document_check' ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1",
+            (snapshot_id,)).fetchone()
+        if attempt and (attempt['state'] == 'running' or (
+                attempt['state'] == 'succeeded' and attempt['generation'] == active['generation'])):
+            annotations.fail('annotation_coverage_build_locked')
         con.execute('INSERT INTO workflow.annotation_section_coverage (snapshot_id, scope, confirmations, updated_by) '
                     'VALUES (%s,%s,%s::jsonb,%s) ON CONFLICT (snapshot_id) DO UPDATE SET '
                     'scope=EXCLUDED.scope, confirmations=EXCLUDED.confirmations, updated_by=EXCLUDED.updated_by, '

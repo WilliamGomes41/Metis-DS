@@ -195,7 +195,7 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
         from src.workflows.formation_recovery_v1 import upgrade_legacy, validate
         if state.get('formation_recovery') is None:
             raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
-        if isinstance(state['formation_recovery'], Mapping) and state['formation_recovery'].get('version') in {5, 6}:
+        if isinstance(state['formation_recovery'], Mapping) and state['formation_recovery'].get('version') in {5, 6, 7}:
             state = upgrade_legacy(dict(state))
         validate(state)
         return deepcopy(dict(state))

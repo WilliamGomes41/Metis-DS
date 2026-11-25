@@ -85,6 +85,12 @@
       ]
     ],
     [
+      "/annotations/coverage",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/editor.js",
       [
         "GET"
@@ -115,6 +121,12 @@
       ]
     ],
     [
+      "/annotations/round",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/source",
       [
         "POST"
@@ -122,6 +134,12 @@
     ],
     [
       "/annotations/source-role",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/annotations/structure",
       [
         "POST"
       ]
