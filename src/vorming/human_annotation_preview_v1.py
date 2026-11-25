@@ -16,6 +16,9 @@ from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from src.vorming.source_accountability_v1 import ROLES, uncovered_ranges, validate_assessments
 from src.vorming.source_bound_fields_v3 import TYPE_FIELDS, VIA_RELATION
 
+# Characters is_source_strength_label accepts around a standalone label.
+_LABEL_PUNCTUATION = frozenset(' \t\r\n.!?:;,')
+
 
 def _span(anchor):
     return {key: anchor[key] for key in ('block_id', 'start', 'end')}
@@ -253,7 +256,14 @@ def inspect_document(entries, *, fragments, confirmed_headings=(), allow_unselec
                 if label:
                     strength_labels[annotation_id] = label
                     anchor = label['label']
-                    covered.setdefault(anchor['block_id'], []).append((anchor['start'], anchor['end']))
+                    # The proof stays the exact cue; its accepted punctuation is accounted for too.
+                    text = next(block['text'] for block in blocks if block['block_id'] == anchor['block_id'])
+                    start, end = anchor['start'], anchor['end']
+                    while start and text[start - 1] in _LABEL_PUNCTUATION:
+                        start -= 1
+                    while end < len(text) and text[end] in _LABEL_PUNCTUATION:
+                        end += 1
+                    covered.setdefault(anchor['block_id'], []).append((start, end))
     try:
         validate_assessments(assessments, blocks, selected)
     except ValueError as error:

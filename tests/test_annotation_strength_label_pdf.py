@@ -142,6 +142,18 @@ def test_pdf_strength_label_survives_annotation_build_admission_and_review(
     assert stored['confirmed_recommendation_semantics']['strength_evidence_span'] == label
 
 
+@pytest.mark.parametrize('layout', ['same', 'following'])
+def test_pdf_strength_label_with_punctuation_leaves_no_unaccounted_source(tmp_path, production_console,
+                                                                         monkeypatch, layout):
+    monkeypatch.setenv('METIS_PDF_EXTRACTOR', 'legacy-comparison')
+    console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
+    actor, sid, _view, selection = prepare_recommendation_pdf(console, layout, labels=(LABEL + '.',))
+    annotation.save(console, actor_id=actor, **selection)
+    execute_build(console, actor, sid)
+    obj = candidate(restart_production(console), sid)
+    assert obj['metadata'][STRENGTH_LABEL_EVIDENCE]['text'] == LABEL
+
+
 @pytest.mark.parametrize('labels,reason', [
     ((), None),
     (('Een volgende, afzonderlijke uitspraak.', LABEL), 'recommendation_strength_label_not_applicable'),
