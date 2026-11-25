@@ -163,9 +163,9 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
                 for row in state['workflow_tables']['publish_authorizations']:
                     row.pop('authorization_payload')
                 formation = state.pop('formation_recovery')
-                assert formation['version'] == 7
+                assert formation['version'] == 8
                 for table in ('annotation_sets','annotation_versions','annotation_heads','annotation_commands',
-                              'annotation_structure_confirmations','annotation_section_coverage',
+                              'annotation_structure_confirmations','annotation_section_coverage','annotation_round_events',
                               'annotation_seals','annotation_build_commands'):
                     assert formation['tables'][table] == []  # Legacy work is never silently taken over.
                 assert not formation['tables']['formation_evidence_roots']
