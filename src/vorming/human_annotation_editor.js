@@ -730,18 +730,21 @@ import {bindRange} from '/annotations/binding.mjs';
     if(coverageSaving) return;
     const notice=el('coverage-status');
     coverageSaving=true;
+    const buttons=[...form.closest('.annotation-contents').querySelectorAll('[data-coverage-form] button')];
+    buttons.forEach(button=>button.disabled=true);
     coverageRequest+=1;
     notice.textContent='Dekking opslaan…';
     try {
       await flush();
       const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{Accept:'application/json'}});
       const result=await response.json();
-      if(result.generation===state.generation) replaceContents(result.contents);
       if(state.document_check_flow) await refreshSourceWork();
+      if(result.generation===state.generation) replaceContents(result.contents);
       notice.textContent=result.message || 'Dekking opslaan is niet gelukt.';
     } catch(error) {
       notice.textContent='Dekking opslaan is niet gelukt. Je kunt het opnieuw proberen.';
     } finally {
+      buttons.forEach(button=>button.disabled=false);
       coverageSaving=false;
     }
   });

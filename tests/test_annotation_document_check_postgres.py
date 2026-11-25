@@ -67,7 +67,7 @@ def test_same_workspace_check_build_review_and_publication(
                        follow_redirects=False).status_code == 303
     old_link = client.get('/annotations', params={'document': sid, 'overview': 'true'})
     assert 'Ik ben klaar met dit document' in old_link.text
-    assert 'Afronden en bouwen' not in old_link.text
+    assert 'data-confirmed-document-build' not in old_link.text
     with console.workflow_document_store._connect() as con:
         assert check.read(con, sid) is None
     form = {'document': sid, 'phase': 'checking', 'expected_generation': baseline['generation'],
@@ -84,13 +84,13 @@ def test_same_workspace_check_build_review_and_publication(
     assert overview(resumed)['document_round']['phase'] == 'checking'
     panel = client.get('/annotations', params={'document': sid, 'overview': 'true'})
     assert 'Verder annoteren' in panel.text and 'Overige begeleidende tekst' in panel.text
-    assert 'Afronden en bouwen' in panel.text
+    assert 'data-confirmed-document-build' in panel.text
     prior = closing(overview())
     section_view = state()[coverage.KEY]
     if scope == 'full':
         coverage.write(console, actor_id=actor, snapshot_id=sid, basis=section_view['basis'], scope='full')
         assert not overview()['can_finalize']
-        assert 'Afronden en bouwen' not in client.get('/annotations', params={'document': sid}).text
+        assert 'data-confirmed-document-build' not in client.get('/annotations', params={'document': sid}).text
         assert {row['title'] for row in overview()['inspection']['findings']
                 if row['code'] == 'annotation_document_coverage_required'} == {'Algemeen', 'Diagnostiek'}
         for section in section_view['sections']:
