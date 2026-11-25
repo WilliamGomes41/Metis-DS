@@ -122,9 +122,14 @@ import {bindRange} from '/annotations/binding.mjs';
   // A meaning reference that lay only inside a removed range no longer has a source.
   function clearDependentFields(removed) {
     const contains=(outer,inner)=>outer.block_id===inner.block_id && outer.start<=inner.start && outer.end>=inner.end;
-    for(const [field,evidence] of Object.entries(entry.field_evidence || {}))
-      if(evidence.span && contains(removed,evidence.span) && !entry.ranges.some(range=>contains(range,evidence.span)))
+    // The field a role binds stays only while a range of that same role still covers it.
+    const owned=fieldContract.context_bindings?.[removed.role];
+    for(const [field,evidence] of Object.entries(entry.field_evidence || {})) {
+      if(!evidence.span || !contains(removed,evidence.span)) continue;
+      const keepers=field===owned ? entry.ranges.filter(range=>range.role===removed.role) : entry.ranges;
+      if(!keepers.some(range=>contains(range,evidence.span)))
         entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
+    }
   }
 
   // Bind the selected source range using its existing annotation role.

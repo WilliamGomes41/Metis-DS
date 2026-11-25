@@ -145,6 +145,32 @@ const tasks=require('./browser_annotation_tasks.cjs');
   await minus(role,text).click();
   await row(role).getByText(text,{exact:true}).waitFor({state:'detached'});
  }
+ // One literal in two application roles: removing one role clears that role's field only.
+ const fieldsOf=async()=>page.evaluate(async sid=>{
+  const data=await (await fetch('/annotations/api?document='+sid)).json();
+  return data.entries.find(entry=>entry.annotation_id===new URL(location.href).searchParams.get('annotation'))?.field_evidence;
+ },sid);
+ for(const role of ['population','scope']) {
+  await tasks.addAs(page,block(support),support,role);
+  await row(role).getByText(support,{exact:true}).waitFor();
+ }
+ await page.waitForFunction(async sid=>{
+  const data=await (await fetch('/annotations/api?document='+sid)).json();
+  const fields=data.entries.find(entry=>entry.annotation_id===new URL(location.href).searchParams.get('annotation'))?.field_evidence;
+  return fields?.target_group_span?.span && fields?.scope_span?.span;
+ },sid);
+ await minus('population',support).click();
+ await row('population').getByText(support,{exact:true}).waitFor({state:'detached'});
+ await page.waitForFunction(async sid=>{
+  const data=await (await fetch('/annotations/api?document='+sid)).json();
+  const entry=data.entries.find(entry=>entry.annotation_id===new URL(location.href).searchParams.get('annotation'));
+  return !entry?.ranges.some(a=>a.role==='population');
+ },sid);
+ let fields=await fieldsOf();
+ assert.equal(fields.target_group_span.span,null,JSON.stringify(fields.target_group_span));
+ assert(fields.scope_span.span,JSON.stringify(fields.scope_span));
+ await minus('scope',support).click();
+ await row('scope').getByText(support,{exact:true}).waitFor({state:'detached'});
  await page.setViewportSize({width:1440,height:1000});
  // 3. Evidence is added when the source has it; the card asks no choice. One button finishes.
  assert.equal(await row('evidence').getByRole('button',{name:/Staat niet in de bron|niet van toepassing/}).count(),0);
