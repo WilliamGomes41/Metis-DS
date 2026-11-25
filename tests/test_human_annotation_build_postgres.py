@@ -19,7 +19,7 @@ from tests.production_support import restart_production
 from tests.test_human_annotation_postgres import anchor, command
 
 
-def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=False, source_status="unknown", context_function=None, **options):
+def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=False, source_status="unknown", context_function=None, heading='', **options):
     console = production_console(root=tmp_path, **options)
     actor = console.create_account(username='builder', password='human-build-secret', roles=('researcher', 'reviewer'))['account_id']
     reviewer = console.create_account(username='reviewer', password='human-build-secret', roles=('reviewer',))['account_id']
@@ -27,7 +27,7 @@ def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=
     if review_option == 'two_others':
         reviewers.append(console.create_account(username='reviewer2', password='human-build-secret', roles=('reviewer',))['account_id'])
     sid = console.receive_source(actor_id=actor, filename='human.html', content_type='text/html',
-        data=('<html><body><p>De kwetsbare huid verklaart de pijn.</p>'+('<p>Alleen bij klachten.</p><p>Onderzoek beschrijft dit verband.</p><p>De beoordeling betreft volwassenen.</p>' if context_function else '')+'</body></html>').encode(),
+        data=('<html><body>'+heading+'<p>De kwetsbare huid verklaart de pijn.</p>'+('<p>Alleen bij klachten.</p><p>Onderzoek beschrijft dit verband.</p><p>De beoordeling betreft volwassenen.</p>' if context_function else '')+'</body></html>').encode(),
         ingest_kind='new', title='Menselijke opbouw', version='1.0', date='2026-11-08', live_url='',
         class_='richtlijn', family='test', named_reviewers=[reviewer] if review_option is None else [],
         review_choice={'contract':'review-configuration-v2','option':review_option,'four_eyes_required':four_eyes,
@@ -414,13 +414,13 @@ def test_version_ten_upgrade_keeps_input_but_never_invents_a_seal(tmp_path, prod
     from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
     from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
-    from src.workflows.formation_recovery_v1 import BUILD_TABLES
+    from src.workflows.formation_recovery_v1 import BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE
     console, _, _, _ = saved_source(production_console, tmp_path)
     current = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
     old = deepcopy(current)
     old['workflow_recovery_version'] = 10
     old['formation_recovery']['version'] = 3
-    for table in BUILD_TABLES:
+    for table in (*BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE):
         del old['formation_recovery']['tables'][table]
     for row in old['formation_recovery']['tables']['annotation_sets']:
         del row['current_seal_id']

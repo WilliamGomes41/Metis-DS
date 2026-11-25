@@ -267,13 +267,13 @@ import {bindRange} from '/annotations/binding.mjs';
     const provisional=!hasCore() && !!selected,busy=finalizing || checking || deriving,object=built();
     el('ready').hidden=!!object || !hasCore() && !provisional;
     el('ready').disabled=busy || !(provisional || complete);
-    el('finish').hidden=!!object;
+    el('finish').hidden=state.document_check_flow || !!object;
     el('finish').disabled=busy || hasCore() && !complete;
     // #1064: an object that is already built has one way forward: rebuild it when something changed,
     // otherwise go back to its review.
     el('rebuild').hidden=!object;
     if(object) {
-      el('rebuild').textContent=changedSinceBuild() ? 'Kennisobject opnieuw bouwen' : 'Terug naar review';
+      el('rebuild').textContent=changedSinceBuild() ? (state.document_check_flow ? 'Opslaan voor documentcontrole' : 'Kennisobject opnieuw bouwen') : 'Terug naar review';
       el('rebuild').disabled=finalizing || checking || deriving || rebuilding || changedSinceBuild() && (!hasCore() || !complete);
     }
     renderRows();
@@ -324,7 +324,7 @@ import {bindRange} from '/annotations/binding.mjs';
     const notice=buildNotice || (buildPhase && !['running','succeeded'].includes(buildPhase.state) ?
       'De laatste opbouw is gestopt. Je opgeslagen annotaties zijn bewaard. Controleer het documentoverzicht.' : '');
     el('saved-notice').textContent=notice;el('saved-notice').hidden=!notice;
-    el('saved-overview').hidden=!entries.length;
+    el('saved-overview').hidden=state.document_check_flow || !entries.length;
     el('saved-overview').setAttribute('aria-disabled',String(finalizing || saving || checking || deriving || rebuilding));
     el('saved-build').hidden=!buildPhase;
     if(buildPhase) el('saved-build').href='/annotations/build?'+new URLSearchParams({document:state.snapshot_id,attempt:buildPhase.attempt_id});
@@ -708,12 +708,58 @@ import {bindRange} from '/annotations/binding.mjs';
       sourceElements.get(gap.block_id)?.after(link);
     }
   }
+  let coverageSaving=false, coverageRequest=0;
+  function replaceContents(next) {
+    const contents=document.querySelector('.annotation-contents');
+    if(!contents || !next) return;
+    const focused=contents.contains(document.activeElement) ? document.activeElement : null;
+    const destination=focused?.closest('li')?.querySelector('a')?.hash;
+    const previousScroll=contents.querySelector('ul').scrollTop;
+    contents.outerHTML=next;
+    const updated=document.querySelector('.annotation-contents');
+    updated.querySelector('ul').scrollTop=previousScroll;
+    if(focused) {
+      const target=[...updated.querySelectorAll('a')].find(link=>link.hash===destination);
+      (target || updated.querySelector('h2')).focus({preventScroll:true});
+    }
+  }
+  sourceWorkHost.closest('.annotation-workplace').addEventListener('submit',async event=>{
+    const form=event.target;
+    if(!form.matches('[data-coverage-form]')) return;
+    event.preventDefault();
+    if(coverageSaving) return;
+    const notice=el('coverage-status');
+    coverageSaving=true;
+    const buttons=[...form.closest('.annotation-contents').querySelectorAll('[data-coverage-form] button')];
+    buttons.forEach(button=>button.disabled=true);
+    coverageRequest+=1;
+    notice.textContent='Dekking opslaan…';
+    try {
+      await flush();
+      const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{Accept:'application/json'}});
+      const result=await response.json();
+      if(state.document_check_flow) await refreshSourceWork();
+      if(result.generation===state.generation) replaceContents(result.contents);
+      notice.textContent=result.message || 'Dekking opslaan is niet gelukt.';
+    } catch(error) {
+      notice.textContent='Dekking opslaan is niet gelukt. Je kunt het opnieuw proberen.';
+    } finally {
+      buttons.forEach(button=>button.disabled=false);
+      coverageSaving=false;
+    }
+  });
+
+  let sourceWorkRequest=0;
   async function refreshSourceWork() {
+    const request=++sourceWorkRequest;
+    const contentsRequest=coverageSaving ? null : coverageRequest;
     const response=await fetch('/annotations/api?'+new URLSearchParams({document:state.snapshot_id,source_work:'true'}));
     if(!response.ok) throw new Error('De bronverantwoording kon niet worden vernieuwd.');
     const next=await response.json();
-    if(next.generation!==state.generation) return;
+    if(request!==sourceWorkRequest || next.generation!==state.generation) return;
     sourceWorkGeneration=next.generation;
+    if(!coverageSaving && contentsRequest===coverageRequest && next.contents) replaceContents(next.contents);
+    if(next.document_check_html!==undefined) el('document-check-host').innerHTML=next.document_check_html;
     const open=[...sourceWorkHost.querySelectorAll('details[open] > summary')].map(item=>item.textContent);
     sourceWork=next.work;
     sourceWorkHost.innerHTML=next.html;
@@ -846,7 +892,9 @@ import {bindRange} from '/annotations/binding.mjs';
           const previous = state.entries[index];
           if (index < 0) state.entries.push(saved); else state.entries[index] = saved;
           committed = version; retryRequest = null;setEntryUrl(entry.annotation_id);
-          if(sourceWorkWasCurrent && previous?.status!=='ready' && !previous?.historical_finding && data.status!=='ready') {
+          if(state.document_check_flow && state.document_round?.phase==='checking') {
+            if(!sourceWorkSaving) refreshSourceWork().catch(()=>{});
+          } else if(sourceWorkWasCurrent && previous?.status!=='ready' && !previous?.historical_finding && data.status!=='ready') {
             sourceWorkGeneration=data.generation;
             for(const input of sourceWorkHost.querySelectorAll('[name=expected_generation]')) input.value=data.generation;
           } else if(!sourceWorkSaving) refreshSourceWork().catch(()=>{});
@@ -928,16 +976,58 @@ import {bindRange} from '/annotations/binding.mjs';
       load('');status('Opgeslagen. Selecteer de volgende uitspraak.');requestOffer(focus);
     }
   });
-  async function finishSourceSelection() {
+  async function finishSourceSelection(continueAfterSave=toOverview) {
     if(finalizing || saving || checking || deriving || rebuilding) return;
-    if(hasCore() || selected) {if(await saveCard()) toOverview();return;}
+    if(hasCore() || selected) {if(await saveCard()) await continueAfterSave();return;}
     // An object that holds nothing is not left behind to block the document.
     if(entry.revision) {await discardObject();if(entry.revision) return;}
-    toOverview();
+    await continueAfterSave();
   }
-  el('finish').addEventListener('click',finishSourceSelection);
+  el('finish').addEventListener('click',()=>finishSourceSelection());
   el('saved-overview').addEventListener('click',event=>{
     event.preventDefault();finishSourceSelection().catch(error=>status(error.message));
+  });
+  let changingRound=false;
+  el('document-check-host').addEventListener('submit',async event=>{
+    const form=event.target;
+    const buildForm=form.matches('[data-confirmed-document-build]');
+    if(!buildForm && !form.matches('[data-annotation-round]')) return;
+    event.preventDefault();
+    if(changingRound) return;
+    changingRound=true;
+    const changeRound=async()=>{
+      await flush();
+      const data=new FormData(form);
+      data.set('expected_generation',String(state.generation));
+      const response=await fetch(form.action,{method:'POST',body:data,headers:{Accept:'application/json'}});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.message || 'De fase is niet opgeslagen.');
+      const target=new URL(result.location,location.origin);
+      const active=new URLSearchParams(location.search).get('annotation');
+      if(active) target.searchParams.set('annotation',active);
+      target.hash=location.hash;
+      history.replaceState(null, "", target);
+      location.reload();
+    };
+    try {
+      if(checkRun) await checkRun;
+      if(buildForm) {
+        const expected=Number(new FormData(form).get('expected_generation'));
+        const selectionPending=!!selected && !hasCore();
+        await flush();
+        if(selectionPending || expected!==state.generation || !form.isConnected) {
+          await refreshSourceWork();
+          status(selectionPending ? 'Sla de geselecteerde uitspraak op of wis de selectie.' :
+            'Controleer de actuele bevindingen en start de bouw opnieuw.');
+          return;
+        }
+        HTMLFormElement.prototype.submit.call(form);
+        return;
+      }
+      if(new FormData(form).get('phase')==='checking') await finishSourceSelection(changeRound);
+      else await changeRound();
+    } catch(error) {status(error.message);}
+    finally {changingRound=false;}
   });
   const changedSinceBuild = () => !!built()?.pending || dirty!==committed || entry.status!=='ready';
   el('rebuild').addEventListener('click',async()=>{
@@ -946,6 +1036,12 @@ import {bindRange} from '/annotations/binding.mjs';
     const review='/review?'+new URLSearchParams({document:state.snapshot_id,object:object.object_id});
     if(!changedSinceBuild()) {window.location.href=review;return;}
     if(!await saveCard()) return;
+    if(state.document_check_flow) {
+      await refreshSourceWork();
+      el('document-check-host').scrollIntoView({block:'nearest'});
+      status('Opgeslagen. Ga verder met documentcontrole.');
+      return;
+    }
     rebuilding=true;renderCard();status('Kennisobject wordt opnieuw gebouwd…');
     try {
       const response=await fetch('/annotations/rebuild',{method:'POST',headers:{'Content-Type':'application/json'},

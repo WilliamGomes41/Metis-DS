@@ -154,7 +154,7 @@ def prepare_object_facts(obj, *, proof):
     semantic = md.get('semantic_passage')
     if isinstance(semantic, dict):
         metadata['semantic_passage'] = {k: deepcopy(semantic[k]) for k in
-            ('version', 'selection_origin', 'structural', 'formation_mode', 'spans') if k in semantic}
+            ('version', 'selection_origin', 'structural', 'formation_mode', 'spans', 'confirmed_section') if k in semantic}
     elif 'semantic_passage' in md:
         metadata['semantic_passage'] = deepcopy(semantic)
     if 'source_accountability' in md:

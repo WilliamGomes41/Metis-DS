@@ -71,6 +71,8 @@ Iedere inhoudelijke bronpassage krijgt een expliciete disposition uit de geslote
 
 Een passage die de toelatingspoort niet haalt is niet automatisch `excluded_with_reason`. Een geblokkeerde kandidaat en een inhoudelijk uitgesloten passage zijn verschillende beslissingen.
 
+**Aanvulling voor de menselijke annotatieroute met Documentcontrole (25 november 2026).** Geselecteerde kennis, gekoppelde context, onderbouwing en expliciete bronbesluiten volgen de toepasselijke passage-disposition. Overige, ongeannoteerde tekst blijft in de vastgelegde bron zonder individuele afhandelplicht. Een expliciet afgeronde annotatieronde vereist actuele documentcontrole vóór de bestaande bouw. Volledige dekking vereist daarnaast per sectie bevestigd onderzoek naar gemiste uitspraken. De bouw bewaart deze basis bij dezelfde werkrevisie. Bronbinding, inhoudelijke review en publicatievereisten voor gevormde kennis blijven volledig gelden.
+
 ### 4.2 Kennisobject
 
 Een kennisobject is een identificeerbare, versiegebonden representatie van één afgebakende betekeniseenheid die volledig uit de vastgelegde bron kan worden verantwoord.

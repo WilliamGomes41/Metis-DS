@@ -11,7 +11,7 @@ from src.publication.publication_chain_recovery_v1 import PublicationChainRecove
 # Dependency order; these identifiers never come from the archive.
 TABLES = (
     'prepared_extraction_versions', 'annotation_sets','annotation_versions','annotation_heads','annotation_commands',
-    'annotation_seals','annotation_build_commands',
+    'annotation_structure_confirmations', 'annotation_section_coverage', 'annotation_round_events', 'annotation_seals','annotation_build_commands',
     'processing_attempts', 'processing_document_summaries', 'processing_checkpoints', 'formation_inputs', 'formation_contexts',
     'formation_task_results', 'formation_task_findings', 'formation_task_result_history',
     'formation_task_plans', 'formation_source_views', 'source_read_roots',
@@ -27,8 +27,11 @@ OPERATIONAL_TABLES=('document_processing_records','document_inputs')
 NEW_TABLES=('processing_archive_inputs','processing_archive_input_members',*OPERATIONAL_TABLES)
 ANNOTATION_TABLES=('annotation_sets','annotation_versions','annotation_heads','annotation_commands')
 BUILD_TABLES=('annotation_seals','annotation_build_commands')
+STRUCTURE_TABLE='annotation_structure_confirmations'
+COVERAGE_TABLE='annotation_section_coverage'
+ROUND_TABLE='annotation_round_events'
 ORDER = {
-    'annotation_seals':'seal_id', 'annotation_build_commands':'snapshot_id,command_id',
+    STRUCTURE_TABLE:'snapshot_id', COVERAGE_TABLE:'snapshot_id', ROUND_TABLE:'snapshot_id,revision', 'annotation_seals':'seal_id', 'annotation_build_commands':'snapshot_id,command_id',
     'processing_attempts':'attempt_id', 'processing_document_summaries':'snapshot_id',
     'processing_checkpoints':'checkpoint_id', 'prepared_extraction_versions':'record_hash',
     'formation_inputs':'artifact_id', 'formation_contexts':'context_id',
@@ -67,7 +70,7 @@ def upgrade_legacy(state):
     result.setdefault('formation_recovery',None)
     section=result.get('formation_recovery')
     if section is not None and section.get('version')==1:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES):
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE}:
             fail('shape_invalid')
         section['version']=2
         for table in NEW_TABLES:
@@ -75,13 +78,13 @@ def upgrade_legacy(state):
         for document in section['documents']:
             document['document_storage_version']=0
     if section is not None and section.get('version')==2:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES):
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE}:
             fail('shape_invalid')
         section['version']=3
         for table in ANNOTATION_TABLES:
             section['tables'][table]=[]
     if section is not None and section.get('version')==3:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(BUILD_TABLES):
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE}:
             fail('shape_invalid')
         section['version']=4
         for table in BUILD_TABLES:
@@ -94,6 +97,21 @@ def upgrade_legacy(state):
         # Only the reader capability changes. No fabricated correction basis,
         # annotation-to-object binding, receipt or review decision is added.
         section['version']=5
+    if section is not None and section.get('version')==5:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE}:
+            fail('shape_invalid')
+        section['tables'][STRUCTURE_TABLE]=[]
+        section['version']=6
+    if section is not None and section.get('version')==6:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-{COVERAGE_TABLE, ROUND_TABLE}:
+            fail('shape_invalid')
+        section['tables'][COVERAGE_TABLE]=[]
+        section['version']=7
+    if section is not None and section.get('version')==7:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-{ROUND_TABLE}:
+            fail('shape_invalid')
+        section['tables'][ROUND_TABLE]=[]
+        section['version']=8
     return result
 
 
@@ -104,7 +122,7 @@ def validate(state):
                for d in (state.get('workflow_tables') or {}).get('documents', [])):
             fail('missing_reexport_required')
         return None
-    if (not isinstance(section, dict) or section.get('version') != 5
+    if (not isinstance(section, dict) or section.get('version') != 8
             or set(section.get('tables') or {}) != set(TABLES + FACT_TABLES)
             or not isinstance(section.get('documents'), list)):
         fail('shape_invalid')
@@ -123,7 +141,7 @@ def validate(state):
 def export(con):
     if not available(con):
         return None
-    return {'version':5,
+    return {'version':8,
             'documents':[_json_safe(dict(r)) for r in con.execute(
                 'SELECT '+','.join(DOCUMENT_COLUMNS)+' FROM workflow.documents ORDER BY snapshot_id').fetchall()],
             'tables':{table:[_json_safe(dict(r)) for r in con.execute(
@@ -163,6 +181,17 @@ def _validate_annotations(con):
         fragments = stored_extraction({**identity,'prepared_source_extraction':source['extraction']})
         if fragments is None:
             fail('annotation_source_mismatch')
+        from src.vorming import confirmed_document_structure_v1 as structure
+        confirmation = structure.read(con, sid)
+        if confirmation is not None:
+            from src.vorming.semantic_passage_v1 import semantic_source_blocks
+            blocks = semantic_source_blocks(fragments)
+            if structure.validated(confirmation['entries'], blocks) != confirmation['entries']:
+                fail('annotation_structure_invalid')
+            from src.vorming import annotation_section_coverage_v1 as coverage
+            recorded = coverage.read(con, sid)
+            if recorded is not None and not coverage.valid_receipts(confirmation, blocks, recorded['confirmations']):
+                fail('annotation_coverage_invalid')
         versions = con.execute('SELECT * FROM workflow.annotation_versions WHERE snapshot_id=%s '
                               'ORDER BY annotation_id,revision',(sid,)).fetchall()
         if any(row['payload'].get('selection_version') for row in versions):
@@ -232,12 +261,21 @@ def _validate_annotations(con):
 
         from src.vorming.human_annotation_preview_v1 import inspect_document
         from src.workflows.processing_archives_v1 import encoded
+        from src.vorming import annotation_document_check_v1 as document_check
+        rounds = con.execute('SELECT revision,phase,generation,actor_id FROM workflow.annotation_round_events '
+                             'WHERE snapshot_id=%s ORDER BY revision', (sid,)).fetchall()
+        if any(row['revision'] != index or row['generation'] > source['generation']
+               or row['phase'] != ('checking' if index % 2 else 'annotating')
+               for index, row in enumerate(rounds, 1)):
+            fail('annotation_round_invalid')
         seals=con.execute('SELECT * FROM workflow.annotation_seals WHERE snapshot_id=%s', (sid,)).fetchall()
         if seals:
             from src.vorming.human_annotation_build_v1 import require_storage
             require_storage(con)
         for seal in seals:
             body=seal['payload']
+            if body.get(structure.KEY) != confirmation:
+                fail('annotation_structure_seal_mismatch')
             if (stable_hash(body)!=seal['seal_id'] or encoded(body)!=seal['payload_text']
                     or stable_hash({k:v for k,v in body.items() if k!='overview_hash'})!=seal['overview_hash']):
                 fail('annotation_seal_invalid')
@@ -247,7 +285,13 @@ def _validate_annotations(con):
                 if not entry or entry['payload_hash']!=ref['payload_hash']:
                     fail('annotation_seal_invalid')
                 entries.append(entry)
-            if inspect_document(entries,fragments=fragments)['findings']:
+            check_input = body.get(document_check.KEY)
+            if check_input is not None and (check_input.get('version') != 1
+                    or not any(check_input.get('round') == dict(row) and row['generation'] <= seal['generation'] for row in rounds)
+                    or document_check.findings(check_input, confirmation, entries, fragments)):
+                fail('annotation_document_check_invalid')
+            if inspect_document(entries, fragments=fragments, confirmed_headings=structure.anchors(confirmation),
+                                allow_unselected=check_input is not None)['findings']:
                 fail('annotation_seal_incomplete')
             if source['current_seal_id']==seal['seal_id'] and seal['generation']!=source['generation']:
                 fail('annotation_seal_stale')

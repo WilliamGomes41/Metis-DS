@@ -19,6 +19,20 @@ const fs=require('node:fs');
   await Promise.all([page.waitForURL(url=>url.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
   const sid=new URL(page.url()).searchParams.get('document');
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  const confirmStructure=process.env.METIS_ANNOTATION_CONFIRMED_STRUCTURE==='1';
+  if(confirmStructure){
+    const confirm=page.getByRole('button',{name:'Bevestig en ga annoteren'});
+    await confirm.waitFor();
+    await page.getByLabel('Kop 1',{exact:true}).fill('Bevestigde bronselectie');
+    await page.screenshot({path:output+'/structure-confirmation-desktop.png',fullPage:true});
+    await page.setViewportSize({width:390,height:844});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:output+'/structure-confirmation-mobile.png',fullPage:true});
+    await page.setViewportSize({width:1440,height:1000});
+    await confirm.click();
+    await page.getByRole('navigation',{name:'Inhoudsopgave',exact:true})
+      .getByRole('link',{name:'Bevestigde bronselectie',exact:true}).waitFor();
+  }
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   assert.equal(await page.locator('#annotation-source-input,.annotation-selection-help').count(),0,'The duplicate selection field must be removed');
   assert.equal(await page.getByText('Huidige passage',{exact:true}).count(),0);
@@ -28,6 +42,13 @@ const fs=require('node:fs');
   assert.equal(await headings.count(),2);
   const destinations=await headings.evaluateAll(links=>links.map(link=>decodeURIComponent(link.hash.slice(1))));
   assert.notEqual(destinations[0],destinations[1],'Repeated heading text must navigate to separate source blocks');
+  if(confirmStructure){
+    assert.equal(await contents.locator('[data-section-status]').count(),0);
+    await contents.getByRole('button',{name:'Dekking hele richtlijn controleren',exact:true}).click();
+    const firstSection=contents.locator('li').filter({has:page.getByRole('link',{name:'Herhaalde kop',exact:true})}).first();
+    await firstSection.getByRole('button',{name:'Markeer als nagekeken: Herhaalde kop',exact:true}).click();
+    await firstSection.locator('[data-section-status="checked"]').waitFor();
+  }
   assert.ok((await contents.boundingBox()).x<(await page.locator('.annotation-document').boundingBox()).x);
   await headings.first().click();
   assert.equal(await page.evaluate(()=>document.activeElement.id),destinations[0]);
@@ -72,6 +93,14 @@ const fs=require('node:fs');
   const touchPage=await mobile.newPage();touchPage.on('pageerror',error=>errors.push(error.message));
   await touchPage.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   const mobileContents=touchPage.getByRole('navigation',{name:'Inhoudsopgave',exact:true});
+  if(confirmStructure){
+    await mobileContents.getByRole('link',{name:'Bevestigde bronselectie',exact:true}).waitFor();
+    assert.equal(await mobileContents.locator('[data-section-status="checked"]').count(),1);
+    await touchPage.screenshot({path:output+'/section-coverage-mobile.png',fullPage:true});
+    await mobileContents.getByRole('button',{name:'Alleen selectie vastleggen',exact:true}).click();
+    await mobileContents.getByRole('button',{name:'Dekking hele richtlijn controleren',exact:true}).waitFor();
+    assert.equal(await mobileContents.locator('[data-section-status]').count(),0);
+  }
   assert.ok((await mobileContents.boundingBox()).y<(await touchPage.locator('.annotation-document').boundingBox()).y);
   await mobileContents.getByRole('link',{name:'Herhaalde kop',exact:true}).last().tap();
   assert.equal(decodeURIComponent(new URL(touchPage.url()).hash.slice(1)),destinations[1]);

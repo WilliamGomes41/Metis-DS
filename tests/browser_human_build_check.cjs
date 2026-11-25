@@ -107,7 +107,7 @@ const assert = require('node:assert/strict');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
     await page.screenshot({path:`${output}/human-stale-${width}.png`,fullPage:true});
   }
-  await page.getByRole('link',{name:'Documentoverzicht opnieuw controleren'}).click();
+  await page.getByRole('link',{name:'Terug naar documentcontrole'}).click();
   await page.locator('#annotation-finalize').click();
   await page.waitForURL(url => url.pathname === '/annotations/build');
   await page.waitForFunction(() => document.getElementById('annotation-build-status').dataset.buildState === 'succeeded', {timeout:30000});
