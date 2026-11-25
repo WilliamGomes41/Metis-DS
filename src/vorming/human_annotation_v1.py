@@ -156,7 +156,7 @@ def _read_set(console, snapshot_id):
 
 
 def _validate(selection, blocks):
-    if not isinstance(selection, dict) or set(selection) - {'status','object_type','ranges','evidence_not_applicable','pending_range','field_evidence','recommendation_semantics','selection_version','disposition','declined_context'}:
+    if not isinstance(selection, dict) or set(selection) - {'status','object_type','ranges','evidence_not_applicable','pending_range','field_evidence','recommendation_semantics','selection_version','disposition','declined_context','recommendation_strength_label'}:
         fail('annotation_selection_invalid')
     status, kind = selection.get('status'), selection.get('object_type')
     disposition=selection.get('disposition')
@@ -275,6 +275,14 @@ def _validate(selection, blocks):
                     raw[field]=_field_span(witness['span'],witness['quote'],blocks)
         payload['selection_version']='human-annotation-input-v2'
         payload['recommendation_semantics']=raw
+    if 'recommendation_strength_label' in selection:
+        label = selection['recommendation_strength_label']
+        if kind != 'recommendation' or disposition is not None or not isinstance(label, dict):
+            fail('recommendation_strength_label_not_applicable')
+        normalized = _validate({'status':'draft', 'ranges':[{**label, 'role':'core'}]}, blocks)['ranges'][0]
+        payload['recommendation_strength_label'] = {
+            key: normalized[key] for key in ('block_id','start','end','quote_sha256')}
+        payload['selection_version'] = 'human-annotation-input-v2'
     if 'declined_context' in selection:
         # #1060 slice 4: source text the worker said does not belong. Exact positions only.
         raw=selection['declined_context']
@@ -605,6 +613,12 @@ def validate_stored_selection(payload, *, fragments, annotation_id=None):
             span=selection['recommendation_semantics'][key]
             if span:
                 selection['recommendation_semantics'][key]={'span':span,'quote':blocks[span['block_id']]['text'][span['start']:span['end']]}
+    if label := selection.get('recommendation_strength_label'):
+        block = blocks.get(label['block_id'])
+        if block is None:
+            fail('annotation_representation_stale')
+        label['quote'] = block['text'][label['start']:label['end']]
+        label.pop('quote_sha256')
     if _validate(selection, blocks) != payload:
         fail('annotation_integrity_failed')
     if annotation_id is not None:
@@ -646,7 +660,9 @@ def overview(console, *, actor_id, snapshot_id, include_source_work=False, inclu
         if stable_hash(entry['payload']) != entry.pop('payload_hash'):
             fail('annotation_integrity_failed')
         entry.update(entry.pop('payload'))
-        for anchor in [*entry['ranges'], *([entry['pending_range']] if entry.get('pending_range') else []), *entry.get('declined_context', [])]:
+        for anchor in [*entry['ranges'], *([entry['pending_range']] if entry.get('pending_range') else []),
+                       *entry.get('declined_context', []),
+                       *([entry['recommendation_strength_label']] if entry.get('recommendation_strength_label') else [])]:
             block = by_id.get(anchor['block_id'])
             if block is None:
                 fail('annotation_representation_stale')

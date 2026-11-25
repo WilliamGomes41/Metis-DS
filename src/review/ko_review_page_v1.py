@@ -290,6 +290,8 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     pair = ' · '.join(label for label in (
         direction_labels.get(descriptor.direction), strength_labels.get(descriptor.strength_choice)) if label)
     if choose_semantics:
+        from src.vorming.recommendation_semantics_v1 import annotation_strength_label_text
+        label_evidence = annotation_strength_label_text(obj)
         picked_action = draft.get('recommendation_review_action') or 'skip'
         token = descriptor.recommendation_proposal_token
 
@@ -304,8 +306,10 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         semantics = ('<fieldset class="ko-semantics-choice" data-ko-semantics-choice>'
             '<legend>Richting en sterkte (optioneel)</legend>'
             '<p class="ko-interpretation">' + (escape('Voorstel van Metis: ' + pair)
-                if token else 'Metis kon dit niet vaststellen.') + '</p>'
-            '<input type="hidden" name="recommendation_proposal_token" value="' + escape(token, quote=True) + '">'
+                if token else 'Geen volledig voorstel voor richting en sterkte.') + '</p>'
+            + ('<p class="ko-interpretation" data-ko-strength-label>Sterktelabel uit de bron: '
+               + escape(label_evidence) + '</p>' if label_evidence else '')
+            + '<input type="hidden" name="recommendation_proposal_token" value="' + escape(token, quote=True) + '">'
             '<label>Keuze <select name="recommendation_review_action">'
             + options(actions, picked_action) + '</select></label>'
             '<div data-ko-review-own>'

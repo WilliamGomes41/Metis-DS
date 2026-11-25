@@ -145,6 +145,9 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     semantics_evidence = item.get("recommendation_semantics_evidence")
     if isinstance(semantics_evidence, dict):
         out["recommendation_semantics_evidence"] = deepcopy(semantics_evidence)
+    strength_label = item.get("recommendation_strength_label_evidence")
+    if isinstance(strength_label, dict):
+        out["recommendation_strength_label_evidence"] = deepcopy(strength_label)
     relation_evidence = item.get("knowledge_relation_evidence")
     if isinstance(relation_evidence, dict):
         out["knowledge_relation_evidence"] = deepcopy(relation_evidence)

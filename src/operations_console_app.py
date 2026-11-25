@@ -410,6 +410,7 @@ ERROR_COPY = {
     "recommendation_strength_confirmation_required": "Kies sterk, zwak of niet vermeld in de bron.",
     "recommendation_direction_source_conflict": "De gekozen richting spreekt het expliciete bronlabel tegen.",
     "recommendation_direction_evidence_missing": "Metis vindt geen bronbewijs voor de gekozen richting. Controleer de oorspronkelijke passage. Laat de beoordeling open als de bron onvoldoende duidelijk is.",
+    "recommendation_strength_label_binding_mismatch": "Het sterktelabel past niet bij deze versie. Controleer de bron in Vorming.",
     "recommendation_strength_evidence_required": "Metis herkent in de bron geen expliciete aanduiding die je keuze Sterk of Zwak ondersteunt. Controleer de oorspronkelijke passage en de context. Vermeldt de bron geen sterkte? Kies Niet vermeld in de bron. Staat de sterkte er wel expliciet? Laat de beoordeling open en meld dit bij de beheerder.",
     "recommendation_strength_not_stated_conflict": "De bron bevat wel een expliciete sterkteaanduiding; kies sterk of zwak, of laat de beoordeling open als de herkende bronverwijzing niet klopt.",
     "recommendation_semantics_confirmation_invalid": "De richting en sterkte konden niet samen worden bevestigd. Controleer beide keuzes aan de hand van de oorspronkelijke passage.",
