@@ -71,6 +71,10 @@ def _capture(con, snapshot_id, store, actor_id):
         (snapshot_id,)).fetchall()
     basis = {key: row[key] for key in ('snapshot_id', 'working_revision_id', 'extraction_hash',
                                      'source_identity', 'objects_revision', 'normalization', 'generation', 'context')}
+    from src.vorming import confirmed_document_structure_v1 as structure
+    confirmation = structure.read(con, snapshot_id)
+    if confirmation is not None:
+        basis[structure.KEY] = confirmation
     from src.vorming.source_accountability_v1 import CONTAINERS_VERSION
     basis.update(version=MODE, source_accountability_version=CONTAINERS_VERSION, entries=[{key: entry[key] for key in
                                        ('annotation_id', 'revision', 'payload_hash')} for entry in entries])
@@ -105,12 +109,15 @@ def overview(console, *, actor_id, snapshot_id):
         annotations.fail('annotation_representation_stale')
     from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(fragments).fragments
-    inspection = inspect_for_overview(entries, fragments=fragments)
+    from src.vorming import confirmed_document_structure_v1 as structure
+    inspection = inspect_for_overview(entries, fragments=fragments, confirmed_headings=structure.anchors(basis.get(structure.KEY)))
     # Display is the existing source reader. A concurrent save requires a new
     # overview; its entries may never be presented under this seal's hash.
     view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
-    if view['generation'] != basis['generation']:
+    if view['generation'] != basis['generation'] or view.get(structure.KEY) != basis.get(structure.KEY):
         annotations.fail('annotation_overview_stale')
+    if structure.enabled() and not active and structure.KEY not in basis and structure.proposed(view['blocks']):
+        inspection['findings'].append({'annotation_id': None, 'code': 'annotation_structure_confirmation_required'})
     return {**view, 'title': basis['context']['title'], 'overview_hash': basis['overview_hash'], 'materialization_context': basis['context'],
             'inspection': inspection, 'current_build': dict(active) if active else None,
             'can_finalize': not inspection['findings'] and view['objects_revision'] == row['objects_revision']

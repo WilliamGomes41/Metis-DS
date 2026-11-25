@@ -1909,11 +1909,17 @@ def _review_section_groups(
 ) -> str:
     """Presentation only: preserve exact source paths and existing object links."""
     priority_ids = priority_ids or set()
-    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    from src.vorming.confirmed_document_structure_v1 import confirmed_section
+    groups: dict[tuple[bool, tuple[str, ...]], tuple[tuple[str, ...], list[dict[str, Any]]]] = {}
     for obj in objects:
-        raw_path = admission_of(obj).get("section_path") or (obj.get("structure") or {}).get("section_path") or []
-        key = tuple(str(part).strip() for part in raw_path if str(part).strip())
-        groups.setdefault(key, []).append(obj)
+        section = confirmed_section(obj)
+        if section is not None:
+            key, titles = (True, tuple(section['anchors'])), tuple(section['titles'])
+        else:
+            raw_path = admission_of(obj).get("section_path") or (obj.get("structure") or {}).get("section_path") or []
+            titles = tuple(str(part).strip() for part in raw_path if str(part).strip())
+            key = (False, titles)
+        groups.setdefault(key, (titles, []))[1].append(obj)
     context_objects = objects if context_objects is None else context_objects
 
     def passage_row(obj: dict[str, Any]) -> str:
@@ -1935,7 +1941,7 @@ def _review_section_groups(
         return item
 
     panels = []
-    for index, (key, rows) in enumerate(groups.items()):
+    for index, (key, rows) in enumerate(groups.values()):
         path = " › ".join(key)
         title = key[-1] if key else "Brononderdeel nog te controleren"
         panels.append(

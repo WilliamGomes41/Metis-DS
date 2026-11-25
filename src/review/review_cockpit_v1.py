@@ -129,6 +129,10 @@ def confirmable_proposed_type(obj: dict[str, Any]) -> str:
 
 
 def found_under_path(obj: dict[str, Any]) -> str:
+    from src.vorming.confirmed_document_structure_v1 import confirmed_section
+    section = confirmed_section(obj)
+    if section is not None:
+        return ' › '.join(section['titles'])
     admission = admission_of(obj)
     scan = admission.get("context_scan") if isinstance(admission.get("context_scan"), dict) else {}
     path = [str(part).strip() for part in (admission.get("section_path") or []) if str(part).strip()]

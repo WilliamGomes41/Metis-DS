@@ -11,6 +11,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from src.operations_console_v1 import ConsoleError
+from src.vorming import confirmed_document_structure_v1 as structure
 from src.vorming import human_annotation_v1 as domain
 from src.vorming.source_accountability_v1 import ROLES as SOURCE_ROLES
 
@@ -79,6 +80,7 @@ FINDINGS = {**ERRORS,
     'annotation_not_ready':'Deze annotatie is nog niet gereed.',
     'annotation_fields_required':'Wijs de noodzakelijke betekenisvelden van deze uitspraak aan.',
     'annotation_relation_target_missing':'Wijs expliciet aan bij welke uitspraak dit onderdeel hoort.',
+    'annotation_structure_confirmation_required':'Bevestig eerst de inhoudsopgave op de annotatiewerkplek.',
     'annotation_source_unaccounted':'Er is nog bronmateriaal niet verantwoord. De betreffende tekst staat hieronder.',
     'source_assessment_overlap':'Een bronrolvoorstel overlapt een uitspraak of ander bronrolvoorstel. Controleer beide annotaties.',
     'predicate_missing':'Wijs aan wat over het onderwerp wordt gezegd.',
@@ -136,32 +138,48 @@ def location_label(block):
     return ' · '.join(labels)
 
 
-def _in_source_contents(path):
-    return bool(path and path[0].casefold() == 'inhoudsopgave')
-
-
-def _heading_level(block, path):
-    if block.get('heading') and block['heading'] == block['text']:
-        return min(5, max(2, len(path) + 1))
-    return None
-
-
-def source_contents_html(blocks):
-    items = []
-    for block in blocks:
-        path = block.get('section_path') or []
-        level = _heading_level(block, path)
-        if level is None or _in_source_contents(path):
-            continue
-        target = quote(block['block_id'], safe='')
-        items.append(
-            f'<li style="--contents-indent:{level - 2}">'
-            f'<a href="#{target}">{escape(block["text"])}</a></li>'
-        )
-    if not items:
+def source_contents_html(entries):
+    if not entries:
         return ''
+    items = []
+    for row in entries:
+        target = quote(row['block_id'], safe='')
+        items.append(
+            f'<li style="--contents-indent:{row["level"] - 1}">'
+            f'<a href="#{target}">{escape(row["title"])}</a></li>'
+        )
     return ('<nav class="annotation-contents" aria-label="Inhoudsopgave">'
             '<h2>Inhoudsopgave</h2><ul>' + ''.join(items) + '</ul></nav>')
+
+
+def confirm_contents_html(document, basis, entries):
+    rows = []
+    for index, row in enumerate(entries, 1):
+        options = ''.join(
+            f'<option value="{level}"{" selected" if level == row["level"] else ""}>Niveau {level}</option>'
+            for level in range(1, 5)
+        )
+        rows.append(
+            '<li><input type="hidden" name="anchor" value="' + escape(row['block_id'], quote=True) + '">'
+            f'<label for="heading-{index}">Kop {index}</label>'
+            f'<input id="heading-{index}" name="title" value="{escape(row["title"], quote=True)}" required maxlength="2000">'
+            f'<select name="level" aria-label="Kopniveau voor kop {index}">{options}</select></li>'
+        )
+    return (
+        '<section class="annotation-confirm-contents"><h2>Klopt de inhoudsopgave?</h2>'
+        '<form method="post" action="/annotations/structure">'
+        f'<input type="hidden" name="document" value="{escape(document, quote=True)}">'
+        f'<input type="hidden" name="basis" value="{escape(basis, quote=True)}">'
+        '<ol>' + ''.join(rows) + '</ol>'
+        '<button class="btn-primary" type="submit">Bevestig en ga annoteren</button></form></section>'
+        '<style>.annotation-confirm-contents{max-width:48rem;margin:1.5rem auto}'
+        '.annotation-confirm-contents ol{padding:0;list-style:none;margin:0 0 1.25rem}'
+        '.annotation-confirm-contents li{display:grid;grid-template-columns:minmax(0,1fr) auto;'
+        'column-gap:.75rem;border-bottom:1px solid var(--line);padding:.5rem 0}'
+        '.annotation-confirm-contents li label{grid-column:1/-1;margin:0 0 .25rem;font-size:.875rem}'
+        '.annotation-confirm-contents li :is(input,select){width:100%;min-width:0;margin:0}'
+        '.annotation-confirm-contents button{min-height:2.75rem}</style>'
+    )
 
 
 def source_document_html(blocks):
@@ -179,8 +197,8 @@ def source_document_html(blocks):
     for index, block in enumerate(blocks):
         text = block['text']
         path = block.get('section_path') or []
-        in_toc = _in_source_contents(path)
-        level = _heading_level(block, path)
+        in_toc = structure.in_source_contents(path)
+        level = structure.heading_level(block, path)
         current_page = next((loc['page'] for loc in block.get('locations') or [] if loc.get('page')), None)
         if in_toc != toc_open:
             if toc_row_open:
@@ -485,6 +503,20 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     body += '<p>Afsluiten is pas mogelijk als alle annotaties en de bronafhandeling gereed zijn.'+(' De opgeslagen bouwopdracht blijft hierboven bereikbaar.' if current else '')+'</p>'
             body += '<p><a class="btn-secondary" href="'+escape(back,quote=True)+'">Verder aanwijzen</a></p>'
             return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><div style="max-width:72ch">'+body+'</div></section><style>.room article.object{margin-block:0 1.5rem}.room article.object>a{display:inline-block;margin-top:.25rem}.room section[aria-labelledby]{margin-top:2rem}#annotation-signals+p+ul>li{margin-block:.5rem 1rem}#annotation-signals+p+ul ul{padding-left:1.1rem;margin:0 0 .25rem}</style>',title='Documentoverzicht'),headers={'Cache-Control':'no-store'})
+        proposed_contents = structure.proposed(state['blocks'])
+        confirmed = state.get(structure.KEY)
+        needs_confirmation = False
+        if structure.enabled() and proposed_contents and confirmed is None:
+            with console.workflow_document_store._connect() as con:
+                needs_confirmation = not structure.has_seal(con, document)
+        if needs_confirmation:
+            original = '/annotations/original?' + urlencode({'document': document})
+            body = ('<h1>Inhoudsopgave bevestigen</h1><h2>' + esc(state['title']) + '</h2>'
+                    f'<p><a target="_blank" rel="noopener" href="{esc(original)}">Open het vastgelegde origineel</a></p>'
+                    + confirm_contents_html(document, state['extraction_hash'], proposed_contents))
+            return HTMLResponse(page(nav(actor, 'selection') + '<section class="room">' + body + '</section>',
+                                     title='Inhoudsopgave bevestigen'), headers={'Cache-Control': 'no-store'})
+        contents = source_contents_html(confirmed['entries'] if confirmed is not None else proposed_contents)
         blocks = source_document_html(state['blocks'])
         pages = list(dict.fromkeys(loc['page'] for block in state['blocks']
             for loc in block.get('locations') or [] if loc.get('page')))
@@ -496,7 +528,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         body = '<header class="annotation-workspace-intro">' + intro + '''</header><details class="annotation-instruction"><summary>Hulp bij annoteren</summary><p>Wijs een eigen uitspraak aan: iets wat de bron stelt, definieert, verklaart of aanbeveelt. Tekst die alleen bij een andere uitspraak hoort, voeg je daar toe bij Hoort erbij of Onderbouwing. Selecteer tekst in de bron en kies naast je selectie waar die bij hoort.</p></details>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <p id="annotation-source-work-status" role="status"></p>
-<div class="annotation-workplace">'''+source_contents_html(state['blocks'])+'''<div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
+<div class="annotation-workplace">'''+contents+'''<div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
 <section id="annotation-offer" aria-label="Voorstel van Metis" hidden>
@@ -604,6 +636,36 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 @media(max-width:800px){.annotation-task-actions{padding-bottom:max(1rem,env(safe-area-inset-bottom))}#annotation-controls select{font-size:1rem}.annotation-document{max-height:60dvh}}
 </style>'''
         return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>'+css,title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
+
+    @app.post('/annotations/structure')
+    async def confirm_structure(request: Request):
+        actor = require(request)
+        if not structure.enabled():
+            return Response(status_code=404)
+        form = await request.form()
+        document = str(form.get('document') or '')
+        try:
+            entries = [
+                {'block_id': anchor, 'title': title, 'level': int(level)}
+                for anchor, title, level in zip(form.getlist('anchor'), form.getlist('title'), form.getlist('level'),
+                                                strict=True)
+            ]
+            await asyncio.to_thread(structure.confirm, console, actor_id=actor['account_id'], snapshot_id=document,
+                                    extraction_hash=str(form.get('basis') or ''), entries=entries)
+        except ConsoleError as exc:
+            if exc.code not in {'annotation_structure_invalid', 'annotation_structure_stale',
+                                'annotation_structure_conflict', 'annotation_structure_already_built'}:
+                raise
+            back = '/annotations?' + urlencode({'document': document})
+            return HTMLResponse(page(nav(actor, 'selection') + '<section class="room"><h1>Inhoudsopgave niet opgeslagen</h1>'
+                                     '<p>Open de werkplek opnieuw om de actuele structuur te bekijken.</p>'
+                                     f'<p><a href="{escape(back, quote=True)}">Terug naar het document</a></p></section>'),
+                                status_code=400 if exc.code == 'annotation_structure_invalid' else 409,
+                                headers={'Cache-Control': 'no-store'})
+        except ValueError:
+            return HTMLResponse('De inhoudsopgave is ongeldig. Open de werkplek opnieuw.', status_code=400)
+        return RedirectResponse('/annotations?' + urlencode({'document': document}), status_code=303)
+
 
     @app.get('/annotations/editor.js')
     def script(request: Request):
@@ -753,6 +815,17 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         body = '<h1>Opbouw van het document</h1><h2>'+esc(status['title'])+'</h2>'
         body += '<p id="annotation-build-status" role="status" aria-live="polite" data-build-state="'+esc(status['state'])+'">'+esc(status['message'])+'</p>'
         body += '<p id="annotation-build-detail">'+esc(status['detail'])+'</p>'
+        with console.workflow_document_store._connect() as con:
+            outline = con.execute(
+                'SELECT s.payload->%s AS definition FROM workflow.annotation_build_commands c '
+                'JOIN workflow.annotation_seals s USING(seal_id) WHERE c.snapshot_id=%s AND c.attempt_id=%s',
+                (structure.KEY, document, attempt),
+            ).fetchone()
+        if outline and outline['definition'] is not None:
+            body += '<details><summary>Bevestigde inhoudsopgave</summary><ul>' + ''.join(
+                f'<li style="margin-inline-start:{row["level"] - 1}rem">{esc(row["title"])}</li>'
+                for row in outline['definition']['entries']
+            ) + '</ul></details>'
         body += '<p><a id="annotation-build-review"'+(' hidden' if status['state']!='succeeded' else '')+' href="/review?'+esc(urlencode({'document':document}))+'">Kennisobjecten en toepasselijke beoordeling openen</a></p>'
         body += '<p><a href="/annotations?'+esc(urlencode({'document':document,'overview':'true'}))+'">Terug naar documentoverzicht</a></p>'
         body += '<p><a href="'+esc(str(request.url))+'">Status opnieuw laden</a></p>'
