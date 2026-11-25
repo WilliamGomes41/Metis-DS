@@ -43,6 +43,14 @@ const {selectText} = require('./browser_annotation_tasks.cjs');
     await page.waitForFunction(stored,fixture);
     await page.reload();
     await quote.waitFor();
+    // A temporary switch to another kind keeps the label for this statement.
+    const kind = page.locator('#annotation-simple-type-select');
+    const other = await kind.evaluate(select=>[...select.options].map(o=>o.value).find(v=>v && v!=='recommendation'));
+    await kind.selectOption(other);
+    await row.waitFor({state:'detached'});
+    await kind.selectOption('recommendation');
+    await quote.waitFor();
+    await page.waitForFunction(stored,fixture);
     await row.getByRole('button',{name:'Sterktelabel weghalen'}).click();
     await quote.waitFor({state:'detached'});
     await page.waitForFunction(async fixture=>{

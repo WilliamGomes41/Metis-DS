@@ -226,10 +226,13 @@ import {bindRange} from '/annotations/binding.mjs';
     const statement=entry.annotation_id+'|'+JSON.stringify(entry.ranges.filter(a=>a.role==='core').map(a=>[a.block_id,a.start,a.end]));
     const memory=kindMemory[statement] ||= {};
     if(entry.object_type) memory[entry.object_type]={field_evidence:clone(entry.field_evidence || null),
-      recommendation_semantics:clone(entry.recommendation_semantics || null)};
+      recommendation_semantics:clone(entry.recommendation_semantics || null),
+      recommendation_strength_label:clone(entry.recommendation_strength_label || null)};
     delete entry.disposition;entry.object_type=value;
     if(memory[value]) {
       entry.field_evidence=clone(memory[value].field_evidence);entry.recommendation_semantics=clone(memory[value].recommendation_semantics);
+      if(memory[value].recommendation_strength_label) entry.recommendation_strength_label=clone(memory[value].recommendation_strength_label);
+      else delete entry.recommendation_strength_label;
     } else resetFields();
     change();renderCard();runCheck();
   }
@@ -264,6 +267,8 @@ import {bindRange} from '/annotations/binding.mjs';
       // Ordinary draft save remains the only writer; no approval/status shortcut.
       entry.object_type=data.object_type;entry.field_evidence=data.field_evidence;
       entry.recommendation_semantics=data.recommendation_semantics;
+      // A strength label belongs to a recommendation only; another inferred kind drops it.
+      if(entry.object_type!=='recommendation') delete entry.recommendation_strength_label;
       change();
       el('controls').scrollTop=0;
       if(window.matchMedia('(max-width:800px)').matches) el('controls').scrollIntoView({block:'start'});
@@ -906,7 +911,7 @@ import {bindRange} from '/annotations/binding.mjs';
       expected_revision:entry.revision,expected_generation:state.generation,extraction_hash:state.extraction_hash,normalization:state.normalization,
       expected_objects_revision:state.objects_revision,
       selection:{status:entry.status,object_type:entry.object_type,ranges,pending_range:entry.pending_range ? reference(entry.pending_range) : null,evidence_not_applicable:entry.evidence_not_applicable,
-        ...(entry.recommendation_strength_label && !entry.disposition ? {
+        ...(entry.recommendation_strength_label && !entry.disposition && entry.object_type==='recommendation' ? {
           recommendation_strength_label:{
             block_id:entry.recommendation_strength_label.block_id,
             start:entry.recommendation_strength_label.start,
