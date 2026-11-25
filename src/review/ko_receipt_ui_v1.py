@@ -174,11 +174,19 @@ def _review_application(obj, essential):
     if not human:
         return [], scopes, essential
     entries = (metadata.get('source_bound_context') or {}).get('entries') or []
-    by_passage = {(entry.get('role'), entry.get('text')): entry for entry in entries}
+    # One passage can carry several annotation roles that share a durable role
+    # (actor and scope both store as scope). Pair each projected item with its
+    # own entry, application roles first, instead of keeping only the last one.
+    by_passage = {}
+    for entry in entries:
+        by_passage.setdefault((entry.get('role'), entry.get('text')), []).append(entry)
+    for matches in by_passage.values():
+        matches.sort(key=lambda entry: entry.get('annotation_role') == 'actor')
     selected, other = [], []
     for item in essential:
         role, text = item['role'], item.get('text')
-        entry = by_passage.get((role, text), {})
+        matches = by_passage.get((role, text)) or [{}]
+        entry = matches.pop(0) if len(matches) > 1 else matches[0]
         if role in _APPLICATION_LABELS and text and entry.get('annotation_role') != 'actor':
             selected.append((item, entry))
         else:
@@ -204,8 +212,8 @@ def _review_application(obj, essential):
             remaining_scopes.append(row)
             continue
         identity = ' '.join(row.text.split())
-        # A derived field never repeats a literal that an explicit span already shows.
-        if not by_role[row.label] and all(identity != shown for _label, shown in seen):
+        # A derived field never repeats a literal already shown in its own role.
+        if not by_role[row.label] and (row.label, identity) not in seen:
             by_role[row.label].append(row)
             seen.add((row.label, identity))
     return [row for group in by_role.values() for row in group], remaining_scopes, other
