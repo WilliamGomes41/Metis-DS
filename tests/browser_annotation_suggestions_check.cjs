@@ -41,9 +41,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // #1067: the route says where the work is and what follows; '?' explains each row and stays open.
  assert.equal(await page.locator('nav.ko-route [aria-current=step]').innerText(),'Annoteren');
  assert.match(await page.locator('nav.ko-route .ko-route-next').innerText(),/^Hierna: /);
- const help=page.locator('#annotation-simple-rows dt[data-row=belongs] .annotation-help-toggle');
+ const help=page.locator('#annotation-simple-rows dt[data-row=context] .annotation-help-toggle');
  await help.click();
- await page.locator('#annotation-help-belongs').getByText('Niet: waarom het klopt. Dat hoort bij Onderbouwing.').waitFor();
+ await page.locator('#annotation-help-context').getByText('Wijs aan wat nodig is om de uitspraak te begrijpen',{exact:false}).waitFor();
  assert.equal(await help.getAttribute('aria-expanded'),'true');
  // #1091: selection guidance is keyboard-accessible, local to the row, and read-only.
  const beforeHelp=await read(),writes=[];
@@ -55,10 +55,9 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await coreHelp.getAttribute('aria-expanded'),'true');
  assert.equal(await coreHelp.getAttribute('aria-controls'),'annotation-help-core');
  assert.equal(await coreHelp.evaluate(button=>button===document.activeElement),true);
- await guidance.getByText('Eén zin kan twee uitspraken bevatten',{exact:false}).waitFor();
- await guidance.getByText('Twijfel is geen reden om het weg te laten.',{exact:false}).waitFor();
+ await guidance.getByText('Wijs aan wat de bron vaststelt',{exact:false}).waitFor();
  await page.getByRole('button',{name:'Uitleg bij Onderbouwing',exact:true}).click();
- await page.locator('#annotation-help-evidence').getByText('238 deelnemers',{exact:false}).waitFor();
+ await page.locator('#annotation-help-evidence').getByText('Een onderzoeksvraag of oproep tot vervolgonderzoek',{exact:false}).waitFor();
  await page.evaluate(()=>window.scrollTo(0,0));
  await page.screenshot({path:output+'/selection-guidance-desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
@@ -89,7 +88,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  for(let i=0;i<60 && (await current()).object_type!=='explanation';i++) await page.waitForTimeout(250);
  entry=await current();
  assert.equal(entry.object_type,'explanation');assert.equal(entry.ranges[0].quote,core);
- assert.equal(await page.locator('#annotation-help-belongs').isVisible(),true,'the explanation stays open while working');
+ assert.equal(await page.locator('#annotation-help-context').isVisible(),true,'the explanation stays open while working');
  // Codex P2: parts of the old kind are not stored with the new kind, where they would be built unseen.
  assert.equal(entry.field_evidence.defined_term.span,null);assert.equal(entry.field_evidence.definiens_span.span,null);
  // Switching back restores Metis' proposal for that kind (besluit William 2026-11-14), without a question.
@@ -109,7 +108,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await tasks.choose(page,'core');await started;
  const other=page.locator('[data-source-block]').filter({hasText:'Een zorgplan is'});
  await tasks.addAs(page,other,'Een zorgplan is een overzicht van afspraken.','context');
- await row('belongs').getByText('Een zorgplan is een overzicht van afspraken.',{exact:true}).waitFor();
+ await row('context').getByText('Een zorgplan is een overzicht van afspraken.',{exact:true}).waitFor();
  await reading();
  // The row shows the choice at once; the store follows with the save. Wait for the store, not for the screen.
  for(let i=0;i<60 && (await current())?.ranges.length!==2;i++) await page.waitForTimeout(250);
