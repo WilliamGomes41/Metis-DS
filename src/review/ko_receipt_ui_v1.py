@@ -126,7 +126,10 @@ class KnowledgeConnection:
     status: str = ''
 
 
-def _scope_connections(obj):
+_APPLICATION_LABELS = {'target_group': 'Doelgroep', 'scope': 'Situatie', 'condition': 'Voorwaarde'}
+
+
+def _scope_connections(obj, *, annotated):
     from src.vorming.source_bound_fields_v2 import KEY, bound_values
     record = (obj.get('metadata') or {}).get(KEY)
     if not record:
@@ -140,29 +143,85 @@ def _scope_connections(obj):
             'Het veldbewijs past niet meer bij deze passage; opnieuw controleren is nodig.')]
     labels = {'actor_of_scope': 'Actor of doelgroep', 'actor_span': 'Uitvoerder',
               'target_group_span': 'Doelgroep', 'scope_span': 'Afbakening'}
+    if annotated:
+        labels.update(scope_span='Situatie', condition_span='Voorwaarde')
     missing = {'not_stated': 'Niet expliciet vermeld', 'uncertain': 'Onzeker',
                'not_applicable': 'Niet van toepassing'}
     rows = []
     for field, label in labels.items():
         evidence = (record.get('evidence') or {}).get(field)
-        if evidence is not None:
-            text = values.get(field) or missing.get(evidence.get('missing_reason'), 'Ontbreekt')
+        if evidence is None:
+            continue
+        text = values.get(field)
+        if not text and not (annotated and label in _APPLICATION_LABELS.values()):
+            text = missing.get(evidence.get('missing_reason'), 'Ontbreekt')
+        if text:
             rows.append(KnowledgeConnection(label, str(text)))
     return rows
 
 
+def _source_origin(entry):
+    locators = (str((ref.get('source_locator') or {}).get('locator_value') or '')
+                for ref in entry.get('source_refs') or [])
+    return ' · '.join(dict.fromkeys(value for value in locators if value))
+
+
+def _review_application(obj, essential):
+    """Return the same applicability rows and remaining context for both views."""
+    metadata = obj.get('metadata') or {}
+    human = bool(metadata.get('human_annotation'))
+    scopes = _scope_connections(obj, annotated=human)
+    if not human:
+        return [], scopes, essential
+    entries = (metadata.get('source_bound_context') or {}).get('entries') or []
+    by_passage = {(entry.get('role'), entry.get('text')): entry for entry in entries}
+    selected, other = [], []
+    for item in essential:
+        role, text = item['role'], item.get('text')
+        entry = by_passage.get((role, text), {})
+        if role in _APPLICATION_LABELS and text and entry.get('annotation_role') != 'actor':
+            selected.append((item, entry))
+        else:
+            other.append(item)
+    # Explicit spans precede derived fields. When a passage is projected twice,
+    # keep any unresolved finding and retain its literal just once.
+    by_role = {label: [] for label in _APPLICATION_LABELS.values()}
+    seen = set()
+    for item, entry in sorted(selected, key=lambda pair: (
+            not bool(pair[1].get('annotation_role')), pair[0].get('status') == 'bound')):
+        text = str(item['text'])
+        identity = ' '.join(text.split())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        label = _APPLICATION_LABELS[item['role']]
+        status = '' if item.get('status') == 'bound' else 'Nog te controleren'
+        by_role[label].append(KnowledgeConnection(label, text, _source_origin(entry), status))
+    remaining_scopes = []
+    for row in scopes:
+        if row.label not in by_role:
+            remaining_scopes.append(row)
+            continue
+        identity = ' '.join(row.text.split())
+        if not by_role[row.label] and identity not in seen:
+            by_role[row.label].append(row)
+            seen.add(identity)
+    return [row for group in by_role.values() for row in group], remaining_scopes, other
+
+
 def _knowledge_connections(obj, objects, *, include_proposals=False):
     projected = knowledge_review_projection(obj, list(objects))
-    rows = _scope_connections(obj)
-    for item in projected['essential_context']:
+    rows, scopes, essential = _review_application(obj, projected['essential_context'])
+    rows.extend(scopes)
+    for item in essential:
         label = _CONTEXT_LABELS.get(item['role'], str(item['role']))
+        if item['role'] == 'context' and (obj.get('metadata') or {}).get('human_annotation'):
+            label = 'Aanvullende context'
         status = 'Nog niet geldig verbonden' if item.get('status') != 'bound' else ''
         record = ((obj.get('metadata') or {}).get('source_bound_context') or {})
         entry = next((row for row in record.get('entries') or []
             if row.get('role') == item['role'] and row.get('text') == item.get('text')), {})
-        locators = list(dict.fromkeys(str((ref.get('source_locator') or {}).get('locator_value') or '')
-            for ref in entry.get('source_refs') or []))
-        origin = ' · '.join(value for value in locators if value)
+        origin = _source_origin(entry)
         source_id = item.get('source_object_id')
         linked = next((row for row in objects if row.get('object_id') == source_id), None)
         if linked is not None:
@@ -200,18 +259,29 @@ def _knowledge_connections(obj, objects, *, include_proposals=False):
 def knowledge_connections_html(obj, objects, *, include_proposals=False):
     """Readable branches from one claim; no inferred relationships or completeness."""
     rows = _knowledge_connections(obj, objects, include_proposals=include_proposals)
-    return _connection_scope_html(rows) + _connection_branches_html(rows)
+    return _connection_scope_html(obj, rows) + _connection_branches_html(rows)
 
 
-def _connection_scope_html(rows):
+def _connection_scope_html(obj, rows):
     primary = ('Geldt wanneer', 'Tenzij', 'Onderbouwd door')
     scopes = [row for row in rows if row.label not in primary]
-    if not scopes:
-        return ''
-    return ('<dl class="ko-scope">' + ''.join(
-        f'<dt>{escape(row.label)}</dt><dd>{escape(row.text)}'
-        + (f' <span class="meta">{escape(row.origin)}</span>' if row.origin else '')
-        + (f' <strong>{escape(row.status)}</strong>' if row.status else '') + '</dd>' for row in scopes) + '</dl>')
+
+    def render(items):
+        if not items:
+            return ''
+        return '<dl class="ko-scope">' + ''.join(
+            f'<dt>{escape(row.label)}</dt><dd>{escape(row.text)}'
+            + (f' <span class="meta">{escape(row.origin)}</span>' if row.origin else '')
+            + (f' <strong>{escape(row.status)}</strong>' if row.status else '') + '</dd>'
+            for row in items) + '</dl>'
+
+    if not (obj.get('metadata') or {}).get('human_annotation'):
+        return render(scopes)
+    labels = _APPLICATION_LABELS.values()
+    application = render([row for row in scopes if row.label in labels])
+    if application:
+        application = '<section aria-label="Toepassing"><strong>Toepassing</strong>' + application + '</section>'
+    return application + render([row for row in scopes if row.label not in labels])
 
 
 def _connection_branches_html(rows):
@@ -264,7 +334,7 @@ def render_ko_receipt(receipt):
             f'<div class="ko-receipt-claim"><p>{escape(text)}</p>'
             f'<span class="meta">{escape(_object_type_label(str(obj.get("confirmed_object_type") or obj.get("object_type") or "")))}'
             f' · versie {escape(str(event.get("object_version") or ""))}</span>'
-            + _connection_scope_html(connections) + '</div>'
+            + _connection_scope_html(obj, connections) + '</div>'
             + _connection_branches_html(connections)
             + f'<p class="ko-receipt-source"><strong>Herkomst</strong> · {escape(found_under_path(obj))} '
               f'<a href="{escape(source_url, quote=True)}">Download volledige oorspronkelijke bron</a></p>'
@@ -337,7 +407,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
         + '</span></dd></div></dl><section class="ko-result-diagram" aria-label="Samenhang van het opgeslagen kennisobject"><h2>Zo is het kennisobject vastgelegd</h2>'
         '<div class="ko-result-claim"><span class="ko-type-badge">' + escape(_object_type_label(str(obj.get('confirmed_object_type') or obj.get('object_type') or '')))
         + '</span><p data-full-knowledge-passage>' + escape(str((obj.get('content') or {}).get('clean_text') or '')) + '</p>'
-        + _connection_scope_html(connections) + '</div>'
+        + _connection_scope_html(obj, connections) + '</div>'
         '<ul class="ko-result-branches" data-knowledge-connections>' + ''.join(branches) + '</ul>'
         '<div class="ko-source-band"><strong>Herkomst</strong><span>' + escape(found_under_path(obj))
         + '</span><a href="' + escape(source, quote=True) + '">Open oorspronkelijke bron</a></div></section></section>'

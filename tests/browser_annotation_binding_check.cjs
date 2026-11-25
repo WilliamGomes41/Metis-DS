@@ -64,7 +64,7 @@ const assert=require('node:assert/strict');
    tasks.addAs(page,condition,'Alleen bij klachten.','context'),
   ]);
   assert.equal(contextSave.ok(),true,'The selected context must save successfully');
-  await row('belongs').getByText('Alleen bij klachten.',{exact:true}).waitFor();
+  await row('context').getByText('Alleen bij klachten.',{exact:true}).waitFor();
   const read=()=>page.evaluate(async sid=>{const r=await fetch('/annotations/api?document='+sid);if(!r.ok)throw Error('read failed');return r.json();},sid);
   const annotationId=contextSave.request().postDataJSON().annotation_id;
   const entry=(await read()).entries.find(item=>item.annotation_id===annotationId);

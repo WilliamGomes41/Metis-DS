@@ -21,7 +21,10 @@ module.exports.selectText=selectText;
 
 // Besluit William 2026-11-15: text is added in one way, with the menu next to the selection.
 async function choose(page,kind) {
- await page.locator('#annotation-selection-menu button[data-add='+kind+']').click();
+ const menu=page.locator('#annotation-selection-menu');
+ if(['population','scope','condition'].includes(kind) && !await menu.locator('#annotation-application-choices').isVisible())
+  await menu.getByRole('button',{name:'Toepassing',exact:true}).click();
+ await menu.locator('button[data-add='+kind+']').click();
 }
 async function addAs(page,source,text,kind) {await selectText(page,source,text);await choose(page,kind);}
 module.exports.choose=choose;

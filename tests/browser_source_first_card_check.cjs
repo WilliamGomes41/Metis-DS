@@ -32,6 +32,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-simple-heading').innerText(),'Selecteer de uitspraak in de bron');
  // #1060 slice 5: the step form is gone, not hidden.
  assert.equal(await page.locator('#annotation-steps, #annotation-fields, #annotation-type, #annotation-suggest, #annotation-entry, #annotation-more, #annotation-task-1, #annotation-task-2, #annotation-task-3').count(),0);
+ // This fixture returns no initial offer. Wait for the request to settle before counting the actions.
+ await page.locator('#annotation-offer-message').getByText('Geen voorstel gevonden.',{exact:false}).waitFor();
  // Only one action exists before anything is selected: there is nothing to save yet.
  assert.deepEqual(await page.locator('#annotation-controls button:visible').allInnerTexts(),['Opslaan en bronselectie beëindigen']);
  const minus=(key,text)=>row(key).locator('.annotation-line').filter({hasText:text}).locator('button.annotation-sign');
@@ -73,7 +75,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await row('core').getByText(item,{exact:true}).waitFor();
  // 2. Slice 4: Metis points at the introduction the item leans on. The proposal is the exact
  // source text, marked apart in the source, and is answered with '+' or '−'.
- const proposal=row('belongs').locator('.annotation-proposal');
+ const proposal=row('context').locator('.annotation-proposal');
  await proposal.getByText(intro,{exact:true}).waitFor();
  assert.equal(await proposal.locator('.annotation-proposal-label').innerText(),'Voorstel van Metis');
  assert.equal(await block(intro).locator('mark[data-proposal]').innerText(),intro);
@@ -85,23 +87,65 @@ const tasks=require('./browser_annotation_tasks.cjs');
   texts:[...document.querySelectorAll('#annotation-simple-rows .annotation-line p')].map(p=>Math.round(p.getBoundingClientRect().left))}));
  assert.equal(new Set(edges.signs).size,1,JSON.stringify(edges));assert.equal(new Set(edges.texts).size,1,JSON.stringify(edges));
  await proposal.locator('[data-proposal=add]').click();
- await row('belongs').locator('.annotation-line:not(.annotation-proposal)').getByText(intro,{exact:true}).waitFor();
+ await row('context').locator('.annotation-line:not(.annotation-proposal)').getByText(intro,{exact:true}).waitFor();
  assert.equal(await proposal.count(),0);
  await page.waitForFunction(()=>!document.querySelector('[data-source-block] mark[data-proposal]'));
  // #1123: in the source each passage of this object shows its role, with the same mark as its row in the card.
  const mark=text=>block(text).locator('mark[data-current]');
  const roleOf=async text=>[await mark(text).getAttribute('data-role'),await mark(text).getAttribute('title')];
- const look=role=>page.evaluate(role=>{
+ const look=(role,rowRole=role)=>page.evaluate(({role,rowRole})=>{
   const m=getComputedStyle(document.querySelector('[data-source-block] mark[data-current][data-role='+role+']'));
-  const s=getComputedStyle(document.querySelector('#annotation-simple-rows dt[data-row='+role+'] .annotation-row-name'),'::before');
+  const s=getComputedStyle(document.querySelector('#annotation-simple-rows dt[data-row='+rowRole+'] .annotation-row-name'),'::before');
   return {fill:m.backgroundColor,line:m.textDecorationLine+' '+m.textDecorationStyle,
-   swatchFill:s.backgroundColor,swatchLine:s.borderBottomStyle,shown:s.display!=='none' && s.content!=='none'};},role);
+   swatchFill:s.backgroundColor,swatchLine:s.borderBottomStyle,shown:s.display!=='none' && s.content!=='none'};},{role,rowRole});
  assert.deepEqual(await roleOf(item),['core','Uitspraak']);
- assert.deepEqual(await roleOf(intro),['belongs','Hoort erbij']);
- const coreLook=await look('core'),belongsLook=await look('belongs');
+ assert.deepEqual(await roleOf(intro),['belongs','Aanvullende context']);
+ const coreLook=await look('core'),belongsLook=await look('belongs','context');
  assert.notDeepEqual([coreLook.fill,coreLook.line],[belongsLook.fill,belongsLook.line]);
  // The row name in the card carries the same mark, so the source needs no separate legend.
  for(const l of [coreLook,belongsLook]) {assert(l.shown,JSON.stringify(l));assert.equal(l.swatchFill,l.fill);}
+ // The core and population can overlap. The mobile submenu offers the same actions with a keyboard.
+ await page.setViewportSize({width:390,height:844});
+ const population='diabetes mellitus';
+ await tasks.selectText(page,block(item),population);
+ await block(item).focus();await page.keyboard.press('Tab');await page.keyboard.press('ArrowRight');
+ assert.equal(await page.evaluate(()=>document.activeElement.textContent),'Toepassing');
+ await page.keyboard.press('Enter');
+ const application=menu.getByRole('group',{name:'Toepassing'});
+ await application.waitFor();
+ assert.deepEqual(await application.locator('button').allInnerTexts(),
+  ['Voor wie?','In welke situatie?','Onder welke voorwaarde?']);
+ assert.equal(await page.evaluate(()=>document.activeElement.dataset.add),'population');
+ assert(await page.evaluate(()=>{
+  const menu=document.querySelector('#annotation-selection-menu').getBoundingClientRect();
+  const source=document.querySelector('.annotation-document').getBoundingClientRect();
+  return menu.left>=source.left && menu.right<=source.right && document.documentElement.scrollWidth<=innerWidth;
+ }));
+ await menu.scrollIntoViewIfNeeded();
+ await page.screenshot({path:output+'/card-application-menu-mobile.png'});
+ await page.keyboard.press('Escape');
+ assert.equal(await application.isVisible(),false);
+ await page.keyboard.press('Enter');await page.keyboard.press('Enter');
+ await row('population').getByText(population,{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Uitleg bij Voor wie?',exact:true}).click();
+ await page.locator('#annotation-help-population').getByText('Dit mag een deel van de uitspraak zijn.',{exact:false}).waitFor();
+ for(const role of ['scope','condition','exception']) {
+  await tasks.addAs(page,block(support),support,role);
+  await row(role).getByText(support,{exact:true}).waitFor();
+ }
+ await page.waitForFunction(async ({sid,population,support})=>{
+  const data=await (await fetch('/annotations/api?document='+sid)).json();
+  const ranges=data.entries.find(entry=>entry.annotation_id===new URL(location.href).searchParams.get('annotation'))?.ranges;
+  return ranges?.some(a=>a.role==='population' && a.quote===population) &&
+         ['scope','condition','exception'].every(role=>ranges.some(a=>a.role===role && a.quote===support));
+ },{sid,population,support});
+ await page.reload();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ await row('population').getByText(population,{exact:true}).waitFor();
+ for(const [role,text] of [['population',population],...['scope','condition','exception'].map(role=>[role,support])]) {
+  await minus(role,text).click();
+  await row(role).getByText(text,{exact:true}).waitFor({state:'detached'});
+ }
+ await page.setViewportSize({width:1440,height:1000});
  // 3. Evidence is added when the source has it; the card asks no choice. One button finishes.
  assert.equal(await row('evidence').getByRole('button',{name:/Staat niet in de bron|niet van toepassing/}).count(),0);
  await page.locator('#annotation-ready:enabled').waitFor();
@@ -123,16 +167,16 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal('required_links' in entry,false);
  // A failed check leaves a visible retry in the card instead of two dead buttons.
  await block(item).locator('mark[data-annotation]').first().click();
- await row('belongs').getByText(intro,{exact:true}).waitFor();
+ await row('context').getByText(intro,{exact:true}).waitFor();
  await page.route('**/annotations/check**',route=>route.abort());
- await minus('belongs',intro).click();
+ await minus('context',intro).click();
  await page.locator('#annotation-simple-recheck').waitFor();
  assert.equal(await page.locator('#annotation-ready').isDisabled(),true);
  await page.unroute('**/annotations/check**');
  await page.locator('#annotation-simple-recheck').click();
  // '−' on the linked introduction answered the proposal: it does not come back.
  await page.locator('#annotation-ready:enabled').waitFor();
- assert.equal(await row('belongs').locator('.annotation-proposal').count(),0);
+ assert.equal(await row('context').locator('.annotation-proposal').count(),0);
  await page.locator('#annotation-ready').click();
  await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
  entry=(await read()).entries.find(e=>e.annotation_id===first);
@@ -142,25 +186,25 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // (the known limit of slice 4): saving points at the proposal instead of passing it by.
  await tasks.selectText(page,block(alone),alone);
  await row('core').getByText(alone,{exact:true}).waitFor();
- await row('belongs').locator('.annotation-proposal').getByText(intro,{exact:true}).waitFor();
+ await row('context').locator('.annotation-proposal').getByText(intro,{exact:true}).waitFor();
  await page.locator('#annotation-ready:enabled').click();
- await row('belongs').getByText('Beantwoord eerst het voorstel',{exact:false}).waitFor();
+ await row('context').getByText('Beantwoord eerst het voorstel',{exact:false}).waitFor();
  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.proposal),'add');
  assert.equal((await current()).status,'draft');
  await page.screenshot({path:output+'/card-proposal-open.png',fullPage:true});
- // The worker adds text alongside Metis: 'Hoort erbij' in the menu adds any number of passages, '−' removes one.
+ // The worker adds text alongside Metis: 'Aanvullende context' in the menu adds any number of passages, '−' removes one.
  // Neither answers the proposal.
  for(const text of [support,item]) {await tasks.addAs(page,block(text),text,'context');
-  await row('belongs').locator('.annotation-line:not(.annotation-proposal)').getByText(text,{exact:true}).waitFor();}
- await minus('belongs',item).click();
- await page.waitForFunction(item=>![...document.querySelectorAll('#annotation-simple-rows dd[data-row=belongs] .annotation-line:not(.annotation-proposal) p')].some(p=>p.textContent===item),item);
- await row('belongs').locator('.annotation-proposal').getByText(intro,{exact:true}).waitFor();
+  await row('context').locator('.annotation-line:not(.annotation-proposal)').getByText(text,{exact:true}).waitFor();}
+ await minus('context',item).click();
+ await page.waitForFunction(item=>![...document.querySelectorAll('#annotation-simple-rows dd[data-row=context] .annotation-line:not(.annotation-proposal) p')].some(p=>p.textContent===item),item);
+ await row('context').locator('.annotation-proposal').getByText(intro,{exact:true}).waitFor();
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.setViewportSize({width:1440,height:1000});
- await row('belongs').locator('[data-proposal=decline]').click();
+ await row('context').locator('[data-proposal=decline]').click();
  await page.locator('#annotation-ready:enabled').waitFor();
- assert.equal(await row('belongs').locator('.annotation-proposal').count(),0);
+ assert.equal(await row('context').locator('.annotation-proposal').count(),0);
  await page.locator('#annotation-ready').click();
  await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
  entry=(await read()).entries.find(e=>e.ranges.some(a=>a.quote===alone));
@@ -174,7 +218,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // Keyboard: Tab to the menu, arrows to Onderbouwing, Enter. Focus returns to the passage, not the page top.
  await tasks.selectText(page,block(support),support);
  await block(support).focus();await page.keyboard.press('Tab');
- await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowRight');
+ await page.keyboard.press('ArrowLeft');
  assert.equal(await page.evaluate(()=>document.activeElement?.dataset.add),'evidence');
  await page.keyboard.press('Enter');
  await row('evidence').getByText(support,{exact:true}).waitFor();
@@ -208,7 +252,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  assert.equal(await page.locator('#annotation-simple-recheck').count(),0);
  // A statement in two pieces: 'Uitspraak' in the menu adds the next piece.
  await tasks.selectText(page,block(failing),failing.slice(14));
- assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);
+ assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Toepassing','Uitzondering','Aanvullende context','Onderbouwing']);
  await tasks.choose(page,'core');
  await row('core').getByText(failing.slice(14),{exact:true}).waitFor();
  await page.locator('#annotation-ready:enabled').waitFor();
@@ -229,7 +273,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  for(let i=0;i<60 && (await current())?.pending_range?.quote!==support;i++) await page.waitForTimeout(250);
  assert.equal((await current()).pending_range.quote,support);
  await page.reload();await page.locator('#annotation-editor-inputs:enabled').waitFor();
- assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Hoort erbij','Onderbouwing']);
+ assert.deepEqual(await page.locator('#annotation-selection-menu button:visible').allInnerTexts(),['Uitspraak','Toepassing','Uitzondering','Aanvullende context','Onderbouwing']);
  await tasks.choose(page,'evidence');
  await row('evidence').getByText(support,{exact:true}).waitFor();
  for(let i=0;i<60 && (await current())?.pending_range;i++) await page.waitForTimeout(250);
