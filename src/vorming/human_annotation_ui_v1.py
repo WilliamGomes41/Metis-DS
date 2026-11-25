@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 from uuid import NAMESPACE_URL, uuid4, uuid5
 import asyncio
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -136,6 +136,34 @@ def location_label(block):
     return ' · '.join(labels)
 
 
+def _in_source_contents(path):
+    return bool(path and path[0].casefold() == 'inhoudsopgave')
+
+
+def _heading_level(block, path):
+    if block.get('heading') and block['heading'] == block['text']:
+        return min(5, max(2, len(path) + 1))
+    return None
+
+
+def source_contents_html(blocks):
+    items = []
+    for block in blocks:
+        path = block.get('section_path') or []
+        level = _heading_level(block, path)
+        if level is None or _in_source_contents(path):
+            continue
+        target = quote(block['block_id'], safe='')
+        items.append(
+            f'<li style="--contents-indent:{level - 2}">'
+            f'<a href="#{target}">{escape(block["text"])}</a></li>'
+        )
+    if not items:
+        return ''
+    return ('<nav class="annotation-contents" aria-label="Inhoudsopgave">'
+            '<h2>Inhoudsopgave</h2><ul>' + ''.join(items) + '</ul></nav>')
+
+
 def source_document_html(blocks):
     """Read the pinned blocks as one document without changing their anchors."""
     parts = []
@@ -151,7 +179,8 @@ def source_document_html(blocks):
     for index, block in enumerate(blocks):
         text = block['text']
         path = block.get('section_path') or []
-        in_toc = bool(path and path[0].casefold() == 'inhoudsopgave')
+        in_toc = _in_source_contents(path)
+        level = _heading_level(block, path)
         current_page = next((loc['page'] for loc in block.get('locations') or [] if loc.get('page')), None)
         if in_toc != toc_open:
             if toc_row_open:
@@ -191,11 +220,10 @@ def source_document_html(blocks):
             else:
                 parts.append(' ')
             parts.append(span)
-        elif block.get('heading') and block['heading'] == text:
+        elif level is not None:
             if toc_row_open:
                 parts.append('</p>')
                 toc_row_open = False
-            level = min(5, max(2, len(path) + 1))
             parts.append(f'<h{level} class="annotation-document-heading">{span}</h{level}>')
         else:
             next_page = next((loc['page'] for loc in blocks[index + 1].get('locations') or []
@@ -468,7 +496,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         body = '<header class="annotation-workspace-intro">' + intro + '''</header><details class="annotation-instruction"><summary>Hulp bij annoteren</summary><p>Wijs een eigen uitspraak aan: iets wat de bron stelt, definieert, verklaart of aanbeveelt. Tekst die alleen bij een andere uitspraak hoort, voeg je daar toe bij Hoort erbij of Onderbouwing. Selecteer tekst in de bron en kies naast je selectie waar die bij hoort.</p></details>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <p id="annotation-source-work-status" role="status"></p>
-<div class="annotation-workplace"><div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
+<div class="annotation-workplace">'''+source_contents_html(state['blocks'])+'''<div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
 <section id="annotation-offer" aria-label="Voorstel van Metis" hidden>
@@ -544,6 +572,19 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 #annotation-controls #annotation-simple-heading{margin:1rem 0 .5rem;font-size:1rem}
 #annotation-status:empty{display:none}
 .annotation-workplace{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(19rem,1fr);gap:1.5rem;align-items:start}
+.annotation-contents{min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft);padding:.75rem}
+.annotation-contents h2{font-size:1rem;color:var(--text);margin:0 0 .25rem}
+.annotation-contents ul{list-style:none;margin:0;padding:.25rem;max-height:8.25rem;overflow:auto;scroll-padding:.25rem}
+.annotation-workplace .annotation-contents li{margin:0;padding-inline-start:calc(var(--contents-indent) * .65rem)}
+.annotation-contents a{display:block;align-content:center;min-height:2.75rem;padding:.25rem .375rem;line-height:1.35;text-decoration:none;color:var(--text)}
+.annotation-contents a:hover{text-decoration:underline;text-underline-offset:.2em}
+.annotation-contents a:focus-visible{outline:2px solid var(--paars);outline-offset:1px}
+@media(min-width:1081px){
+  .annotation-workplace:has(.annotation-contents){grid-template-columns:minmax(10rem, .65fr) minmax(0, 1.8fr) minmax(19rem, 1fr)}
+  .annotation-contents{position:sticky;top:1rem}
+  .annotation-contents ul{max-height:calc(100dvh - 5rem)}
+}
+@media(max-width:1080px){.annotation-contents{grid-column:1/-1}}
 #annotation-editor-inputs{min-width:0;margin:0;padding:0;border:0}
 .annotation-document{position:relative;min-width:0;background:var(--wit);border:1px solid var(--line);border-radius:12px;max-height:calc(100vh - 8rem);overflow:auto}
 .annotation-document-tools{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:.75rem;padding:.75rem 1.5rem;background:var(--wit);border-bottom:1px solid var(--line)}

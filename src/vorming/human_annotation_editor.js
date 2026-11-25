@@ -764,6 +764,10 @@ import {bindRange} from '/annotations/binding.mjs';
       focusedGap=link.dataset.annotationGap;
       renderSourceHighlights();
     }
+    if (link?.closest('.annotation-contents')) {
+      menuClosed = true;
+      renderMenu();
+    }
     if (link?.hash) revealSource(decodeURIComponent(link.hash.slice(1)));
     // A marked passage of another statement opens that statement's card.
     const mark=event.target.closest?.('mark[data-annotation]');

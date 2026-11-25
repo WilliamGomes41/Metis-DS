@@ -4,7 +4,7 @@
 # release-control-evidence: releasebewijs — the reader regression below checks both facts.
 from html.parser import HTMLParser
 
-from src.vorming.human_annotation_ui_v1 import source_document_html
+from src.vorming.human_annotation_ui_v1 import source_contents_html, source_document_html
 
 
 class Reader(HTMLParser):
@@ -59,6 +59,10 @@ def test_reader_keeps_every_exact_block_and_folds_contents_without_repeated_cont
     assert 'class="annotation-page-number"' in html
     assert 'class="annotation-list-item"' in html
     assert 'Dit hele tekstblok aanwijzen' not in html
+    contents = source_contents_html(blocks)
+    assert 'href="#block-7">Aanbevelingen</a>' in contents
+    assert 'href="#block-2"' not in contents
+    assert 'href="#block-3"' not in contents
 
 
 def test_reader_escapes_source_text_without_changing_the_visible_selection():
@@ -68,3 +72,4 @@ def test_reader_escapes_source_text_without_changing_the_visible_selection():
     reader.feed(html)
     assert reader.spans['block-1'] == original
     assert '<script>' not in html
+    assert source_contents_html([block(1, None, original)]) == ''
