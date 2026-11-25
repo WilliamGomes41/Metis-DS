@@ -121,6 +121,12 @@
       ]
     ],
     [
+      "/annotations/round",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/source",
       [
         "POST"

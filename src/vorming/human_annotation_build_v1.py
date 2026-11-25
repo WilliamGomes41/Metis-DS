@@ -2,6 +2,7 @@
 from copy import deepcopy
 
 from src.integrity_kernel import stable_hash
+from src.vorming import annotation_document_check_v1 as document_check
 from src.vorming import human_annotation_v1 as annotations
 from src.vorming.human_annotation_contract_v1 import MODE
 from src.vorming.human_annotation_preview_v1 import inspect_for_overview
@@ -34,6 +35,12 @@ def require_storage(con):
         ('formation_evidence_roots', 'require_sealed_formation_evidence'),
         ('document_inputs', 'ab_guard_document_input_variant'),
     }
+    if document_check.storage_available(con):
+        required.update({
+            ('annotation_round_events', 'guard_annotation_round_history'),
+            ('annotation_seals', 'guard_annotation_document_check_seal'),
+            ('processing_attempts', 'guard_annotation_document_check_attempt'),
+        })
     present = {(row['table_name'], row['name']) for row in con.execute(
         "SELECT c.relname AS table_name,t.tgname AS name FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
         "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='workflow' AND t.tgenabled IN ('O','A')").fetchall()}
@@ -75,6 +82,9 @@ def _capture(con, snapshot_id, store, actor_id):
     confirmation = structure.read(con, snapshot_id)
     if confirmation is not None:
         basis[structure.KEY] = confirmation
+    current_round = document_check.read(con, snapshot_id)
+    if current_round is not None:
+        basis[document_check.KEY] = document_check.capture(con, snapshot_id, current_round)
     from src.vorming.source_accountability_v1 import CONTAINERS_VERSION
     basis.update(version=MODE, source_accountability_version=CONTAINERS_VERSION, entries=[{key: entry[key] for key in
                                        ('annotation_id', 'revision', 'payload_hash')} for entry in entries])
@@ -110,17 +120,35 @@ def overview(console, *, actor_id, snapshot_id):
     from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(fragments).fragments
     from src.vorming import confirmed_document_structure_v1 as structure
-    inspection = inspect_for_overview(entries, fragments=fragments, confirmed_headings=structure.anchors(basis.get(structure.KEY)))
+    check_input = basis.get(document_check.KEY)
+    new_flow = check_input is not None or (document_check.enabled() and active is None)
+    inspection = inspect_for_overview(entries, fragments=fragments,
+                                      confirmed_headings=structure.anchors(basis.get(structure.KEY)),
+                                      allow_unselected=new_flow)
+    if new_flow and not any(row['payload']['status'] == 'ready' and row['payload'].get('disposition') is None
+                            for row in entries):
+        inspection['findings'].append({'annotation_id': None, 'code': 'annotation_knowledge_required'})
+    if new_flow:
+        if check_input is None:
+            inspection['findings'].append({'annotation_id': None, 'code': 'annotation_document_round_required'})
+        else:
+            inspection['findings'].extend(document_check.findings(check_input, basis.get(structure.KEY), entries, fragments))
     # Display is the existing source reader. A concurrent save requires a new
     # overview; its entries may never be presented under this seal's hash.
     view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
     if view['generation'] != basis['generation'] or view.get(structure.KEY) != basis.get(structure.KEY):
         annotations.fail('annotation_overview_stale')
-    if structure.enabled() and not active and structure.KEY not in basis and structure.proposed(view['blocks']):
+    if (structure.enabled() and not active and structure.KEY not in basis
+            and (new_flow or structure.proposed(view['blocks']))):
         inspection['findings'].append({'annotation_id': None, 'code': 'annotation_structure_confirmation_required'})
-    return {**view, 'title': basis['context']['title'], 'overview_hash': basis['overview_hash'], 'materialization_context': basis['context'],
+    from src.review.knowledge_route_v1 import build_is_current
+    already_built = (new_flow and active and active['state'] == 'succeeded'
+                     and build_is_current(view['entries'], view['object_bindings']))
+    return {**view, 'title': basis['context']['title'], 'overview_hash': basis['overview_hash'],
+            'document_check_flow': new_flow, 'document_round': check_input['round'] if check_input else None,
+            'already_built': bool(already_built), 'materialization_context': basis['context'],
             'inspection': inspection, 'current_build': dict(active) if active else None,
-            'can_finalize': not inspection['findings'] and view['objects_revision'] == row['objects_revision']
+            'can_finalize': not already_built and not inspection['findings'] and view['objects_revision'] == row['objects_revision']
                 and (not active or active['state'] != 'running')}
 
 
@@ -151,6 +179,8 @@ def rebuild(console, *, actor_id, snapshot_id, annotation_id, command_id, expect
     the generation the card saved. Everything else is the existing finalize.
     """
     view = overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
+    if view['document_check_flow']:
+        annotations.fail('annotation_document_round_required')
     binding = view['object_bindings'].get(annotation_id)
     if binding is None or type(expected_generation) is not int:
         annotations.fail('annotation_command_invalid')
@@ -175,16 +205,27 @@ def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
     # A successful command remains idempotent after its object frontier moved.
     # Authorization is rechecked, never inferred from possession of a receipt.
     annotations.authorize(console, actor_id, console._envelope(snapshot_id))
-    with console.workflow_document_store._connect() as con:
-        require_storage(con)
+    def issued_receipt(con):
         receipt = con.execute('SELECT request_hash,result FROM workflow.annotation_build_commands '
             'WHERE snapshot_id=%s AND command_id=%s', (snapshot_id, command_id)).fetchone()
+        if receipt:
+            if receipt['request_hash'] != request_hash:
+                annotations.fail('annotation_command_conflict')
+            return receipt['result']
+        return None
+
+    with console.workflow_document_store._connect() as con:
+        require_storage(con)
+        receipt = issued_receipt(con)
     if receipt:
-        if receipt['request_hash'] != request_hash:
-            annotations.fail('annotation_command_conflict')
-        return receipt['result']
+        return receipt
     view = overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
     if not view['can_finalize']:
+        # Another request may have reserved this exact command during the overview read.
+        with console.workflow_document_store._connect() as con:
+            receipt = issued_receipt(con)
+        if receipt:
+            return receipt
         if view['current_build'] and view['current_build']['state'] == 'running':
             annotations.fail('processing_attempt_in_progress')
         annotations.fail('annotation_document_incomplete')
@@ -192,12 +233,9 @@ def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
         annotations._locked(console, con, actor_id, snapshot_id)
         con.execute('SELECT snapshot_id FROM workflow.annotation_sets WHERE snapshot_id=%s FOR UPDATE', (snapshot_id,))
         row, _, basis = _capture(con, snapshot_id, console.workflow_document_store, actor_id)
-        receipt = con.execute('SELECT request_hash,result FROM workflow.annotation_build_commands '
-            'WHERE snapshot_id=%s AND command_id=%s', (snapshot_id, command_id)).fetchone()
+        receipt = issued_receipt(con)
         if receipt:
-            if receipt['request_hash'] != request_hash:
-                annotations.fail('annotation_command_conflict')
-            return receipt['result']
+            return receipt
         if (basis['overview_hash'] != overview_hash or view['overview_hash'] != overview_hash
                 or row['generation'] != expected_generation
                 or row['objects_revision'] != expected_revision

@@ -25,8 +25,14 @@ def build_objects(seal, entries, *, fragments):
             raise ValueError("annotation_structure_stale")
         blocks = semantic_source_blocks(fragments)
         structure.validated(definition['entries'], blocks)
+    from src.vorming import annotation_document_check_v1 as document_check
+    check_input = seal.get(document_check.KEY)
+    if check_input is not None:
+        if check_input.get('version') != 1 or document_check.findings(check_input, definition, entries, fragments):
+            raise ValueError('annotation_document_check_invalid')
     confirmed_headings = structure.anchors(definition)
-    inspection = inspect_document(entries, fragments=fragments, confirmed_headings=confirmed_headings)
+    inspection = inspect_document(entries, fragments=fragments, confirmed_headings=confirmed_headings,
+                                  allow_unselected=check_input is not None)
     if inspection['findings']:
         raise ValueError('annotation_document_incomplete')
     decisions, occupied, context_spans = [], defaultdict(list), []
@@ -51,14 +57,17 @@ def build_objects(seal, entries, *, fragments):
                 occupied[anchor['block_id']].append((anchor['start'], anchor['end']))
             else:
                 context_spans.append({key: anchor[key] for key in ('block_id', 'start', 'end')})
+    if check_input is not None and not decisions:
+        raise ValueError('annotation_knowledge_required')
     context = seal['context']
     units = materialise_knowledge_candidates(decisions, document_id=context['document_id'], fragments=fragments)
     # These are retained source records under the existing accountability owner,
     # never KnowledgeCandidates or an automatic source-role confirmation.
-    units += [unit for _, unit in _coverage_remainders(
+    units.extend(unit for _, unit in _coverage_remainders(
         [row for row in _reconstructed_blocks(fragments) if row[0]['block_id'] not in confirmed_headings],
         document_id=context['document_id'], selected_ranges_by_block=occupied,
-        assessments=inspection['source_assessments'], context_spans=context_spans, source_version=source_version)]
+        assessments=inspection['source_assessments'], context_spans=context_spans,
+        source_version=source_version, retain_unselected=check_input is None))
     from src.operations_console_v1 import canonical_source_manifest, transform_generic
     from src.vorming.admission_gate_v1 import apply_admission_gate
     from src.vorming.passage_register_v1 import apply_passage_register

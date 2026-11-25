@@ -36,7 +36,7 @@ def proposed(blocks):
 
 
 def validated(entries, blocks):
-    if not isinstance(entries, list) or not entries:
+    if not isinstance(entries, list):
         annotations.fail('annotation_structure_invalid')
     expected = [row['block_id'] for row in proposed(blocks)]
     if len(entries) != len(expected):

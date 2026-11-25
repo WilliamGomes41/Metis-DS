@@ -51,13 +51,20 @@ def build_is_current(entries, bindings) -> bool:
                for entry in entries if entry.get('status') != 'withdrawn')
 
 
-def annotation_route(*, overview: bool, second_review: bool, finalized: str = '') -> str:
+def annotation_route(*, overview: bool, second_review: bool, finalized: str = '',
+                     document_check_flow: bool = False) -> str:
     """The annotation card and the document check. ``finalized`` is the build state after closing, if any."""
     if finalized == 'running':
         return route_html('build', 'Hierna: Metis bouwt de kennisobjecten. Daarna gaan ze naar de review.',
                           second_review=second_review)
     if finalized == 'succeeded':
         return route_html('review', 'Hierna: de reviewer beoordeelt elk kennisobject.', second_review=second_review)
+    if document_check_flow:
+        if overview:
+            return route_html('check', 'Gebruik ‘Afronden en bouwen’ zodra de documentcontrole gereed is.',
+                              second_review=second_review)
+        return route_html('annotate', 'Kies ‘Ik ben klaar met dit document’ om de documentcontrole te openen.',
+                          second_review=second_review)
     if overview:
         return route_html('check', 'Hierna: na ‘Ik ben klaar met dit document’ bouwt Metis de kennisobjecten. '
                           'Daarna beoordeelt de reviewer ze.', second_review=second_review)

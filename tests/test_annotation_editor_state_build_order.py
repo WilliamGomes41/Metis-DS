@@ -24,6 +24,12 @@ class _Console:
     workflow_document_store = _Store()
 
 
+@pytest.fixture(autouse=True)
+def _no_document_round(monkeypatch):
+    # These tests script only the build reads; no document-check round exists.
+    monkeypatch.setattr(ui.document_check, 'read', lambda connection, snapshot_id: None)
+
+
 def test_build_finishing_between_reads_never_shows_stale_annotations_as_built(monkeypatch):
     world = {'finished': False}
 
@@ -31,7 +37,7 @@ def test_build_finishing_between_reads_never_shows_stale_annotations_as_built(mo
         world['finished'] = True
         return value
 
-    def overview(console, *, actor_id, snapshot_id):
+    def overview(console, *, actor_id, snapshot_id, **_options):
         bindings = {'a1': 'bound'} if world['finished'] else {}
         return read_then_finish({'object_bindings': bindings})
 
@@ -55,7 +61,7 @@ def _client(monkeypatch, builds, bindings=None):
     """Serve the scripted build states, one per latest_build read; overview reads are counted."""
     reads = {'builds': iter(builds), 'overviews': 0}
 
-    def overview(console, *, actor_id, snapshot_id):
+    def overview(console, *, actor_id, snapshot_id, **_options):
         reads['overviews'] += 1
         return {'object_bindings': dict(bindings or {}), 'read': reads['overviews']}
 

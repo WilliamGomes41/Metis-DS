@@ -158,7 +158,7 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
     return blocking
 
 
-def inspect_for_overview(entries, *, fragments, confirmed_headings=()):
+def inspect_for_overview(entries, *, fragments, confirmed_headings=(), allow_unselected=False):
     """Preview historical heads without making them eligible for a new seal."""
     current, historical = [], []
     for entry in entries:
@@ -171,7 +171,8 @@ def inspect_for_overview(entries, *, fragments, confirmed_headings=()):
         validate_historical_display(entry['payload'], fragments=fragments, annotation_id=entry['annotation_id'])
         historical.append((entry, code))
 
-    result = inspect_document(current, fragments=fragments, confirmed_headings=confirmed_headings)
+    result = inspect_document(current, fragments=fragments, confirmed_headings=confirmed_headings,
+                              allow_unselected=allow_unselected)
     if historical:
         # Coverage of the current subset cannot establish gaps in this document.
         result['findings'] = [f for f in result['findings'] if f['code'] != 'annotation_source_unaccounted']
@@ -182,7 +183,7 @@ def inspect_for_overview(entries, *, fragments, confirmed_headings=()):
     return result
 
 
-def inspect_document(entries, *, fragments, confirmed_headings=()):
+def inspect_document(entries, *, fragments, confirmed_headings=(), allow_unselected=False):
     """Accept stored {annotation_id,revision,payload,payload_hash} entries.
 
     Duplicate core identities are refused without merging. Shared context and
@@ -241,7 +242,7 @@ def inspect_document(entries, *, fragments, confirmed_headings=()):
         span = assessment['span']
         covered.setdefault(span['block_id'], []).append((span['start'], span['end']))
     gaps = []
-    for block in blocks:
+    for block in () if allow_unselected else blocks:
         if block['block_id'] in confirmed_headings:
             continue
         for start, end in uncovered_ranges(len(block['text']), covered.get(block['block_id'], [])):

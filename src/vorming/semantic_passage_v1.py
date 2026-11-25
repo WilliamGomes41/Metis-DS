@@ -166,6 +166,7 @@ def _coverage_remainders(
     assessments: list[dict[str, Any]] | None = None,
     context_spans: list[dict[str, Any]] | None = None,
     source_version: str = "source-accountability-v1",
+    retain_unselected: bool = True,
 ) -> list[tuple[tuple[int, int], dict[str, Any]]]:
     out: list[tuple[tuple[int, int], dict[str, Any]]] = []
     for public, source in reconstructed:
@@ -176,15 +177,19 @@ def _coverage_remainders(
         from src.vorming.source_accountability_v1 import uncovered_ranges
         gaps = uncovered_ranges(len(text), ranges)
 
-        # Preserve every gap, split only at explicit source-role boundaries.
+        # Split at the boundaries of explicitly assessed or selected source material.
         classified = [r for r in (assessments or []) if r["span"]["block_id"] == block_id]
         boundaries = [r["span"] for r in classified] + [s for s in (context_spans or []) if s["block_id"] == block_id]
+        if not retain_unselected and not boundaries:
+            continue
         split_gaps = []
         for lo, hi in gaps:
             cuts = sorted({lo, hi, *(v for s in boundaries for v in
                 (s["start"], s["end"]) if lo < v < hi)})
             split_gaps.extend(zip(cuts, cuts[1:]))
         for start, end in split_gaps:
+            if not retain_unselected and not any(s["start"] <= start and end <= s["end"] for s in boundaries):
+                continue
             remainder_text = normalize_visible_prose(text[start:end])
             if not remainder_text:
                 continue

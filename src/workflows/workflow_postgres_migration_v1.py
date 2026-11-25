@@ -52,8 +52,12 @@ MIGRATION_NAMES = (
     "042_retire_essential_relationships.sql",
     "043_annotation_structure_confirmation.sql",
     "044_annotation_section_coverage.sql",
+    "045_annotation_document_check.sql",
 )
 REQUIRED_TRIGGERS = frozenset({
+    ("annotation_round_events", "guard_annotation_round_history"),
+    ("annotation_seals", "guard_annotation_document_check_seal"),
+    ("processing_attempts", "guard_annotation_document_check_attempt"),
     ("annotation_structure_confirmations", "guard_annotation_structure_insert"),
     ("annotation_structure_confirmations", "guard_annotation_structure_history"),
     ("annotation_seals", "guard_annotation_structure_seal"),
@@ -73,7 +77,7 @@ REQUIRED_TABLES = frozenset(
     {
         "test_document_deletions", "deleted_test_snapshots",
         "annotation_sets", "annotation_versions", "annotation_heads", "annotation_commands",
-        "annotation_structure_confirmations", "annotation_section_coverage",
+        "annotation_structure_confirmations", "annotation_section_coverage", "annotation_round_events",
         "annotation_seals", "annotation_build_commands",
         "document_inputs", "document_processing_records", "processing_archive_inputs",
         "object_revision_frontiers",
@@ -156,6 +160,7 @@ RUNTIME_TABLE_PRIVILEGES = {
     "annotation_sets": (_S, _I, _U),
     "annotation_structure_confirmations": (_S, _I),
     "annotation_section_coverage": (_S, _I, _U),
+    "annotation_round_events": (_S, _I),
     "annotation_versions": (_S, _I),
     "annotation_heads": (_S, _I, _U),
     "annotation_commands": (_S, _I),
