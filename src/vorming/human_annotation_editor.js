@@ -708,12 +708,51 @@ import {bindRange} from '/annotations/binding.mjs';
       sourceElements.get(gap.block_id)?.after(link);
     }
   }
+  let coverageSaving=false, coverageRequest=0;
+  function replaceContents(next) {
+    const contents=document.querySelector('.annotation-contents');
+    if(!contents || !next) return;
+    const focused=contents.contains(document.activeElement) ? document.activeElement : null;
+    const destination=focused?.closest('li')?.querySelector('a')?.hash;
+    const previousScroll=contents.querySelector('ul').scrollTop;
+    contents.outerHTML=next;
+    const updated=document.querySelector('.annotation-contents');
+    updated.querySelector('ul').scrollTop=previousScroll;
+    if(focused) {
+      const target=[...updated.querySelectorAll('a')].find(link=>link.hash===destination);
+      (target || updated.querySelector('h2')).focus({preventScroll:true});
+    }
+  }
+  sourceWorkHost.closest('.annotation-workplace').addEventListener('submit',async event=>{
+    const form=event.target;
+    if(!form.matches('[data-coverage-form]')) return;
+    event.preventDefault();
+    if(coverageSaving) return;
+    const notice=el('coverage-status');
+    coverageSaving=true;
+    coverageRequest+=1;
+    notice.textContent='Dekking opslaan…';
+    try {
+      await flush();
+      const response=await fetch(form.action,{method:'POST',body:new FormData(form),headers:{Accept:'application/json'}});
+      const result=await response.json();
+      if(result.generation===state.generation) replaceContents(result.contents);
+      notice.textContent=result.message || 'Dekking opslaan is niet gelukt.';
+    } catch(error) {
+      notice.textContent='Dekking opslaan is niet gelukt. Je kunt het opnieuw proberen.';
+    } finally {
+      coverageSaving=false;
+    }
+  });
+
   async function refreshSourceWork() {
+    const contentsRequest=coverageSaving ? null : coverageRequest;
     const response=await fetch('/annotations/api?'+new URLSearchParams({document:state.snapshot_id,source_work:'true'}));
     if(!response.ok) throw new Error('De bronverantwoording kon niet worden vernieuwd.');
     const next=await response.json();
     if(next.generation!==state.generation) return;
     sourceWorkGeneration=next.generation;
+    if(!coverageSaving && contentsRequest===coverageRequest && next.contents) replaceContents(next.contents);
     const open=[...sourceWorkHost.querySelectorAll('details[open] > summary')].map(item=>item.textContent);
     sourceWork=next.work;
     sourceWorkHost.innerHTML=next.html;
