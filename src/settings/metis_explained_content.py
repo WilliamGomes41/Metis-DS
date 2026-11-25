@@ -48,7 +48,7 @@ class Model:
 
 
 # References describe this inspected revision, never an inferred deployment.
-REFERENCE_REVISION = "9a6f19986dcf5c6985bc41801fd130e534e11798"
+REFERENCE_REVISION = "6e8de5085f5ecf7d74334438b0531a2d7a3e1518"
 
 MODELS = (
     Model(
@@ -64,6 +64,7 @@ MODELS = (
         (Reference("Compositie van documentopslag", "docs/architecture/operational-document-inputs-950.md"),
          Reference("Bronvoorbereiding voor annotatie", "docs/architecture/annotation-source-preparation.md"),
          Reference("Begeleide annotatiewerkplek", "docs/architecture/annotation-workplace-guided.md"),
+         Reference("Documentcontrole en bouwen", "docs/change-contracts/1156-annotation-document-check.md"),
          Reference("Testdocumenten verwijderen", "docs/architecture/test-document-deletion-1037.md"),
          Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md"),
          Reference("Leesgrenzen van Review", "docs/architecture/review-input-scopes-951.md"),
