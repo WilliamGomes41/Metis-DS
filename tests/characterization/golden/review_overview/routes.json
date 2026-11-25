@@ -127,6 +127,12 @@
       ]
     ],
     [
+      "/annotations/structure",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/suggest",
       [
         "POST"
