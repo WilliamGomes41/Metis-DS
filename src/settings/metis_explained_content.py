@@ -64,6 +64,8 @@ MODELS = (
         (Reference("Compositie van documentopslag", "docs/architecture/operational-document-inputs-950.md"),
          Reference("Bronvoorbereiding voor annotatie", "docs/architecture/annotation-source-preparation.md"),
          Reference("Begeleide annotatiewerkplek", "docs/architecture/annotation-workplace-guided.md"),
+         Reference("Bevestigde sectie-indeling", "docs/change-contracts/1152-confirmed-document-structure.md"),
+         Reference("Sectiedekking in Vorming", "docs/change-contracts/1154-section-coverage.md"),
          Reference("Documentcontrole en bouwen", "docs/change-contracts/1156-annotation-document-check.md"),
          Reference("Testdocumenten verwijderen", "docs/architecture/test-document-deletion-1037.md"),
          Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md"),
