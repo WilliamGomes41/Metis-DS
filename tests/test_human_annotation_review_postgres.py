@@ -541,6 +541,7 @@ def test_v11_human_proof_upgrade_preserves_absent_review_payload_without_inventi
     old['workflow_recovery_version'] = 11
     old['formation_recovery']['version'] = 4
     del old['formation_recovery']['tables']['annotation_structure_confirmations']
+    del old['formation_recovery']['tables']['annotation_section_coverage']
     for row in old['workflow_tables']['publish_authorizations']:
         del row['authorization_payload']
     upgraded = _upgrade_workflow_state(old)

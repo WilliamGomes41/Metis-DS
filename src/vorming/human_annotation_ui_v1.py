@@ -11,6 +11,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from src.operations_console_v1 import ConsoleError
+from src.vorming import annotation_section_coverage_v1 as section_coverage
 from src.vorming import confirmed_document_structure_v1 as structure
 from src.vorming import human_annotation_v1 as domain
 from src.vorming.source_accountability_v1 import ROLES as SOURCE_ROLES
@@ -138,18 +139,39 @@ def location_label(block):
     return ' · '.join(labels)
 
 
-def source_contents_html(entries):
+def source_contents_html(entries, *, coverage=None, document='', editable=True):
     if not entries:
         return ''
+    full = coverage is not None and coverage['scope'] == 'full'
+
+    def coverage_form(fields, label, *, target=''):
+        params = {'document': document, 'basis': coverage['basis'], **fields}
+        hidden = ''.join(f'<input type="hidden" name="{key}" value="{escape(value, quote=True)}">'
+                         for key, value in params.items())
+        target_label = f' aria-label="{escape(label + ": " + target, quote=True)}"' if target else ''
+        return ('<form method="post" action="/annotations/coverage" data-coverage-form>'
+                + hidden + f'<button type="submit"{target_label}>{label}</button></form>')
+
     items = []
-    for row in entries:
+    for row in coverage['sections'] if full else entries:
         target = quote(row['block_id'], safe='')
+        detail = ''
+        if full:
+            status = {'checked': 'Nagekeken', 'stale': 'Opnieuw nakijken', 'open': 'Nog te controleren'}[row['status']]
+            detail = f'<span class="annotation-section-status" data-section-status="{row["status"]}">{status}</span>'
+            if editable and row['status'] != 'checked':
+                detail += coverage_form({'section': row['block_id'], 'fingerprint': row['fingerprint']},
+                                        'Markeer als nagekeken', target=row['title'])
         items.append(
             f'<li style="--contents-indent:{row["level"] - 1}">'
-            f'<a href="#{target}">{escape(row["title"])}</a></li>'
+            f'<a href="#{target}">{escape(row["title"])}</a>{detail}</li>'
         )
+    scope = ''
+    if coverage is not None and editable:
+        scope = (coverage_form({'scope': 'selection'}, 'Alleen selectie vastleggen') if full else
+                 coverage_form({'scope': 'full'}, 'Dekking hele richtlijn controleren'))
     return ('<nav class="annotation-contents" aria-label="Inhoudsopgave">'
-            '<h2>Inhoudsopgave</h2><ul>' + ''.join(items) + '</ul></nav>')
+            '<h2 tabindex="-1">Inhoudsopgave</h2>' + scope + '<ul>' + ''.join(items) + '</ul></nav>')
 
 
 def confirm_contents_html(document, basis, entries):
@@ -339,6 +361,12 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 return view
         domain.fail('annotation_overview_stale')
 
+    def confirmed_contents(state, document):
+        definition = state[structure.KEY]
+        coverage = state.get(section_coverage.KEY)
+        editable = coverage is not None and not console.snapshot_is_published(document)
+        return source_contents_html(definition['entries'], coverage=coverage, document=document, editable=editable)
+
     @app.get('/annotations', response_class=HTMLResponse)
     def editor(request: Request, document: str = '', overview: bool = False):
         actor = require(request)
@@ -516,7 +544,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     + confirm_contents_html(document, state['extraction_hash'], proposed_contents))
             return HTMLResponse(page(nav(actor, 'selection') + '<section class="room">' + body + '</section>',
                                      title='Inhoudsopgave bevestigen'), headers={'Cache-Control': 'no-store'})
-        contents = source_contents_html(confirmed['entries'] if confirmed is not None else proposed_contents)
+        contents = (confirmed_contents(state, document) if confirmed is not None else
+                    source_contents_html(proposed_contents))
         blocks = source_document_html(state['blocks'])
         pages = list(dict.fromkeys(loc['page'] for block in state['blocks']
             for loc in block.get('locations') or [] if loc.get('page')))
@@ -528,6 +557,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         body = '<header class="annotation-workspace-intro">' + intro + '''</header><details class="annotation-instruction"><summary>Hulp bij annoteren</summary><p>Wijs een eigen uitspraak aan: iets wat de bron stelt, definieert, verklaart of aanbeveelt. Tekst die alleen bij een andere uitspraak hoort, voeg je daar toe bij Hoort erbij of Onderbouwing. Selecteer tekst in de bron en kies naast je selectie waar die bij hoort.</p></details>
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <p id="annotation-source-work-status" role="status"></p>
+<p id="annotation-coverage-status" role="status"></p>
 <div class="annotation-workplace">'''+contents+'''<div class="annotation-document" aria-label="Document in leesvolgorde"><div class="annotation-document-tools"><strong>Documenttekst</strong><span id="annotation-keyboard-hint" class="sr-only">Selecteer rechtstreeks in de bron. Met toetsenbord: focus een passage en gebruik Shift met de pijltoetsen naar links of rechts. Home en End gaan naar begin en einde van de passage.</span>'''+('<label for="annotation-page-nav">Ga naar pagina</label><select id="annotation-page-nav">'+page_options+'</select>' if pages else '')+'''</div><div id="annotation-source-work-host">'''+source_work_html(state, esc)+'''</div>'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><h2>Kennisobject voorbereiden</h2>
 <p id="annotation-initializing" role="status">De annotatiewerkplek wordt klaargezet.</p>
@@ -611,6 +641,17 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 .annotation-contents a{display:block;align-content:center;min-height:2.75rem;padding:.25rem .375rem;line-height:1.35;text-decoration:none;color:var(--text)}
 .annotation-contents a:hover{text-decoration:underline;text-underline-offset:.2em}
 .annotation-contents a:focus-visible{outline:2px solid var(--paars);outline-offset:1px}
+#annotation-coverage-status:empty{display:none}
+.annotation-contents [data-coverage-form]{margin:.15rem 0 .5rem}
+.annotation-contents [data-coverage-form] button{display:block;min-height:2.75rem;width:100%;padding:.25rem .375rem;
+  background:var(--wit);border:1px solid var(--line);border-radius:6px;cursor:pointer;
+  text-align:start;color:var(--paars);font:inherit;font-size:.8125rem;white-space:normal}
+.annotation-contents [data-coverage-form] button:hover{background:var(--water-soft)}
+.annotation-contents [data-coverage-form] button:focus-visible{outline:2px solid var(--paars);outline-offset:1px}
+.annotation-contents li:has(.annotation-section-status){padding-block:.25rem;border-bottom:1px solid var(--line)}
+.annotation-section-status{display:block;padding-inline:.375rem;color:var(--muted);font-size:.8125rem}
+.annotation-section-status[data-section-status=checked]{color:var(--text);font-weight:600}
+
 @media(min-width:1081px){
   .annotation-workplace:has(.annotation-contents){grid-template-columns:minmax(10rem, .65fr) minmax(0, 1.8fr) minmax(19rem, 1fr)}
   .annotation-contents{position:sticky;top:1rem}
@@ -666,6 +707,43 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             return HTMLResponse('De inhoudsopgave is ongeldig. Open de werkplek opnieuw.', status_code=400)
         return RedirectResponse('/annotations?' + urlencode({'document': document}), status_code=303)
 
+
+    @app.post('/annotations/coverage')
+    async def record_coverage(request: Request):
+        actor = require(request)
+        if not structure.enabled():
+            return Response(status_code=404)
+        form = await request.form()
+        document = str(form.get('document') or '')
+        basis = str(form.get('basis') or '')
+        scope, section, fingerprint = (form.get(key) for key in ('scope', 'section', 'fingerprint'))
+        error = None
+        try:
+            await asyncio.to_thread(section_coverage.write, console, actor_id=actor['account_id'],
+                                    snapshot_id=document, basis=basis, scope=scope, section=section,
+                                    fingerprint=fingerprint)
+        except ConsoleError as exc:
+            if exc.code not in {'annotation_coverage_invalid', 'annotation_coverage_stale',
+                                'annotation_coverage_scope_closed'}:
+                raise
+            error = exc.code
+        location = '/annotations?' + urlencode({'document': document})
+        if request.headers.get('accept') == 'application/json':
+            state = await asyncio.to_thread(editor_state, actor, document, include_source_work=True)
+            message = 'Sectie gemarkeerd als nagekeken.' if section else 'Reikwijdte opgeslagen.'
+            if error:
+                message = 'De sectie is gewijzigd. Controleer de actuele inhoudsopgave.'
+            return JSONResponse({'generation': state['generation'],
+                                 'contents': confirmed_contents(state, document) if structure.KEY in state else '',
+                                 'message': message},
+                                status_code=409 if error else 200, headers={'Cache-Control': 'no-store'})
+        if error:
+            return HTMLResponse(page(nav(actor, 'selection') + '<section class="room"><h1>Dekking niet opgeslagen</h1>'
+                                     f'<p><a href="{escape(location, quote=True)}">Open de actuele inhoudsopgave</a></p></section>'),
+                                status_code=409, headers={'Cache-Control': 'no-store'})
+        if isinstance(section, str):
+            location += '#' + quote(section, safe='')
+        return RedirectResponse(location, status_code=303)
 
     @app.get('/annotations/editor.js')
     def script(request: Request):
@@ -873,8 +951,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         actor = require(request)
         state = editor_state(actor, document, include_source_work=source_work)
         if source_work:
-            state = {'generation': state['generation'], 'work': state['source_work'],
-                     'html': source_work_html(state, esc)}
+            output = {'generation': state['generation'], 'work': state['source_work'],
+                      'html': source_work_html(state, esc)}
+            if section_coverage.KEY in state:
+                output['contents'] = confirmed_contents(state, document)
+            state = output
         return JSONResponse(state, headers={'Cache-Control': 'no-store'})
 
     @app.get('/annotations/check')

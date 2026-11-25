@@ -11,7 +11,7 @@ from src.publication.publication_chain_recovery_v1 import PublicationChainRecove
 # Dependency order; these identifiers never come from the archive.
 TABLES = (
     'prepared_extraction_versions', 'annotation_sets','annotation_versions','annotation_heads','annotation_commands',
-    'annotation_structure_confirmations', 'annotation_seals','annotation_build_commands',
+    'annotation_structure_confirmations', 'annotation_section_coverage', 'annotation_seals','annotation_build_commands',
     'processing_attempts', 'processing_document_summaries', 'processing_checkpoints', 'formation_inputs', 'formation_contexts',
     'formation_task_results', 'formation_task_findings', 'formation_task_result_history',
     'formation_task_plans', 'formation_source_views', 'source_read_roots',
@@ -28,8 +28,9 @@ NEW_TABLES=('processing_archive_inputs','processing_archive_input_members',*OPER
 ANNOTATION_TABLES=('annotation_sets','annotation_versions','annotation_heads','annotation_commands')
 BUILD_TABLES=('annotation_seals','annotation_build_commands')
 STRUCTURE_TABLE='annotation_structure_confirmations'
+COVERAGE_TABLE='annotation_section_coverage'
 ORDER = {
-    STRUCTURE_TABLE:'snapshot_id', 'annotation_seals':'seal_id', 'annotation_build_commands':'snapshot_id,command_id',
+    STRUCTURE_TABLE:'snapshot_id', COVERAGE_TABLE:'snapshot_id', 'annotation_seals':'seal_id', 'annotation_build_commands':'snapshot_id,command_id',
     'processing_attempts':'attempt_id', 'processing_document_summaries':'snapshot_id',
     'processing_checkpoints':'checkpoint_id', 'prepared_extraction_versions':'record_hash',
     'formation_inputs':'artifact_id', 'formation_contexts':'context_id',
@@ -68,7 +69,7 @@ def upgrade_legacy(state):
     result.setdefault('formation_recovery',None)
     section=result.get('formation_recovery')
     if section is not None and section.get('version')==1:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE}:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE}:
             fail('shape_invalid')
         section['version']=2
         for table in NEW_TABLES:
@@ -76,13 +77,13 @@ def upgrade_legacy(state):
         for document in section['documents']:
             document['document_storage_version']=0
     if section is not None and section.get('version')==2:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE}:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE}:
             fail('shape_invalid')
         section['version']=3
         for table in ANNOTATION_TABLES:
             section['tables'][table]=[]
     if section is not None and section.get('version')==3:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE}:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(BUILD_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE}:
             fail('shape_invalid')
         section['version']=4
         for table in BUILD_TABLES:
@@ -96,10 +97,15 @@ def upgrade_legacy(state):
         # annotation-to-object binding, receipt or review decision is added.
         section['version']=5
     if section is not None and section.get('version')==5:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-{STRUCTURE_TABLE}:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-{STRUCTURE_TABLE, COVERAGE_TABLE}:
             fail('shape_invalid')
         section['tables'][STRUCTURE_TABLE]=[]
         section['version']=6
+    if section is not None and section.get('version')==6:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-{COVERAGE_TABLE}:
+            fail('shape_invalid')
+        section['tables'][COVERAGE_TABLE]=[]
+        section['version']=7
     return result
 
 
@@ -110,7 +116,7 @@ def validate(state):
                for d in (state.get('workflow_tables') or {}).get('documents', [])):
             fail('missing_reexport_required')
         return None
-    if (not isinstance(section, dict) or section.get('version') != 6
+    if (not isinstance(section, dict) or section.get('version') != 7
             or set(section.get('tables') or {}) != set(TABLES + FACT_TABLES)
             or not isinstance(section.get('documents'), list)):
         fail('shape_invalid')
@@ -129,7 +135,7 @@ def validate(state):
 def export(con):
     if not available(con):
         return None
-    return {'version':6,
+    return {'version':7,
             'documents':[_json_safe(dict(r)) for r in con.execute(
                 'SELECT '+','.join(DOCUMENT_COLUMNS)+' FROM workflow.documents ORDER BY snapshot_id').fetchall()],
             'tables':{table:[_json_safe(dict(r)) for r in con.execute(
@@ -173,8 +179,13 @@ def _validate_annotations(con):
         confirmation = structure.read(con, sid)
         if confirmation is not None:
             from src.vorming.semantic_passage_v1 import semantic_source_blocks
-            if structure.validated(confirmation['entries'], semantic_source_blocks(fragments)) != confirmation['entries']:
+            blocks = semantic_source_blocks(fragments)
+            if structure.validated(confirmation['entries'], blocks) != confirmation['entries']:
                 fail('annotation_structure_invalid')
+            from src.vorming import annotation_section_coverage_v1 as coverage
+            recorded = coverage.read(con, sid)
+            if recorded is not None and not coverage.valid_receipts(confirmation, blocks, recorded['confirmations']):
+                fail('annotation_coverage_invalid')
         versions = con.execute('SELECT * FROM workflow.annotation_versions WHERE snapshot_id=%s '
                               'ORDER BY annotation_id,revision',(sid,)).fetchall()
         if any(row['payload'].get('selection_version') for row in versions):
