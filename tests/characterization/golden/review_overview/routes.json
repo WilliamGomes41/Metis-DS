@@ -85,6 +85,12 @@
       ]
     ],
     [
+      "/annotations/coverage",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/annotations/editor.js",
       [
         "GET"
