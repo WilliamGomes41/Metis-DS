@@ -69,8 +69,16 @@ def usable_annotation_semantics(payload, *, fragments):
     from src.vorming.semantic_passage_v1 import _recommendation_semantics_from_proposal, semantic_source_blocks
     from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
     by_id = {block['block_id']: block for block in semantic_source_blocks(fragments)}
-    selected = [{key: anchor[key] for key in ('block_id', 'start', 'end')} | {'section_path': by_id[anchor['block_id']]['section_path']}
-                for anchor in payload['ranges'] if anchor['role'] == 'core' and anchor['block_id'] in by_id]
+    selected = []
+    for anchor in payload['ranges']:
+        if anchor['role'] != 'core' or anchor['block_id'] not in by_id:
+            continue
+        block = by_id[anchor['block_id']]
+        selected.append({
+            **{key: anchor[key] for key in ('block_id', 'start', 'end')},
+            'section_path': block['section_path'],
+            'text': block['text'][anchor['start']:anchor['end']],
+        })
     if not selected:
         return None
     try:

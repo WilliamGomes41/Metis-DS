@@ -411,6 +411,9 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
         # A prior final assessment is evidence for its old tuple. Confirmed
         # classification/relations/semantics remain reviewer-owned choices.
         _drop_confirmation_of_another_kind(proposed, raw, peers=by_id, next_kinds=next_kinds)
+        from src.vorming.recommendation_semantics_v1 import CONFIRMED_FIELD, still_bound_confirmation
+        if CONFIRMED_FIELD in proposed and still_bound_confirmation(proposed) is None:
+            proposed.pop(CONFIRMED_FIELD)
         proposed['metadata'].pop('review_passage', None)
         proposed['metadata'].pop('passage_register', None)
         bound = proposed['metadata'].get('source_bound_context')

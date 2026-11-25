@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterable
@@ -35,11 +36,16 @@ from src.knowledge_relations_v1 import (
 )
 from src.vorming.recommendation_semantics_v1 import (
     CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
+    SOURCE_DIRECTIONAL_LABEL_RE,
     confirmed_recommendation_semantics_of,
     recommendation_semantics_errors,
 )
 from src.serving_relations_v1 import HISTORICAL_NON_SERVING_TYPES
 from src.review.source_context_review_v1 import links_of, literal_identity, role_of, CONTRACT
+
+_TRAILING_DIRECTIONAL_STAMP = re.compile(
+    SOURCE_DIRECTIONAL_LABEL_RE.pattern + r"[\s.!?;,:]*$", SOURCE_DIRECTIONAL_LABEL_RE.flags,
+)
 
 SEARCHABLE_TYPES = {
     "definition",
@@ -367,6 +373,11 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         if content.get("clean_text"):
             text_parts.append(content["clean_text"].strip())
         text_parts.extend(_logic_text(obj.get("logic")))
+        if (served_type == "recommendation" and not confirmed_recommendation_semantics
+                and (obj.get("metadata") or {}).get("human_annotation")):
+            # Older annotations sometimes included the directional strength stamp
+            # in their core selection. Keep the canonical source and quote intact.
+            text_parts = [_TRAILING_DIRECTIONAL_STAMP.sub("", part).rstrip() for part in text_parts]
         retrieval_text = "\n".join(p for p in text_parts if p).strip()
 
         chunk_readiness = {

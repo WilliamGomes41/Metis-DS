@@ -252,21 +252,17 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     second = canonical_task == 'second_review'
     if not reading and (second or task == 'second_review'):
         task = canonical_task
-    descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
-        fragments=inputs.fragments, stage='second_review' if second else None)
     published = console.snapshot_is_published(sid)
+    descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
+        fragments=inputs.fragments, stage='second_review' if second else None,
+        confirmed_only=reading or published)
     # #1064: a saved correction is rebuilt from the card; until then this version cannot be approved.
     rebuilding = None
     if annotation and not published:
         from src.vorming.human_annotation_build_v1 import correction_state
         rebuilding = correction_state(console, sid, obj['object_id'])
-    # #1067: what the reviewer's own direction/strength choice resolves does not disable approval.
-    # Only for knowledge objects from annotation; other routes keep their correction route.
-    confirmable = descriptor.can_confirm or (
-        annotation and descriptor.object_type == 'recommendation' and not descriptor.legacy_recommendation_strength
-        and not second and set(descriptor.issues) <= set(descriptor.semantic_issues))
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
-                       and confirmable and not conflict and not rebuilding)
+                       and descriptor.can_confirm and not conflict and not rebuilding)
     lineage = (obj.get('metadata') or {}).get('revision_lineage') or {}
     history = (' <span aria-hidden="true">·</span> <span data-ko-rebuilt>opnieuw gebouwd na correctie van versie '
                + escape(str(lineage['previous_object_version'])) + '</span>') if annotation and lineage.get('previous_object_version') else ''
@@ -288,28 +284,41 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         fields['review_stage'] = 'second_review'
     hidden = ''.join(f'<input type="hidden" name="{key}" value="{escape(str(value), quote=True)}">' for key, value in fields.items())
     semantics = ''
-    choose_semantics = (annotation and descriptor.object_type == 'recommendation' and not descriptor.legacy_recommendation_strength
-                        and not reading and not second and not published)
+    choose_semantics = descriptor.optional_recommendation_review and not (reading or second or published)
+    direction_labels = {'for': 'Aanraden', 'against': 'Afraden'}
+    strength_labels = {'strong': 'Sterk', 'weak': 'Zwak', 'not_stated': 'Sterkte niet vermeld'}
+    pair = ' · '.join(label for label in (
+        direction_labels.get(descriptor.direction), strength_labels.get(descriptor.strength_choice)) if label)
     if choose_semantics:
-        # #1067: Metis proposes, the reviewer confirms or corrects in the existing line.
-        picked_direction = str(draft.get('recommendation_direction') or descriptor.direction or '')
-        picked_strength = str(draft.get('recommendation_strength_level') or descriptor.strength_choice or '')
+        picked_action = draft.get('recommendation_review_action') or 'skip'
+        token = descriptor.recommendation_proposal_token
+
         def options(choices, picked):
-            return '<option value="">Kiezen</option>' + ''.join(
-                '<option value="' + value + '"' + (' selected' if value == picked else '') + '>' + label + '</option>'
-                for value, label in choices)
-        semantics = ('<p class="ko-interpretation ko-semantics-choice" data-ko-semantics-choice>'
-            '<label>Richting <select name="recommendation_direction" required>'
-            + options((('for', 'Aanraden'), ('against', 'Afraden')), picked_direction) + '</select></label> '
-            '<label>Sterkte <select name="recommendation_strength_level" required>'
-            + options((('strong', 'Sterk'), ('weak', 'Zwak'), ('not_stated', 'Niet vermeld')), picked_strength)
-            + '</select></label>'
-            + ('' if descriptor.direction else ' <span class="ko-semantics-note">Metis kon dit niet vaststellen.</span>')
-            + '</p>')
-    elif descriptor.direction or descriptor.strength_choice:
-        direction = {'for': 'Aanraden', 'against': 'Afraden'}.get(descriptor.direction, 'Richting nog onbekend')
-        strength = {'strong': 'Sterk', 'weak': 'Zwak', 'not_stated': 'Sterkte niet vermeld'}.get(descriptor.strength_choice, 'Sterkte nog onbekend')
-        semantics = '<p class="ko-interpretation">' + escape(direction + ' · ' + strength) + '</p>'
+            return ''.join('<option value="' + value + '"' + (' selected' if value == picked else '')
+                           + '>' + escape(label) + '</option>' for value, label in choices)
+
+        actions = [('skip', 'Overslaan')]
+        if token:
+            actions.append(('accept', 'Voorstel accepteren'))
+        actions.append(('decline', 'Voorstel weigeren' if token else 'Zelf richting en sterkte kiezen'))
+        semantics = ('<fieldset class="ko-semantics-choice" data-ko-semantics-choice>'
+            '<legend>Richting en sterkte (optioneel)</legend>'
+            '<p class="ko-interpretation">' + (escape('Voorstel van Metis: ' + pair)
+                if token else 'Metis kon dit niet vaststellen.') + '</p>'
+            '<input type="hidden" name="recommendation_proposal_token" value="' + escape(token, quote=True) + '">'
+            '<label>Keuze <select name="recommendation_review_action">'
+            + options(actions, picked_action) + '</select></label>'
+            '<div data-ko-review-own>'
+            '<p class="ko-interpretation">Vul beide velden in om zelf een keuze te bevestigen.</p>'
+            '<label>Richting <select name="recommendation_direction">'
+            + options([('', 'Kiezen'), *direction_labels.items()], draft.get('recommendation_direction')) + '</select></label>'
+            '<label>Sterkte <select name="recommendation_strength_level">'
+            + options([('', 'Kiezen'), ('strong', 'Sterk'), ('weak', 'Zwak'), ('not_stated', 'Niet vermeld')],
+                      draft.get('recommendation_strength_level')) + '</select></label></div></fieldset>')
+    elif pair:
+        semantics = '<p class="ko-interpretation">' + escape(pair) + '</p>'
+    elif descriptor.optional_recommendation_review:
+        semantics = '<p class="ko-interpretation">Richting en sterkte onbevestigd.</p>'
     if descriptor.legacy_recommendation_strength:
         from src.object_taxonomy_v1 import recommendation_strength_sentence
         semantics = '<p class="ko-interpretation">' + escape(recommendation_strength_sentence(
@@ -451,8 +460,14 @@ for (const form of document.querySelectorAll('[data-ko-assessment-form]')) {
   const submitters = form.querySelectorAll('button[name="review_action"]');
   const approve = form.querySelector('button[value="approve"]');
   const status = form.querySelector('[data-ko-submit-status]');
+  const semanticAction = form.querySelector('[name="recommendation_review_action"]');
+  const ownChoice = form.querySelector('[data-ko-review-own]');
   let submitting = false;
   const update = () => {
+    if (ownChoice) {
+      ownChoice.hidden = semanticAction.value !== 'decline';
+      ownChoice.querySelectorAll('select').forEach(select => { select.disabled = ownChoice.hidden; });
+    }
     const yes = ['applicable','complete','placed_correctly'].every(name => form.querySelector(`input[name="${name}"]:checked`)?.value === 'yes');
     approve.disabled = form.dataset.canApprove !== 'true' || !yes;
   };
@@ -499,10 +514,15 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
         'review_assessment_answer_invalid': 'Kies bij iedere vraag Ja of Aanpassen.',
         'review_assessment_requires_three_yes': 'Voor goedkeuren moeten de drie antwoorden Ja zijn. Kies anders Correctie nodig.',
         'review_assessment_unresolved_proposal': 'De getoonde interpretatie kan nog niet volledig worden bevestigd. Kies Correctie nodig.',
-        'recommendation_semantics_required': 'Kies richting en sterkte van deze aanbeveling voordat je goedkeurt.',
+        'recommendation_semantics_required': 'Kies richting én sterkte of laat beide velden leeg.',
+        'recommendation_review_choice_invalid': 'Kies accepteren, weigeren of overslaan.',
+        'recommendation_review_choice_conflict': 'Kies weigeren om zelf richting en sterkte te bevestigen.',
+        'recommendation_review_proposal_changed': 'Het voorstel komt niet meer overeen. Bekijk het actuele voorstel en kies opnieuw.',
     }
     code = SNAPSHOT_OBJECT_WRITE_CONFLICT if conflict else getattr(error, 'code', str(error))
     message = messages.get(code) or ERROR_COPY.get(code) or 'Deze beoordeling is niet opgeslagen. Controleer de passage en probeer opnieuw.'
+    if code == 'recommendation_review_proposal_changed':
+        draft = {key: value for key, value in draft.items() if key != 'recommendation_review_action'}
     page = render_review_page(console, account, inputs, obj, task=task,
                               draft=draft, error=message, conflict=conflict or not revision.strip())
     return HTMLResponse(page, status_code=409 if conflict else 400, headers={'Cache-Control': 'no-store'})
@@ -510,7 +530,7 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
 
 def handle_compact_review(console, account, snapshot_id, object_id, revision, interaction_id, task,
                           action, values, comment='', *, second=False, evidence_not_applicable=False,
-                          semantics_choice=None):
+                          recommendation_action='', proposal_token='', semantics_choice=('', '')):
     from fastapi.responses import RedirectResponse
     from src.operations_console_v1 import ConsoleError
     from src.review.review_assessment_v1 import ReviewAssessment, displayed_review_descriptor, compact_approval_arguments
@@ -518,12 +538,14 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
     from src.review.review_interaction_v1 import build_review_interaction_evidence, REVIEW_INTERACTION_PREFIX
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     from src.review.ko_receipt_ui_v1 import receipt_location
-    # #1067: the descriptor decides whether the choice applies; the second review confirms the first's version.
-    if second:
-        semantics_choice = None
+    semantic_command = {}
+    if not second and action == 'approve':
+        semantic_command = {'recommendation_review_action': recommendation_action or 'skip',
+                            'recommendation_proposal_token': proposal_token,
+                            'recommendation_direction': semantics_choice[0],
+                            'recommendation_strength_level': semantics_choice[1]}
     draft = {**values, 'comment': comment, 'evidence_not_applicable': evidence_not_applicable,
-             **(dict(zip(('recommendation_direction', 'recommendation_strength_level'), semantics_choice))
-                if semantics_choice and any(semantics_choice) else {})}
+             **semantic_command}
     try:
         if not revision.strip():
             raise ConsoleError('snapshot_revision_required')
@@ -554,8 +576,7 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
             obj = next(row for row in inputs.objects if row['object_id'] == object_id)
             path = review_path_for_klasse(inputs.envelope['class'])
             descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
-                fragments=inputs.fragments, stage='second_review' if second else None,
-                semantics_choice=semantics_choice)
+                fragments=inputs.fragments, stage='second_review' if second else None)
             if action == 'approve' and not descriptor.can_confirm:
                 raise ConsoleError('review_assessment_unresolved_proposal')
             evidence = build_review_interaction_evidence(interaction_id=interaction_id,
@@ -577,6 +598,8 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
             else:
                 kwargs = compact_approval_arguments(assessment, descriptor) if action == 'approve' else {
                     'suitability': 'geen_kenniseenheid', 'eindoordeel': 'afwijzen'}
+                if descriptor.optional_recommendation_review and action == 'approve':
+                    kwargs.update(semantic_command)
                 console.review_object(actor_id=account['account_id'], snapshot_id=snapshot_id,
                     object_id=object_id, decision=action, comment=comment,
                     expected_revision=resolve_review_revision(console, snapshot_id, revision),
@@ -584,8 +607,7 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
         else:
             console.review_object(actor_id=account['account_id'], snapshot_id=snapshot_id,
                 object_id=object_id, decision=action, comment=comment,
-                **({'recommendation_direction': semantics_choice[0], 'recommendation_strength_level': semantics_choice[1]}
-                   if semantics_choice and any(semantics_choice) and action == 'approve' else {}),
+                **semantic_command,
                 suitability='ja' if action == 'approve' else 'geen_kenniseenheid',
                 eindoordeel='goedkeuren' if action == 'approve' else 'afwijzen',
                 expected_revision=revision, _compact_result=True, _interaction_id=interaction_id,

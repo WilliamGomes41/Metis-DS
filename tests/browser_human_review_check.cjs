@@ -77,7 +77,37 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
   await page.goto(base+'/review?'+new URLSearchParams({document:m.document,object:m.object}));
   assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
+  const recommendation = await browser.newPage({viewport:{width:1440,height:1000}});
+  recommendation.on('pageerror', error => errors.push(error.message));
+  await recommendation.goto(base+'/login');
+  await recommendation.locator('[name=username]').fill('richting');
+  await recommendation.locator('[name=password]').fill('human-semantics-secret');
+  await Promise.all([recommendation.waitForURL(u => u.pathname!='/login'),
+    recommendation.locator('button[type=submit]').click()]);
+  await recommendation.goto(base+'/review?'+new URLSearchParams({
+    document:m.recommendation_document,object:m.recommendation_object}));
+  const semantics=recommendation.locator('[data-ko-semantics-choice]');
+  const action=semantics.getByRole('combobox',{name:'Keuze'});
+  await semantics.getByText('Voorstel van Metis: Afraden · Zwak',{exact:true}).waitFor();
+  assert.equal(await action.inputValue(),'skip');
+  assert.equal(await semantics.getByRole('combobox',{name:'Richting',exact:true}).isVisible(),false);
+  await semantics.scrollIntoViewIfNeeded();
+  await recommendation.screenshot({path:output+'/review-recommendation-desktop.png'});
+  await recommendation.setViewportSize({width:390,height:844});
+  await action.focus();await recommendation.keyboard.press('End');
+  assert.equal(await action.inputValue(),'decline');
+  assert.equal(await semantics.getByRole('combobox',{name:'Richting',exact:true}).inputValue(),'');
+  await semantics.scrollIntoViewIfNeeded();
+  await recommendation.screenshot({path:output+'/review-recommendation-mobile.png'});
+  assert.ok(await recommendation.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await action.selectOption('skip');
+  await recommendation.locator('[name=evidence_not_applicable]').check();
+  for(const question of ['applicable','complete','placed_correctly'])
+    await recommendation.locator(`[name=${question}][value=yes]`).check();
+  await Promise.all([recommendation.waitForNavigation({waitUntil:'domcontentloaded'}),
+    recommendation.locator('[name=review_action][value=approve]').click()]);
+  assert.equal(await recommendation.locator('[data-review-receipt]').count(),1);
   assert.deepEqual(errors,[]);
-  fs.writeFileSync(output+'/human-review-result.json',JSON.stringify({annotation:m.annotation,object:m.object,previous:m.version,current,screenshots:6}));
+  fs.writeFileSync(output+'/human-review-result.json',JSON.stringify({annotation:m.annotation,object:m.object,previous:m.version,current,screenshots:8}));
   await browser.close();
 })().catch(error => {console.error(error);process.exit(1);});

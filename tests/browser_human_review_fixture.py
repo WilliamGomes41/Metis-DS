@@ -2,6 +2,7 @@
 from tests.browser_postgres_support import browser_application
 from tests.test_human_annotation_build_postgres import saved_source
 from tests.test_human_annotation_review_postgres import execute_build, candidate, approve
+from tests.test_reviewer_recommendation_semantics_1067 import prepared_recommendation
 
 app = browser_application('human-review')
 console = app.state.operations_kernel
@@ -11,9 +12,11 @@ reviewer = console._envelope(sid)['named_reviewers'][0]
 oid = candidate(console, sid)['object_id']
 approve(console, sid, oid, reviewer)
 version = candidate(console, sid)['object_version']
+recommendation_sid, recommendation, _, _ = prepared_recommendation(console, explicitly_proposed=True)
 
 
 @app.get('/browser-manifest')
 def manifest():
     return {'document': sid, 'annotation': original['annotation_id'], 'object': oid,
-            'version': version, 'username': 'reviewer', 'password': 'human-build-secret'}
+            'version': version, 'username': 'reviewer', 'password': 'human-build-secret',
+            'recommendation_document': recommendation_sid, 'recommendation_object': recommendation['object_id']}

@@ -276,7 +276,7 @@ def _review_direction_evidence(obj: dict[str, Any]) -> str:
     return str(content.get("clean_text") or content.get("raw_text") or "").strip()
 
 
-def _review_strength_evidence(obj: dict[str, Any], strength: str) -> str | None:
+def _review_strength_candidates(obj: dict[str, Any]) -> list[str]:
     proposed = proposed_recommendation_semantics_of(obj)
     candidates = [
         proposed.get("strength_evidence_span"),
@@ -286,11 +286,11 @@ def _review_strength_evidence(obj: dict[str, Any], strength: str) -> str | None:
     candidates.extend(structure.get("section_path") or [])
     content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
     candidates.append(content.get("clean_text"))
-    for raw in candidates:
-        text = str(raw or "").strip()
-        if text and source_literal_strength(text) == strength:
-            return text
-    return None
+    return [str(raw).strip() for raw in candidates if raw]
+
+
+def _review_strength_evidence(candidates: list[str], strength: str) -> str | None:
+    return next((text for text in candidates if source_literal_strength(text) == strength), None)
 
 
 def complete_annotation_semantics(raw: Any) -> bool:
@@ -333,8 +333,9 @@ def confirmed_recommendation_semantics_from_review(
     if not direction_evidence:
         raise ValueError("recommendation_direction_evidence_missing")
 
+    strength_candidates = _review_strength_candidates(obj)
     if safe_strength == "not_stated":
-        if _review_strength_evidence(obj, "strong") or _review_strength_evidence(obj, "weak"):
+        if any(any(source_strength_cues(text)) for text in strength_candidates):
             raise ValueError("recommendation_strength_not_stated_conflict")
         value = {
             "version": RECOMMENDATION_SEMANTICS_VERSION,
@@ -347,7 +348,7 @@ def confirmed_recommendation_semantics_from_review(
             "normalization_scheme": "source_literal_v1",
         }
     else:
-        evidence = _review_strength_evidence(obj, safe_strength)
+        evidence = _review_strength_evidence(strength_candidates, safe_strength)
         if not evidence:
             raise ValueError("recommendation_strength_evidence_required")
         value = {
@@ -361,10 +362,78 @@ def confirmed_recommendation_semantics_from_review(
             "normalization_scheme": "source_literal_v1",
         }
 
+    # A directional source stamp is explicit evidence. A non-directional
+    # strength label still leaves the interpretation to the reviewer.
+    cues = (direction_evidence, value.get("strength_evidence_span") or "")
+    if any(source_label_direction(match.group()) != safe_direction
+           for cue in cues for match in SOURCE_DIRECTIONAL_LABEL_RE.finditer(cue)):
+        raise ValueError("recommendation_direction_source_conflict")
     errors = validate_recommendation_semantics(value, confirmed=True)
     if errors:
         raise ValueError("recommendation_semantics_confirmation_invalid")
     return value
+
+
+def _strength_choice(value: dict[str, Any]) -> str:
+    return "not_stated" if value.get("strength_status") == "not_stated" else str(value.get("strength") or "")
+
+
+def annotation_review_proposal(obj: dict[str, Any]) -> tuple[str, str, str]:
+    """Return the exact proposal token and pair that the first review can offer."""
+    from src.integrity_kernel import compute_canonical_object_hash, stable_hash
+
+    proposal = proposed_recommendation_semantics_of(obj)
+    if not proposal or validate_recommendation_semantics(proposal):
+        return "", "", ""
+    direction, strength = proposal["direction"], _strength_choice(proposal)
+    try:
+        confirmed_recommendation_semantics_from_review(obj, direction=direction, strength_choice=strength)
+    except ValueError:
+        return "", "", ""
+    token = stable_hash({"object": compute_canonical_object_hash(obj), "proposal": proposal})
+    return token, direction, strength
+
+
+def still_bound_confirmation(obj: dict[str, Any]) -> dict[str, Any] | None:
+    """Retain confirmation only if its original evidence binds on this version."""
+    original = confirmed_recommendation_semantics_of(obj)
+    if not original:
+        return None
+    try:
+        current = confirmed_recommendation_semantics_from_review(
+            obj, direction=original.get("direction"), strength_choice=_strength_choice(original))
+    except ValueError:
+        return None
+    return original if current == original else None
+
+
+def resolve_annotation_recommendation_review(obj, *, action, token, direction, strength):
+    """Resolve consent and audit evidence against the owner-checked current object."""
+    action, token, direction, strength = (str(value or "").strip() for value in
+                                          (action, token, direction, strength))
+    action = action or "skip"
+    if action not in {"accept", "decline", "skip"}:
+        raise ValueError("recommendation_review_choice_invalid")
+    proposal_token, proposed_direction, proposed_strength = annotation_review_proposal(obj)
+    own_choice = bool(direction or strength)
+    if action == "decline" and not proposal_token and not own_choice:
+        action = "skip"
+    if action != "decline" and own_choice:
+        raise ValueError("recommendation_review_choice_conflict")
+    if action == "accept":
+        if not proposal_token or token != proposal_token:
+            raise ValueError("recommendation_review_proposal_changed")
+        direction, strength = proposed_direction, proposed_strength
+    elif action == "decline" and own_choice and not (direction and strength):
+        raise ValueError("recommendation_semantics_required")
+    if direction and strength:
+        confirmed = confirmed_recommendation_semantics_from_review(
+            obj, direction=direction, strength_choice=strength)
+    else:
+        confirmed = still_bound_confirmation(obj) if action == "skip" else None
+    return confirmed, {"outcome": action, "proposal_available": bool(proposal_token),
+                       "proposal_token": proposal_token or None, "own_choice": own_choice}
+
 
 
 def legacy_recommendation_semantics_view(

@@ -45,6 +45,11 @@
 .ko-evidence { margin: 6px 0 16px; font-size: 13px; }
 .ko-evidence > summary, .ko-reject > summary { color: var(--paars); text-decoration: underline; cursor: pointer; }
 .ko-assessment-form { margin-top: 14px; }
+.ko-semantics-choice { min-width: 0; margin: 0 0 12px; padding: 12px 0; border: 0; border-top: 1px solid var(--line); }
+.ko-semantics-choice legend { font-weight: 700; padding: 0; }
+.ko-semantics-choice label { display: block; width: fit-content; max-width: 100%; margin: 6px 0; }
+.ko-semantics-choice select { display: block; max-width: 100%; }
+.ko-semantics-choice [data-ko-review-own][hidden] { display: none; }
 .ko-question { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px 12px; border: 0; border-top: 1px solid var(--line); border-radius: 0; margin: 0; padding: 12px 0; min-width: 0; position: relative; }
 .ko-question legend { float: left; width: auto; font-weight: 700; font-size: 14px; padding: 0; }
 .ko-question > div { display: flex; gap: 24px; }
