@@ -38,24 +38,29 @@ def _source_panel(console, inputs, obj, *, task=''):
 
 
 def summary_rows(obj, objects, descriptor=None, *, review_path='richtlijn'):
-    from src.review.ko_receipt_ui_v1 import _scope_connections
+    from src.review.ko_receipt_ui_v1 import _review_application
     rows = {'Doelgroep': [], 'Voorwaarde': [], 'Uitzondering': [], 'Bij deze uitzondering': [], 'Onderbouwing': []}
-    for item in _scope_connections(obj):
-        if item.label in {'Doelgroep', 'Actor of doelgroep', 'Doelgroep en afbakening', 'Afbakening'}:
+    human = (obj.get('metadata') or {}).get('human_annotation')
+    application, scopes, essential = _review_application(obj, knowledge_review_projection(obj, objects)['essential_context'])
+    if human:
+        rows = {'Doelgroep': [], 'Situatie': [], **rows}
+    for item in application:
+        rows[item.label].append((item.text, item.status, item.origin))
+    for item in scopes:
+        if item.label in {'Doelgroep', 'Doelgroep en afbakening'} or (not human and item.label in {'Actor of doelgroep', 'Afbakening'}):
             rows['Doelgroep'].append((item.text, item.status, item.origin))
-    for item in knowledge_review_projection(obj, objects)['essential_context']:
+    for item in essential:
         label = {'condition': 'Voorwaarde', 'exception': 'Uitzondering', 'support': 'Onderbouwing',
                  'scope': 'Doelgroep', 'target_group': 'Doelgroep',
                  'exception_action': 'Bij deze uitzondering'}.get(item['role'])
         if label:
             rows[label].append((str(item.get('text') or ''),
                                 '' if item.get('status') == 'bound' else 'Nog te controleren', ''))
-    human = (obj.get('metadata') or {}).get('human_annotation')
     if human:
         for entry in ((obj.get('metadata') or {}).get('source_bound_context') or {}).get('entries', []):
-            label = {'population':'Doelgroep', 'condition':'Voorwaarde', 'exception':'Uitzondering',
-                'evidence':'Onderbouwing', 'explanation':'Toelichting', 'context':'Context',
-                'actor':'Uitvoerder', 'scope':'Toepassingssituatie', 'timing':'Tijdstip',
+            label = {'exception':'Uitzondering',
+                'evidence':'Onderbouwing', 'explanation':'Toelichting', 'context':'Aanvullende context',
+                'actor':'Uitvoerder', 'timing':'Tijdstip',
                 'list_introduction':'Bronstructuur', 'row_header':'Bronstructuur', 'column_header':'Bronstructuur'}.get(entry.get('annotation_role'))
             text = str(entry.get('text') or '')
             if label and text and not any(value[0] == text for value in rows.get(label, [])):
@@ -73,11 +78,13 @@ def summary_rows(obj, objects, descriptor=None, *, review_path='richtlijn'):
 
 
 def _summary_table(rows):
-    missing = {'Doelgroep': 'Niet afzonderlijk vermeld.', 'Voorwaarde': 'Niet afzonderlijk vastgelegd.',
+    missing = {'Doelgroep': 'Niet afzonderlijk vermeld.', 'Situatie': 'Niet afzonderlijk vastgelegd.', 'Voorwaarde': 'Niet afzonderlijk vastgelegd.',
                'Uitzondering': 'Niet afzonderlijk vastgelegd.', 'Bij deze uitzondering': 'Niet afzonderlijk vastgelegd.',
                'Onderbouwing': 'Niet afzonderlijk gekoppeld.'}
     body = []
     for label, values in rows.items():
+        if label == 'Doelgroep' and 'Situatie' in rows:
+            body.append('<tr><th colspan="2">Toepassing</th></tr>')
         content = ''.join('<p>' + escape(text) + (f'<small>{escape(status)}</small>' if status else '') + '</p>'
                           for text, status, _origin in values)
         body.append('<tr><th scope="row">' + label + '</th><td>'

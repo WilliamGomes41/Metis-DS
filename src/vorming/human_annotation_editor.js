@@ -19,25 +19,29 @@ import {bindRange} from '/annotations/binding.mjs';
     return fieldContract.source_roles[role]?.find(item => item.value === reason)?.label || 'Nog te beoordelen';
   };
   const clone = value => JSON.parse(JSON.stringify(value));
-  // #1067: what to select in each card row, and what '−' does there.
-  const HELP={
-    core:['Zegt de bron hier iets wat afzonderlijk kan worden begrepen en beoordeeld, zoals een aanbeveling, definitie of verklaring? Selecteer die uitspraak letterlijk.',
-      'Kies één betekenis met de tekst die nodig is om haar goed te begrijpen. Eén zin kan twee uitspraken bevatten; één uitspraak kan meerdere bronbereiken beslaan. Gebruik niet automatisch de hele alinea.',
-      ['“Voer A uit en controleer daarna B.” kan twee afzonderlijk te beoordelen adviezen bevatten. Maak dan twee kaarten.',
-       '“Voor de volgende gevallen geldt:” en een opsommingspunt kunnen samen één uitspraak vormen. Voeg de noodzakelijke inleiding toe bij Hoort erbij.',
-       'Een kopnummer, documentdatum of “Figuur 3” bevat op zichzelf niets wat afzonderlijk te beoordelen is.'],
-      'Twijfel je of dit een aparte uitspraak is? Laat het bronstuk open voor documentcontrole. Twijfel is geen reden om het weg te laten.',
-      'Met − haal je de selectie weg.'],
-    type:['Het soort zegt wat voor uitspraak dit is, bijvoorbeeld een aanbeveling of een definitie. Metis stelt het voor; de reviewer controleert het.'],
-    belongs:['Selecteer tekst die nodig is om de uitspraak te begrijpen of toe te passen. Bijvoorbeeld:',
-      ['de inleidende zin van een opsomming;','voor wie of wanneer het geldt (‘Bij volwassenen in de thuiszorg’);','een voorwaarde of uitzondering die de betekenis begrenst;','een begrip dat in de uitspraak wordt gebruikt.'],
-      '“Voer handeling A uit bij groep B. Niet bij conditie C.” kan één aanbeveling zijn met een uitzondering bij Hoort erbij. Een uitzondering is niet automatisch een eigen uitspraak; een afzonderlijk advies kan dat wel zijn.',
-      '“Bij groep C is de effectiviteit onzeker.” kan een eigen uitspraak of een beperking bij een andere uitspraak zijn. Lees de omliggende tekst.',
-      'Niet: waarom het klopt. Dat hoort bij Onderbouwing.','Met − haal je tekst weg, of wijs je een voorstel van Metis af.'],
-    evidence:['Selecteer tekst waarmee de bron de uitspraak ondersteunt of verklaart. Bijvoorbeeld:',
-      ['een beschrijving van onderzoek;','de mate van bewijs;','een verwijzing of een afweging van de werkgroep.'],
-      '“De studie omvatte 238 deelnemers.” kan onderzoekscontext zijn; niet iedere feitelijke zin is een eigen uitspraak. Bevat de tekst een afzonderlijk te beoordelen bevinding? Controleer dan of die past bij de toegelaten soorten voor deze bron.',
-      'Niet: voorwaarden of doelgroep. Die horen bij Hoort erbij.','Geen onderbouwing in de bron? Laat de regel leeg; de reviewer beoordeelt dat.'],
+  const APPLICATION_ROLES = [
+    ['population', 'Voor wie?'],
+    ['scope', 'In welke situatie?'],
+    ['condition', 'Onder welke voorwaarde?'],
+  ];
+  const applicationRoles = new Set(APPLICATION_ROLES.map(([role])=>role));
+  const EXTRA_ROLES = [
+    ['exception', 'Uitzondering'],
+    ['context', 'Aanvullende context'],
+    ['evidence', 'Onderbouwing'],
+  ];
+  const ROLE_LABELS = Object.fromEntries([
+    ['core', 'Uitspraak'], ...APPLICATION_ROLES, ...EXTRA_ROLES,
+  ]);
+  const HELP = {
+    core: ['Wijs aan wat de bron vaststelt, uitlegt of aanbeveelt.'],
+    type: ['Het soort zegt wat voor uitspraak dit is, bijvoorbeeld een aanbeveling of een definitie. Metis stelt het voor; de reviewer controleert het.'],
+    population: ['Wijs de personen of groep aan over wie de uitspraak gaat. Dit mag een deel van de uitspraak zijn.'],
+    scope: ['Wijs de zorgomgeving of werksituatie aan waarvoor de uitspraak geldt.'],
+    condition: ['Wijs aan wat het geval moet zijn voordat de uitspraak geldt.'],
+    exception: ['Wijs aan in welk geval iets anders geldt en wat de bron voor dat geval zegt, als ze dat vermeldt.'],
+    context: ['Wijs aan wat nodig is om de uitspraak te begrijpen of uit te voeren, bijvoorbeeld een lijst, definitie of tabelkop.'],
+    evidence: ['Wijs de redenen of het bewijs voor de uitspraak aan. Een onderzoeksvraag of oproep tot vervolgonderzoek geeft op zichzelf geen onderbouwing.'],
   };
   const helpOpen=new Set();
   const savedRows=new Map();
@@ -118,12 +122,17 @@ import {bindRange} from '/annotations/binding.mjs';
   // A meaning reference that lay only inside a removed range no longer has a source.
   function clearDependentFields(removed) {
     const contains=(outer,inner)=>outer.block_id===inner.block_id && outer.start<=inner.start && outer.end>=inner.end;
-    for(const [field,evidence] of Object.entries(entry.field_evidence || {}))
-      if(evidence.span && contains(removed,evidence.span) && !entry.ranges.some(range=>contains(range,evidence.span)))
+    // The field a role binds stays only while a range of that same role still covers it.
+    const owned=fieldContract.context_bindings?.[removed.role];
+    for(const [field,evidence] of Object.entries(entry.field_evidence || {})) {
+      if(!evidence.span || !contains(removed,evidence.span)) continue;
+      const keepers=field===owned ? entry.ranges.filter(range=>range.role===removed.role) : entry.ranges;
+      if(!keepers.some(range=>contains(range,evidence.span)))
         entry.field_evidence[field]={span:null,missing_reason:'uncertain'};
+    }
   }
 
-  // ---- Binding: the selection becomes the statement, or text that belongs to it, or its evidence.
+  // Bind the selected source range using its existing annotation role.
   function bindAs(role) {
     try {
       // What the card links belongs; '−' simply removes it. Evidence supports the statement.
@@ -138,7 +147,7 @@ import {bindRange} from '/annotations/binding.mjs';
     if(!selected || finalizing || deriving) return;
     if(kind==='core') {bindAs('core');if(selected) return;await derive();return;}
     if(kind==='evidence') entry.evidence_not_applicable=false;
-    bindAs(kind==='evidence' ? 'evidence' : 'context');await runCheck();
+    bindAs(kind);await runCheck();
   }
   // The menu next to the selection: the selection goes where the worker chooses. Without a statement it can only
   // become the statement; with one, 'Uitspraak' adds the next piece of it.
@@ -356,21 +365,45 @@ import {bindRange} from '/annotations/binding.mjs';
   // ---- The menu at the selection. It sits in the scrolling document next to the selected text, so it scrolls with
   // it; it comes right after the source block, so Tab reaches it from a keyboard selection.
   const menu=document.createElement('span'),menuButtons={};
+  const applicationButton=document.createElement('button'),applicationChoices=document.createElement('span');
+  function showApplicationChoices(open) {
+    applicationChoices.hidden=!open;
+    applicationButton.setAttribute('aria-expanded',String(open));
+  }
   {
     menu.id='annotation-selection-menu';menu.className='annotation-selection-menu';menu.setAttribute('role','toolbar');
     menu.setAttribute('aria-label','Selectie toevoegen aan');menu.hidden=true;
-    const label=document.createElement('span');label.className='annotation-selection-label';label.textContent='Toevoegen aan';label.setAttribute('aria-hidden','true');
-    menu.append(label);
-    for(const [kind,text] of [['core','Uitspraak'],['context','Hoort erbij'],['evidence','Onderbouwing']]) {
-      const button=document.createElement('button');button.type='button';button.dataset.add=kind;button.textContent=text;
-      button.addEventListener('click',()=>add(kind));menuButtons[kind]=button;menu.append(button);
-    }
-    // Pressing a choice must not take the selection away before it is used.
+    const addButton=(parent,role,label)=>{
+      const button=document.createElement('button');button.type='button';button.dataset.add=role;button.textContent=label;
+      button.addEventListener('click',()=>add(role));menuButtons[role]=button;parent.append(button);
+    };
+    addButton(menu,'core',ROLE_LABELS.core);
+    applicationButton.type='button';applicationButton.textContent='Toepassing';
+    applicationButton.setAttribute('aria-controls','annotation-application-choices');
+    applicationChoices.id='annotation-application-choices';applicationChoices.className='annotation-application-choices';
+    applicationChoices.setAttribute('role','group');applicationChoices.setAttribute('aria-label','Toepassing');
+    for(const [role,label] of APPLICATION_ROLES) addButton(applicationChoices,role,label);
+    applicationButton.addEventListener('click',()=>{
+      showApplicationChoices(applicationChoices.hidden);
+      renderMenu();
+      if(!applicationChoices.hidden) menuButtons.population.focus();
+    });
+    menu.append(applicationButton,applicationChoices);
+    showApplicationChoices(false);
+    for(const [role,label] of EXTRA_ROLES) addButton(menu,role,label);
+    // Keep the browser's selection while a choice is clicked.
     menu.addEventListener('mousedown',event=>event.preventDefault());
     menu.addEventListener('keydown',event=>{
-      const buttons=[...menu.querySelectorAll('button:not([hidden])')],at=buttons.indexOf(document.activeElement);
-      if(event.key==='Escape') {const block=menu.previousElementSibling;dismissMenu();block?.focus?.();event.preventDefault();}
-      else if((event.key==='ArrowRight' || event.key==='ArrowLeft') && at>=0) {
+      const buttons=[...menu.querySelectorAll('button')].filter(button=>!button.closest('[hidden]'));
+      const at=buttons.indexOf(document.activeElement);
+      if(event.key==='Escape') {
+        if(!applicationChoices.hidden) {
+          showApplicationChoices(false);renderMenu();applicationButton.focus();
+        } else {
+          const block=menu.previousElementSibling;dismissMenu();block?.focus?.();
+        }
+        event.preventDefault();
+      } else if((event.key==='ArrowRight' || event.key==='ArrowLeft') && at>=0) {
         buttons[(at+(event.key==='ArrowRight' ? 1 : buttons.length-1))%buttons.length].focus();event.preventDefault();
       }
     });
@@ -393,6 +426,7 @@ import {bindRange} from '/annotations/binding.mjs';
   // own '−'. With one, the selection is shown nowhere else, so putting the menu away cancels it (Codex P2): no
   // hidden pending selection keeps the card from being finished.
   function dismissMenu() {
+    showApplicationChoices(false);
     if(!hasCore()) {menuClosed=true;renderMenu();return;}
     if(!selected && !entry.pending_range) {menuClosed=true;renderMenu();return;}
     // Like every other edit ('−' included): save, then check again, so finishing is offered again at once.
@@ -404,16 +438,17 @@ import {bindRange} from '/annotations/binding.mjs';
     const block=show ? sourceElements.get(selected.block_id) : null,host=block?.closest('.annotation-document'),range=block ? spanRange(selected) : null;
     // A choice clears the selection before the menu hides: focus returns to the passage the menu stood by, so
     // the next Tab continues from there (Codex P2).
-    if(!range || !host) {if(menu.contains(document.activeElement)) (menu.previousElementSibling?.closest('[data-source-block]') || sourceElements.get(selected?.block_id))?.focus();menu.hidden=true;return;}
+    if(!range || !host) {if(menu.contains(document.activeElement)) (menu.previousElementSibling?.closest('[data-source-block]') || sourceElements.get(selected?.block_id))?.focus();menu.hidden=true;showApplicationChoices(false);return;}
     // A selection restored inside folded source (the table of contents) opens it, as revealSource() does (Codex P2).
     const folded=block.closest('details');
     if(folded && !folded.open) folded.open=true;
     if(menu.previousSibling!==block) block.after(menu);
     const core=hasCore();
     menuButtons.core.setAttribute('aria-label',core ? 'Toevoegen aan de uitspraak, als volgend stuk' : 'Toevoegen als uitspraak');
-    menuButtons.context.hidden=menuButtons.evidence.hidden=!core;
-    menuButtons.context.setAttribute('aria-label','Toevoegen aan Hoort erbij');
-    menuButtons.evidence.setAttribute('aria-label','Toevoegen aan Onderbouwing');
+    const choosingApplication=core && !applicationChoices.hidden;
+    menuButtons.core.hidden=choosingApplication;
+    applicationButton.hidden=!core;
+    for(const [role] of EXTRA_ROLES) menuButtons[role].hidden=!core || choosingApplication;
     menu.hidden=false;
     // Below the selection: a phone shows its own menu above it.
     const rects=[...range.getClientRects()].filter(r=>r.width || r.height),last=rects.at(-1) || range.getBoundingClientRect();
@@ -423,7 +458,7 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   function renderRows() {
     el('save-current-format').hidden = entry.historical_finding !== 'annotation_historical_format';
-    const core=entry.ranges.filter(a=>a.role==='core'),belongs=entry.ranges.filter(a=>a.role!=='core' && a.role!=='evidence'),evidence=entry.ranges.filter(a=>a.role==='evidence');
+    const core=entry.ranges.filter(a=>a.role==='core'),evidence=entry.ranges.filter(a=>a.role==='evidence');
     const done=entry.status==='ready' && dirty===committed && !built(),current=checkIsCurrent(),provisional=!core.length && !!selected;
     el('simple-heading').textContent=!core.length && !selected ? 'Selecteer de uitspraak in de bron' : done ? 'Klaar voor documentcontrole' : '';
     el('simple-heading').hidden=!el('simple-heading').textContent;
@@ -442,8 +477,7 @@ import {bindRange} from '/annotations/binding.mjs';
       button.setAttribute('aria-expanded',String(helpOpen.has(key)));
       box.id='annotation-help-'+key;box.className='annotation-help';box.hidden=!helpOpen.has(key);
       for(const part of HELP[key]) {
-        if(Array.isArray(part)) {const ul=document.createElement('ul');for(const item of part) {const li=document.createElement('li');li.textContent=item;ul.append(li);}box.append(ul);}
-        else {const p=document.createElement('p');p.textContent=part;box.append(p);}
+        const p=document.createElement('p');p.textContent=part;box.append(p);
       }
       button.addEventListener('click',()=>{
         const open=!helpOpen.has(key);if(open) helpOpen.add(key);else helpOpen.delete(key);
@@ -456,11 +490,12 @@ import {bindRange} from '/annotations/binding.mjs';
       const name=document.createElement('span'),text=document.createElement('span');
       if(kind) {dt.replaceChildren();for(const child of [...dd.childNodes]) if(child!==kindBox) child.remove();}
       else {dt.dataset.row=key;dd.dataset.row=key;}
+      if(applicationRoles.has(key) || key==='exception' || key==='context') dt.dataset.related='true';
       text.textContent=label;name.className='annotation-row-name';name.append(text);dt.append(name);
       if(HELP[key]) explain(name,dd,key,label);
       if(adoptedCard===entry.annotation_id && !kind && !deriving) {
         sign(dt,'+','Brontekst toevoegen aan '+label,()=>{
-          if(selected) {add(key==='belongs' ? 'context' : key);return;}
+          if(selected) {add(key);return;}
           status('Selecteer tekst in de bron en kies '+label+'.');
           sourceElements.get(entry.ranges[0]?.block_id)?.focus();
         });
@@ -493,18 +528,27 @@ import {bindRange} from '/annotations/binding.mjs';
       hint(dd,entry.object_type ? 'Klopt het soort niet? Kies het juiste soort.' : 'Metis kon het soort niet bepalen. Kies het soort.');
     });
     if(core.length || provisional) {
-      row('belongs','Hoort erbij',dd=>{
-        for(const a of belongs) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
+      const application=document.createElement('dt');
+      application.className='annotation-row-group';application.textContent='Toepassing';rows.append(application);
+      for(const [role,label] of APPLICATION_ROLES) row(role,label,dd=>{
+        for(const a of entry.ranges.filter(a=>a.role===role)) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
+      });
+      row('exception',ROLE_LABELS.exception,dd=>{
+        for(const a of entry.ranges.filter(a=>a.role==='exception')) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
+      });
+      row('context',ROLE_LABELS.context,dd=>{
+        const context=entry.ranges.filter(a=>!applicationRoles.has(a.role) && !['core','evidence','exception'].includes(a.role));
+        for(const a of context) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
         for(const proposal of proposals) {
           const div=document.createElement('div'),text=document.createElement('p'),label=document.createElement('span'),quote=document.createElement('span'),signs=document.createElement('span');
           div.className='annotation-line annotation-proposal';label.className='annotation-proposal-label';label.textContent='Voorstel van Metis';
           quote.textContent=proposal.quote;text.append(label,quote);signs.className='annotation-signs';
-          sign(signs,'+','Toevoegen aan Hoort erbij: '+proposal.quote,()=>{answerProposal(proposal,true).catch(()=>{});}).dataset.proposal='add';
+          sign(signs,'+','Toevoegen aan Aanvullende context: '+proposal.quote,()=>{answerProposal(proposal,true).catch(()=>{});}).dataset.proposal='add';
           sign(signs,'−','Afwijzen, hoort er niet bij: '+proposal.quote,()=>{answerProposal(proposal,false).catch(()=>{});}).dataset.proposal='decline';
           div.append(text,signs);dd.append(div);
         }
         if(asked && proposals.length) hint(dd,'Beantwoord eerst het voorstel: + voegt de tekst toe, − wijst het af.');
-        if(!belongs.length && !proposals.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
+        if(!context.length && !proposals.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
       });
       row('evidence','Onderbouwing',dd=>{
         for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
@@ -515,7 +559,7 @@ import {bindRange} from '/annotations/binding.mjs';
     }
     const own=finding=>finding.code==='annotation_core_required' && !entry.object_type || finding.code==='annotation_context_proposal_open';
     el('simple-status').textContent=deriving ? 'Metis leest de uitspraak…'+(queued ? ' Je selectie wordt daarna toegevoegd.' : '') : !selected && lostSelection ||
-      (core.length && selected ? 'Kies bij je selectie waar de tekst bij hoort.' : !core.length ? '' :
+      (core.length && selected ? 'Kies bij je selectie welke rol de tekst heeft.' : !core.length ? '' :
        done ? 'Dit is geen inhoudelijke goedkeuring of publicatie.' : checking ? 'Controleren…' : '');
     const notes=el('simple-notes');notes.replaceChildren();
     // A check that failed or never ran must not strand a complete object: offer the retry here.
@@ -549,7 +593,6 @@ import {bindRange} from '/annotations/binding.mjs';
     };
     selection.setBaseAndExtent(...point(kept[0]),...point(kept[1]));
   }
-  const ROLE_LABELS={core:'Uitspraak',belongs:'Hoort erbij',evidence:'Onderbouwing'};
   function renderSourceHighlights() {
     const ranges = new Map();
     for (const saved of [...state.entries.filter(e => e.annotation_id !== entry.annotation_id && e.status !== 'withdrawn'),entry]) {
@@ -590,9 +633,9 @@ import {bindRange} from '/annotations/binding.mjs';
             if (entry.disposition) {
               mark.title='Geen uitspraak';
             } else {
-              const roles=covering.filter(a => a.current).map(a => a.role==='core' || a.role==='evidence' ? a.role : 'belongs');
-              const role=['core','evidence','belongs'].find(r => roles.includes(r));
-              mark.dataset.role=role;mark.title=ROLE_LABELS[role];
+              const roles=covering.filter(a=>a.current).map(a=>a.role);
+              mark.dataset.role=roles.includes('core') ? 'core' : roles.includes('evidence') ? 'evidence' : 'belongs';
+              mark.title=[...new Set(roles.map(role=>ROLE_LABELS[role] || ROLE_LABELS.context))].join(' · ');
             }
           }
           else if (covering.some(a => a.sourceRest)) {
@@ -612,6 +655,7 @@ import {bindRange} from '/annotations/binding.mjs';
     dismissOffer();
     // A selection made while Metis reads the statement waits; it must not make that answer stale.
     if(deriving) {queued=value;renderCard();return;}
+    showApplicationChoices(false);
     selected=value;lostSelection='';
     el('to-source').href='#'+value.block_id;
     const role=!hasCore() ? 'core' : 'context';
@@ -1080,10 +1124,9 @@ import {bindRange} from '/annotations/binding.mjs';
       if(controller.signal.aborted || entry.annotation_id!==id || selected || dirty!==0 ||
           JSON.stringify(basis)!==JSON.stringify(suggestionBasis())) return;
       offerRanges=ranges;
-      const labels={core:'Uitspraak',context:'Hoort erbij',evidence:'Onderbouwing'};
       for(const range of ranges) {
         const title=document.createElement('dt'),quote=document.createElement('dd');
-        title.textContent=labels[range.role];quote.textContent=literal(range);
+        title.textContent=ROLE_LABELS[range.role];quote.textContent=literal(range);
         el('offer-ranges').append(title,quote);
       }
       el('offer-message').textContent=ranges.length ? 'Voorstel van Metis' : 'Geen voorstel gevonden. Selecteer zelf een uitspraak.';

@@ -29,9 +29,9 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('#annotation-rebuild').innerText(),'Terug naar review');
   assert.deepEqual(await page.locator('.annotation-task-actions button:visible').allInnerTexts(),['Terug naar review']);
   await page.screenshot({path:output+'/annotation-original-desktop.png',fullPage:true});
-  // The reviewer turns the context sentence into evidence: '−' on Hoort erbij, then Onderbouwing in the menu.
+  // The reviewer turns the context sentence into evidence: '−' on Aanvullende context, then Onderbouwing in the menu.
   const moved='De beoordeling betreft volwassenen.';
-  await row('belongs').locator('.annotation-line').filter({hasText:moved}).locator('button.annotation-sign').click();
+  await row('context').locator('.annotation-line').filter({hasText:moved}).locator('button.annotation-sign').click();
   await tasks.addAs(page,page.locator('[data-source-block]').filter({hasText:'De beoordeling'}),moved,'evidence');
   await row('evidence').getByText(moved,{exact:true}).waitFor();
   // #1067: a wrong kind is corrected in the same card, like any other row.

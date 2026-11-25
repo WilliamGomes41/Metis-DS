@@ -70,7 +70,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
   // 3. Reopening shows the stored version; finishing then succeeds, and a new login resumes it.
   await page.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
-  await row('belongs').getByText(extra,{exact:true}).waitFor();
+  await row('context').getByText(extra,{exact:true}).waitFor();
   await page.locator('#annotation-ready:enabled').click();
   await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron'}).waitFor();
   assert.equal((await read()).entries[0].status,'ready');
