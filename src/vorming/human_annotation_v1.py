@@ -406,7 +406,9 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
             from src.vorming.human_annotation_preview_v1 import inspect_for_overview, source_range_key, source_work
             if frontier != expected_objects_revision:
                 fail('annotation_objects_stale')
-            inspection = inspect_for_overview(_annotation_heads(con, snapshot_id)['entries'], fragments=fragments)
+            from src.vorming import confirmed_document_structure_v1 as structure
+            inspection = inspect_for_overview(_annotation_heads(con, snapshot_id)['entries'], fragments=fragments,
+                                              confirmed_headings=structure.anchors(structure.read(con, snapshot_id)))
             work = source_work(inspection, source_blocks)
             chosen = {source_range_key(span) for span in core}
             if source_role_group:
@@ -630,10 +632,12 @@ def overview(console, *, actor_id, snapshot_id, include_source_work=False):
     by_id = {b['block_id']:b for b in blocks}
     capture, history, pending = _capture_heads(console, snapshot_id)
     entries = capture['entries']
-    coverage = {}
+    from src.vorming import confirmed_document_structure_v1 as structure
+    confirmation = capture[structure.KEY]
+    coverage = {structure.KEY: confirmation} if confirmation is not None else {}
     if include_source_work:
         from src.vorming.human_annotation_preview_v1 import inspect_for_overview, source_work
-        inspection = inspect_for_overview(entries, fragments=fragments)
+        inspection = inspect_for_overview(entries, fragments=fragments, confirmed_headings=structure.anchors(confirmation))
         coverage['source_work'] = source_work(inspection, blocks)
     for entry in entries:
         if stable_hash(entry['payload']) != entry.pop('payload_hash'):
@@ -684,6 +688,8 @@ def _capture_heads(console, snapshot_id):
     with console.workflow_document_store._connect() as con:
         con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         capture = _annotation_heads(con, snapshot_id)
+        from src.vorming import confirmed_document_structure_v1 as structure
+        capture[structure.KEY] = structure.read(con, snapshot_id)
         history = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (snapshot_id,)).fetchall()]
         revision_supported = con.execute("SELECT to_regprocedure('workflow.annotation_pending_objects(text)') AS name").fetchone()['name'] is not None
         pending = {r['object_id'] for r in con.execute('SELECT object_id FROM workflow.annotation_pending_objects(%s)', (snapshot_id,)).fetchall()} if revision_supported else set()
