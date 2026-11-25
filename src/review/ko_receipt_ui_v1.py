@@ -183,18 +183,19 @@ def _review_application(obj, essential):
             selected.append((item, entry))
         else:
             other.append(item)
-    # Explicit spans precede derived fields. When a passage is projected twice,
-    # keep any unresolved finding and retain its literal just once.
+    # Explicit spans precede derived fields. When a passage is projected twice
+    # in one role, keep any unresolved finding and retain its literal just once
+    # for that role. The same literal assigned to two roles stays in both.
     by_role = {label: [] for label in _APPLICATION_LABELS.values()}
     seen = set()
     for item, entry in sorted(selected, key=lambda pair: (
             not bool(pair[1].get('annotation_role')), pair[0].get('status') == 'bound')):
         text = str(item['text'])
         identity = ' '.join(text.split())
-        if identity in seen:
-            continue
-        seen.add(identity)
         label = _APPLICATION_LABELS[item['role']]
+        if (label, identity) in seen:
+            continue
+        seen.add((label, identity))
         status = '' if item.get('status') == 'bound' else 'Nog te controleren'
         by_role[label].append(KnowledgeConnection(label, text, _source_origin(entry), status))
     remaining_scopes = []
@@ -203,9 +204,10 @@ def _review_application(obj, essential):
             remaining_scopes.append(row)
             continue
         identity = ' '.join(row.text.split())
-        if not by_role[row.label] and identity not in seen:
+        # A derived field never repeats a literal that an explicit span already shows.
+        if not by_role[row.label] and all(identity != shown for _label, shown in seen):
             by_role[row.label].append(row)
-            seen.add(identity)
+            seen.add((row.label, identity))
     return [row for group in by_role.values() for row in group], remaining_scopes, other
 
 
