@@ -211,6 +211,7 @@ def review_burden_projection(
     grouped: dict[str, dict[str, Any]] = {}
     legacy_unmeasured = 0
     invalid_evidence = 0
+    proposal_decisions = {action: set() for action in ("accept", "decline", "skip")}
 
     for event in events:
         if not _is_decision_event(event):
@@ -257,13 +258,15 @@ def review_burden_projection(
             int(row["requested_count"]),
             int(evidence.get("requested_count") or 1),
         )
-        row["decisions"].add(
-            (
-                str(event.get("object_id") or ""),
-                str(event.get("object_version") or ""),
-                str(event.get("event_type") or ""),
-            )
-        )
+        decision = (str(event.get("object_id") or ""), str(event.get("object_version") or ""),
+                    str(event.get("event_type") or ""))
+        row["decisions"].add(decision)
+        recommendation = details.get("recommendation_review")
+        if (isinstance(recommendation, dict) and recommendation.get("proposal_available") is True
+                and decision[2].endswith("_review_approve") and decision[2] != "second_review_approve"):
+            outcome = recommendation.get("outcome")
+            if isinstance(outcome, str) and outcome in proposal_decisions:
+                proposal_decisions[outcome].add((interaction_id, *decision))
 
     interactions: list[dict[str, Any]] = []
     for row in grouped.values():
@@ -301,5 +304,6 @@ def review_burden_projection(
         "legacy_unmeasured_decisions": legacy_unmeasured,
         "invalid_evidence_events": invalid_evidence,
         "by_kind": by_kind,
+        "recommendation_proposal_decisions": {action: len(rows) for action, rows in proposal_decisions.items()},
         "interactions": interactions,
     }

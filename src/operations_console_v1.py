@@ -99,7 +99,7 @@ from src.vorming.recommendation_semantics_v1 import (
     LEGACY_CONFIRMED_FIELD as LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD,
     confirmed_recommendation_semantics_from_review,
     confirmed_recommendation_semantics_of,
-    proposed_recommendation_semantics_of,
+    proposed_recommendation_semantics_of, resolve_annotation_recommendation_review,
 )
 from src.review.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publication.publish_authorization_v1 import record_authorization, invalidate_for_object, still_matches, tuple_record
@@ -3269,6 +3269,8 @@ class OperationsConsole:
         recommendation_strength: str | None = None,
         recommendation_direction: str | None = None,
         recommendation_strength_level: str | None = None,
+        recommendation_review_action: str | None = None,
+        recommendation_proposal_token: str | None = None,
         relation_choices: Iterable[str] | None = None,
         relation_review_ack: bool = False,
         suitability: str | None = None,
@@ -3376,6 +3378,9 @@ class OperationsConsole:
                 **({"evidence_not_applicable": True} if evidence_not_applicable else {}),
                 # Present only when reported, so earlier command hashes stay valid.
                 **({"source_discrepancy": discrepancy} if discrepancy else {}),
+                **({"recommendation_review_action": recommendation_review_action,
+                    "recommendation_proposal_token": recommendation_proposal_token}
+                   if recommendation_review_action is not None else {}),
                 "decision": decision, "confirmed_object_type": confirmed_object_type,
                 "recommendation_strength": recommendation_strength,
                 "recommendation_direction": recommendation_direction,
@@ -3429,6 +3434,8 @@ class OperationsConsole:
             if decision == "approve" or apply_type:
                 if review_path != "boom" and content_reviewable(target):
                     self._require_resolved_candidate_source(envelope, target)
+            recommendation_review = None
+            review_confirmation = None
             if decision != "later":
                 from src.vorming.source_accountability_v1 import is_source_record
                 if is_source_record(target) and (decision == "approve" or apply_type):
@@ -3464,7 +3471,25 @@ class OperationsConsole:
                     and stamp_type == "recommendation"
                     and has_new_recommendation_semantics
                 )
-                if decision == "approve" and new_recommendation_semantics_mode:
+                optional_review = (decision == "approve" and review_path != "boom"
+                                   and stamp_type == "recommendation"
+                                   and bool((target.get("metadata") or {}).get("human_annotation")))
+                if recommendation_review_action is not None and not optional_review:
+                    raise ConsoleError("recommendation_review_choice_invalid")
+                if optional_review:
+                    action = recommendation_review_action
+                    if action is None and (direction_preview or strength_level_preview):
+                        # Direct kernel callers may explicitly provide a pair.
+                        action = "decline"
+                    if strength_preview:
+                        raise ConsoleError("legacy_recommendation_strength_not_allowed")
+                    try:
+                        review_confirmation, recommendation_review = resolve_annotation_recommendation_review(
+                            target, action=action, token=recommendation_proposal_token,
+                            direction=direction_preview, strength=strength_level_preview)
+                    except ValueError as exc:
+                        raise ConsoleError(str(exc)) from exc
+                elif decision == "approve" and new_recommendation_semantics_mode:
                     existing_semantics = confirmed_recommendation_semantics_of(target)
                     effective_direction = direction_preview or str(existing_semantics.get("direction") or "")
                     if strength_level_preview:
@@ -3598,7 +3623,19 @@ class OperationsConsole:
                 and has_new_recommendation_semantics
             )
             confirmed_semantics: dict[str, Any] | None = None
-            if decision == "approve" and new_recommendation_semantics_mode:
+            if recommendation_review is not None:
+                confirmed_semantics = review_confirmation
+                previous = target.get(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD)
+                legacy = target.pop(LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD, None)
+                if confirmed_semantics != previous or legacy:
+                    if str(target.get("object_version") or "1.0") == review_semantics_base_version:
+                        target["object_version"] = bump_patch(review_semantics_base_version)
+                    if confirmed_semantics is None:
+                        target.pop(CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD, None)
+                    else:
+                        target[CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD] = confirmed_semantics
+                    stamp_canonical_hashes(target)
+            elif decision == "approve" and new_recommendation_semantics_mode:
                 existing_semantics = confirmed_recommendation_semantics_of(target)
                 effective_direction = direction_choice or str(existing_semantics.get("direction") or "")
                 if strength_level_choice:
@@ -3895,6 +3932,7 @@ class OperationsConsole:
                     "proposed_correction": str(proposed_correction or ""),
                     "snapshot_id": snapshot_id,
                     "review_interaction": deepcopy(interaction_evidence),
+                    **({"recommendation_review": recommendation_review} if recommendation_review is not None else {}),
                     "reviewer_id": actor_id,
                     "confirmed_object_type": updated_target.get("confirmed_object_type"),
                     "review_domain": review_domain,

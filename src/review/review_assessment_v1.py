@@ -11,7 +11,7 @@ from src.review.knowledge_relation_review_v1 import (
     semantic_confirmed_relations, semantic_proposed_relations,
 )
 from src.vorming.recommendation_semantics_v1 import (
-    confirmed_recommendation_semantics_from_review,
+    annotation_review_proposal, confirmed_recommendation_semantics_from_review,
     confirmed_recommendation_semantics_of, proposed_recommendation_semantics_of,
     validate_recommendation_semantics, PROPOSED_FIELD, CONFIRMED_FIELD,
 )
@@ -69,8 +69,8 @@ class DisplayedReviewDescriptor:
     relations: tuple[dict, ...]
     issues: tuple[str, ...]
     outcome_strength: str = ''
-    # #1067: the part of ``issues`` a reviewer's own direction/strength choice resolves.
-    semantic_issues: tuple[str, ...] = ()
+    optional_recommendation_review: bool = False
+    recommendation_proposal_token: str = ''
     outcome_no_action: bool = False
     legacy_recommendation_strength: str = ''
 
@@ -79,35 +79,9 @@ class DisplayedReviewDescriptor:
         return not self.issues
 
 
-def reviewer_semantics_choice(focal, choice):
-    """#1067: the reviewer's direction/strength pair for this object, if the card offered one.
-
-    ``None`` when nothing applies (not from annotation, or nothing chosen); ``()`` for half a choice,
-    which is never completed silently with the proposal.
-    """
-    if choice is None or not (focal.get('metadata') or {}).get('human_annotation'):
-        return None
-    pair = tuple(str(value or '').strip() for value in choice)
-    if not any(pair):
-        return None
-    return pair if all(pair) else ()
-
-
-def _recommendation_values(focal, object_type, choice=None):
+def _recommendation_values(focal, object_type):
     if object_type != 'recommendation':
         return '', '', [], ''
-    # #1067: the review card offers the choice only for knowledge objects from annotation.
-    choice = reviewer_semantics_choice(focal, choice)
-    if choice == ():
-        return '', '', ['recommendation_semantics_required'], ''
-    if choice is not None:
-        # The reviewer's own choice, checked against the source exactly as approval checks it.
-        direction, strength = choice
-        try:
-            confirmed_recommendation_semantics_from_review(focal, direction=direction, strength_choice=strength)
-        except ValueError as error:
-            return direction, strength, [str(error)], ''
-        return direction, strength, [], ''
     if PROPOSED_FIELD not in focal and CONFIRMED_FIELD not in focal:
         from src.object_taxonomy_v1 import is_closed_recommendation_strength
         legacy = str(focal.get('confirmed_recommendation_strength')
@@ -149,7 +123,7 @@ def _outcome_values(focal, object_type):
 
 def displayed_review_descriptor(
     focal: dict[str, Any], objects: Iterable[dict[str, Any]], review_path: str,
-    *, bindings=(), fragments=None, stage=None, semantics_choice=None,
+    *, bindings=(), fragments=None, stage=None, confirmed_only=False,
 ) -> DisplayedReviewDescriptor:
     """Project precisely the type, semantics and relation basis a reviewer endorses."""
     rows = list(objects)
@@ -160,8 +134,21 @@ def displayed_review_descriptor(
     known_type = (object_type in CLOSED_BOOM_TYPES if review_path == 'boom'
                   else is_closed_confirmed_type(object_type))
     issues = [] if known_type else ['review_type_required']
-    direction, strength, semantic_errors, legacy_strength = _recommendation_values(focal, object_type, semantics_choice)
-    issues.extend(semantic_errors)
+    optional = (review_path != 'boom' and object_type == 'recommendation'
+                and bool((focal.get('metadata') or {}).get('human_annotation')))
+    proposal_token = ''
+    if optional:
+        legacy_strength = ''
+        if stage == 'second_review' or confirmed_only:
+            confirmed = confirmed_recommendation_semantics_of(focal)
+            direction = str(confirmed.get('direction') or '')
+            strength = ('not_stated' if confirmed.get('strength_status') == 'not_stated'
+                        else str(confirmed.get('strength') or ''))
+        else:
+            proposal_token, direction, strength = annotation_review_proposal(focal)
+    else:
+        direction, strength, semantic_errors, legacy_strength = _recommendation_values(focal, object_type)
+        issues.extend(semantic_errors)
     outcome_strength, outcome_no_action, outcome_errors = _outcome_values(focal, object_type)
     issues.extend(outcome_errors)
     proposed = semantic_proposed_relations(focal) if stage != 'second_review' else []
@@ -200,7 +187,7 @@ def displayed_review_descriptor(
         direction, strength, str(focal.get('parent_object_id') or ''),
         found_under_path(focal), choices, tuple(relations), tuple(dict.fromkeys(issues)),
         outcome_strength=outcome_strength, outcome_no_action=outcome_no_action,
-        semantic_issues=tuple(dict.fromkeys(semantic_errors)),
+        optional_recommendation_review=optional, recommendation_proposal_token=proposal_token,
         legacy_recommendation_strength=legacy_strength)
 
 
@@ -219,7 +206,7 @@ def compact_approval_arguments(
         'found_under': descriptor.found_under or None,
         'relation_choices': list(descriptor.relation_choices), 'relation_review_ack': True,
     }
-    if descriptor.object_type == 'recommendation':
+    if descriptor.object_type == 'recommendation' and not descriptor.optional_recommendation_review:
         if descriptor.legacy_recommendation_strength:
             arguments['recommendation_strength'] = descriptor.legacy_recommendation_strength
         else:
