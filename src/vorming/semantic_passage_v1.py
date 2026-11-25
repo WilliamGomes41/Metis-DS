@@ -540,6 +540,10 @@ def bind_annotation_strength_label(selected, blocks, manual=None, *, fragments):
     cues = {}
     docling_bindings = None
     for row in _applicable_strength_ranges(selected, blocks):
+        # Only the statement itself or a label directly after it is evidence for
+        # this recommendation. A shared heading can cover several statements.
+        if row["reason"] not in {"selected_text", "adjacent_strength_label"}:
+            continue
         matches = list(source_strength_cues(row["text"]))
         if not matches:
             continue
