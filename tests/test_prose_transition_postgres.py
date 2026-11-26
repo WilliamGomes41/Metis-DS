@@ -64,22 +64,26 @@ def request(console, actor, sid, attempt):
 
 
 @pytest.mark.parametrize(('layout', 'task_storage'), [('legacy', 'legacy'), ('legacy', 'v1'), ('v1', 'v1')])
-def test_kernel_stop_is_durable_idempotent_and_does_not_resume_old_work(tmp_path, production_console, monkeypatch, layout, task_storage):
+def test_http_stop_is_durable_idempotent_and_does_not_resume_old_work(tmp_path, production_console, monkeypatch, layout, task_storage):
     monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
     monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', layout)
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch, task_storage=task_storage)
     before = deepcopy(console._envelope(sid))
+    client = TestClient(application_for(console))  # No startup delivery before the explicit stop.
+    assert client.post('/login', data={'username': 'researcher.d54', 'password': 'd54-secret'}).status_code == 200
+    view = client.get('/source-selection/transition', params={'document': sid})
+    assert view.status_code == 200 and view.json()['transition'] is None
     command = request(console, actor, sid, attempt)
-    assert transition.inventory(console, actor_id=actor, snapshot_id=sid)['transition'] is None
-    stopped = transition.stop(console, **command)
-    assert stopped['stopped_attempt_ids'] == [attempt['attempt_id']]
-    assert stopped['external_cancellation'] == 'not_guaranteed'
-    assert transition.stop(console, **command) == stopped
-    with pytest.raises(ConsoleError, match='prose_transition_command_conflict'):
-        transition.stop(console, **{**command, 'reason': 'Andere reden'})
+    command.pop('actor_id')
+    stopped = client.post('/source-selection/transition', json=command)
+    assert stopped.status_code == 200, stopped.text
+    assert stopped.json()['stopped_attempt_ids'] == [attempt['attempt_id']]
+    assert stopped.json()['external_cancellation'] == 'not_guaranteed'
+    assert client.post('/source-selection/transition', json=command).json() == stopped.json()
+    assert client.post('/source-selection/transition', json={**command, 'reason': 'Andere reden'}).status_code == 409
     resumed = restart_production(console); bind(resumed)
     result = transition.inventory(resumed, actor_id=actor, snapshot_id=sid)
-    assert result['transition'] == stopped
+    assert result['transition'] == stopped.json()
     assert not pending(resumed)
     assert resumed._envelope(sid)['sha256'] == before['sha256']
     assert resumed.snapshot_objects(sid) == []
@@ -239,14 +243,13 @@ def test_tree_and_human_build_are_not_prose_stop_targets(tmp_path, production_co
     assert calls == []
 
 
-def test_retired_http_routes_cannot_read_or_stop_a_run(tmp_path, production_console, monkeypatch):
+def test_malformed_http_command_is_rejected_without_provider_or_stop(tmp_path, production_console, monkeypatch):
     console, actor, sid, attempt, calls, _ = setup_command(tmp_path, production_console, monkeypatch)
     client = TestClient(application_for(console))
     client.post('/login', data={'username': 'researcher.d54', 'password': 'd54-secret'})
-    assert client.get('/source-selection/transition', params={'document': sid}, follow_redirects=False).status_code == 404
-    assert client.post('/source-selection/transition', content='{').status_code == 404
+    assert client.post('/source-selection/transition', content='{').status_code == 422
     command = request(console, actor, sid, attempt)
     command.pop('actor_id')
-    assert client.post('/source-selection/transition', json=command).status_code == 404
+    assert client.post('/source-selection/transition', json={**command, 'snapshot_id': []}).status_code == 409
     assert transition.inventory(console, actor_id=actor, snapshot_id=sid)['transition'] is None
     assert calls == []
