@@ -5,12 +5,27 @@ import re
 
 from src.operations_console_v1 import ConsoleError
 from src.vorming import human_annotation_v1 as annotations
-from src.vorming.processing_retry_v1 import reserve as reserve_attempt, now, assert_active, finish
+from src.vorming.processing_retry_v1 import admission_closed, reserve as reserve_attempt, now, assert_active, finish, status
 from src.workflows.formation_task_store_v1 import FormationTaskStore
 from src.workflows.workflow_documents_postgres_v1 import _json_text
 
 KIND = 'human_annotation_source'
 MODE = 'human-annotation-source-v1'
+
+
+def received_prose(envelope):
+    return envelope.get('class') != 'beslisboom' and bool(envelope.get('received_source'))
+
+
+# Attempts that belong to manual annotation. Any other attempt, including
+# automatic 'ingest' runs and legacy attempts without a kind, is automatic
+# processing whose card keeps status, estimate and recovery.
+NON_AUTOMATIC_KINDS = frozenset({KIND, 'human_annotation_build'})
+
+
+def has_automatic_attempt(envelope):
+    attempts = envelope.get('processing_attempts') or []
+    return bool(attempts) and attempts[-1].get('kind') not in NON_AUTOMATIC_KINDS
 
 
 def configuration(console, envelope):
@@ -44,6 +59,8 @@ def reserve(console, *, actor_id, snapshot_id, command_id, expected_revision):
                 raise ConsoleError('annotation_prose_required')
             if annotations.owns_source(console, snapshot_id):
                 return None, False
+            if not received_prose(envelope):
+                raise ConsoleError('annotation_source_not_received')
             if store.objects_revision(snapshot_id) != expected_revision:
                 raise ConsoleError('annotation_objects_stale')
             if (store.current_document_objects(snapshot_id) or envelope.get('semantic_replay')
@@ -159,11 +176,18 @@ def execute(console, *, actor_id, snapshot_id, attempt, deadline):
 def progress(console, *, actor_id, snapshot_id):
     annotations.authorize(console, actor_id, console._envelope(snapshot_id))
     with console.workflow_document_store._connect() as con:
-        row = con.execute("SELECT payload->>'state' AS state,payload->>'phase' AS phase,"
+        row = con.execute("SELECT attempt_id,payload->>'state' AS state,payload->>'phase' AS phase,"
             "payload->>'error_code' AS error_code,payload->>'started_at' AS started_at, "
             "EXISTS(SELECT 1 FROM workflow.annotation_sets WHERE snapshot_id=%s) AS ready "
             "FROM workflow.processing_attempts WHERE snapshot_id=%s AND payload->>'kind'=%s "
             'ORDER BY started_at DESC,attempt_id DESC LIMIT 1', (snapshot_id,snapshot_id,KIND)).fetchone()
     if row is None:
         return None
-    return {**row, 'elapsed_seconds': max(0, int((now()-datetime.fromisoformat(row['started_at'])).total_seconds()))}
+    result = {**row, 'elapsed_seconds': max(0, int((now()-datetime.fromisoformat(row['started_at'])).total_seconds()))}
+    if row['state'] != 'running' and not row['ready']:
+        envelope = console._processing_command_envelope(snapshot_id, attempt_id=row['attempt_id'])
+        retry = status(envelope, policy=console._processing_limits())
+        closed = admission_closed()
+        result.update(retry_allowed=retry['retry_allowed'] and not closed,
+                      retry_reason='processing_admission_closed' if closed else retry['reason_code'])
+    return result

@@ -60,7 +60,8 @@ def test_real_problem_page_shows_source_without_losing_findings_or_writing(tmp_p
     client = TestClient(console._metis_test_application)
     login(client)
     initial = client.get('/formation-problems', params={'document': sid})
-    assert 'Nog geen verwerkingsresultaat' in initial.text and not calls
+    # #1168: before any processing the legacy bookmark opens the manual card on Vorming.
+    assert 'Bekijk status bouwopdrachten' in initial.text and not calls
     execute(console, sid, author, 'clarity-initial')
     before = deepcopy(console._envelope(sid)), console.snapshot_objects(sid), console.object_review_bindings(sid)
     report = collect(console, actor_id=author, snapshot_id=sid)

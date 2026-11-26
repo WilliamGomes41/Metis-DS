@@ -293,7 +293,7 @@ def test_http_legacy_budget_remains_while_fresh_source_offers_annotation(tmp_pat
         assert client.post('/login',data={'username':'researcher.d54','password':'d54-secret'},follow_redirects=False).status_code == 303
         before = deepcopy(console._envelope(sid))
         page = client.get('/source-selection',params={'document':sid})
-        assert page.status_code == 200 and 'Bron openen voor annotatie' in page.text
+        assert page.status_code == 200 and '>Annoteren</button>' in page.text
         assert 'action="/source-selection/start"' not in page.text
         assert 'binnen vier uur inclusief wachttijd' not in page.text
         assert console._envelope(sid) == before

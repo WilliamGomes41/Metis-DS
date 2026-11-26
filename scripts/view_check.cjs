@@ -103,7 +103,7 @@ async function run(input) {
     }, origin+'/inzicht/document/passages?'+query+'&format=json');
     if (exported.snapshot_id !== input.document || exported.objects_revision !== input.revision || exported.rows.length>1000) throw Error('context_changed');
     const selected = await page.locator('[data-source-document][data-selected="true"]').getAttribute('data-source-document');
-    const selectedValue = await page.locator('select[name=document]').inputValue();
+    const selectedValue = await page.locator('select#source-document').inputValue();
     step='formation_problems'; expectedState='problem_room_and_existing_actions';
     // Problem details now share the selected source page. Observe the same
     // captured page instead of repeating its potentially deep document read.

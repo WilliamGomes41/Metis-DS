@@ -622,15 +622,21 @@ def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(pr
         assert urlsplit(str(uploaded.url)).path == '/annotations'
         assert 'Bron openen voor annotatie' in uploaded.text
         sid = parse_qs(urlsplit(str(uploaded.url)).query)['document'][0]
-        for response in (client.get(str(uploaded.url)), client.get('/source-selection', params={'document':sid})):
-            assert response.status_code == 200, response.text
-            assert 'Bron openen voor annotatie' in response.text
+        workplace = client.get(str(uploaded.url))
+        assert workplace.status_code == 200, workplace.text
+        assert 'Bron openen voor annotatie' in workplace.text
+        # #1168: the Vorming card offers Annoteren instead of the old link.
+        card = client.get('/source-selection', params={'document':sid})
+        assert card.status_code == 200, card.text
+        assert '>Annoteren</button>' in card.text
+        for response in (workplace, card):
             assert 'action="/source-selection/start"' not in response.text
         with console.workflow_document_store._connect() as con:
             assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s', (sid,)).fetchone()['n'] == 0
             assert con.execute('SELECT count(*) AS n FROM workflow.annotation_sets WHERE snapshot_id=%s', (sid,)).fetchone()['n'] == 0
         assert console.snapshot_objects(sid, include_blocked=True) == []
-        opened = client.post('/annotations/source', data={'document':sid,'expected_revision':console.objects_revision(sid)})
+        opened = client.post('/annotations/source', data={'document':sid,'command_id':'chain-source-open',
+                                                          'expected_revision':console.objects_revision(sid)})
         assert opened.status_code == 200
         # The HTTP command reserves durable preparation; the worker exposes the
         # pinned source asynchronously before the human begins selecting text.

@@ -82,7 +82,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                                     'browser_annotation_binding_check.cjs':2,
                                     'browser_annotation_document_check.cjs':2,
                                     'browser_annotation_strength_label_check.cjs':2,
-                                    'browser_annotation_source_progress_check.cjs':2,
+                                    'browser_annotation_source_progress_check.cjs':4,
                                     'browser_test_document_deletion_check.cjs':5,
                                     'browser_human_build_check.cjs':10,
                                     'browser_human_review_check.cjs':8}.get(script,6)

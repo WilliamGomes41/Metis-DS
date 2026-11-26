@@ -347,6 +347,14 @@ def source_work_html(state, esc):
             ''.join(sections)+'</details>')
 
 
+
+def source_preparation_form(document, revision, label, esc):
+    return ('<form method="post" action="/annotations/source">'
+            f'<input type="hidden" name="document" value="{esc(document)}">'
+            f'<input type="hidden" name="command_id" value="{uuid4().hex}">'
+            f'<input type="hidden" name="expected_revision" value="{esc(revision)}">'
+            f'<button class="btn-primary" type="submit">{esc(label)}</button></form>')
+
 def install(app, console, require, page, nav, esc, *, dispatcher):
     def editor_state(actor, document, *, include_source_work=False):
         # Build state is read before and after the overview. A build read as running keeps the
@@ -463,10 +471,6 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             progress = source.progress(console, actor_id=actor['account_id'], snapshot_id=document)
             if progress and progress['ready']:
                 return RedirectResponse('/annotations?'+urlencode({'document':document}), status_code=303)
-            hidden = '<input type="hidden" name="document" value="'+esc(document)+'">'
-            hidden += '<input type="hidden" name="command_id" value="'+uuid4().hex+'">'
-
-            hidden += '<input type="hidden" name="expected_revision" value="'+esc(console.objects_revision(document))+'">'
             if progress:
                 running = progress['state'] == 'running'
                 phases = {'annotation_source_pending':'Wachten op beschikbare verwerkingsruimte.',
@@ -480,8 +484,20 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                     body += '<p>Verstreken: '+duration+'.</p><p>Bij een grote PDF kan dit enkele minuten duren. Je kunt deze pagina verlaten en later terugkomen; de voorbereiding loopt door.</p>'
                     body += '<p>Deze pagina vernieuwt elke 5 seconden. Zodra de bron gereed is, verschijnt het annotatiedocument.</p><meta http-equiv="refresh" content="5">'
                 else:
-                    body += '<p class="banner warn" role="alert">Het voorbereiden van de bron is gestopt. Je bronbestand en opgeslagen werk blijven bewaard.</p>'
-                    body += '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bronvoorbereiding opnieuw proberen</button></form>'
+                    reason = progress.get('retry_reason') or progress.get('error_code')
+                    message = {
+                        'processing_attempt_expired': 'De tijdslimiet voor bronvoorbereiding is bereikt.',
+                        'processing_timeout': 'Het uitlezen van de bron duurde te lang.',
+                        'docling_timeout': 'Het uitlezen van de PDF duurde te lang.',
+                        'processing_attempt_limit_reached': 'Het maximum aantal pogingen is bereikt.',
+                        'processing_retry_cooldown': 'Wacht tot opnieuw proberen mogelijk is.',
+                        'processing_admission_closed': 'Nieuwe voorbereidingen zijn tijdelijk gepauzeerd.',
+                        'source_extraction_integrity_failed': 'Metis kon de uitgelezen bron niet verifiëren.',
+                    }.get(reason, 'Metis kon de voorbereiding van de bron niet voltooien.')
+                    body += '<p class="banner warn" role="alert">'+esc(message)+'</p>'
+                    if progress.get('retry_allowed'):
+                        body += source_preparation_form(document, console.objects_revision(document),
+                                                        'Bronvoorbereiding opnieuw proberen', esc)
                 body += '<p><a href="/tree">Terug naar Documenten</a></p></section>'
                 return HTMLResponse(page(body,title='Bron voorbereiden'),headers={'Cache-Control':'no-store'})
             notice = '<div class="banner ok" role="status">Document veilig ontvangen. Open de bron om te annoteren.</div>' if request.query_params.get('received') == 'yes' else ''
@@ -489,7 +505,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 +notice+
                 '<p>Open de vastgelegde bron om uitspraken, voorwaarden, uitzonderingen en onderbouwing aan te wijzen. Je kunt concepten opslaan en later hervatten.</p>'
                 '<p>Annoteren geeft geen goedkeuring. De bij ontvangst gekozen beoordeling blijft gelden.</p>'
-                '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bron openen voor annotatie</button></form></section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
+                +source_preparation_form(document, console.objects_revision(document), 'Bron openen voor annotatie', esc)
+                +'</section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
         from src.vorming import human_annotation_build_v1 as build
         state = editor_state(actor, document, include_source_work=True)
         overview = overview and not state['document_check_flow']
@@ -1105,15 +1122,18 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         try:
             attempt, fresh = await asyncio.to_thread(source.reserve, console,
                 actor_id=actor['account_id'], snapshot_id=document,
-                command_id=str(form.get('command_id') or uuid4().hex),
+                command_id=str(form.get('command_id') or ''),
                 expected_revision=str(form.get('expected_revision') or ''))
         except ConsoleError as exc:
             messages = {
+                'annotation_source_not_received':'Deze bron valt onder een andere vormingsroute.',
+                'annotation_prose_required':'Open de beslisboom in Vorming.',
                 'annotation_source_storage_not_ready':'De bronvoorbereiding is nog niet beschikbaar. Laat de beheerder de opslag bijwerken.',
                 'annotation_processing_in_progress':'Er loopt al een andere verwerking voor dit document. Open Documenten om de voortgang te bekijken.',
                 'annotation_objects_stale':'Het document is gewijzigd. Open de bronpagina opnieuw voordat je verdergaat.',
                 'processing_admission_closed':'Nieuwe voorbereidingen zijn tijdelijk gepauzeerd. Probeer het later opnieuw.',
                 'processing_attempt_limit_reached':'Er zijn meerdere voorbereidingen gestopt. Laat de beheerder de oorzaak controleren voordat je opnieuw probeert.',
+                'published_working_revision_immutable':'Deze versie is gepubliceerd. Bereid een nieuwe werkversie voor.',
                 'published_objects_must_not_be_rewritten':'Deze versie is gepubliceerd. Bereid een nieuwe werkversie voor.',
                 'annotation_existing_work_requires_takeover':'Dit document bevat al gevormd werk. Open de bestaande werkversie.',
             }

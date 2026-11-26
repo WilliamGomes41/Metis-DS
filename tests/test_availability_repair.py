@@ -234,7 +234,9 @@ def test_layout_and_estimate_unknown(tmp_path, *, production_app, production_con
         assert positions==sorted(positions)
         upload(client,reviewer)
         screen=client.get('/source-selection').text
-        assert 'Onvoldoende vergelijkbare metingen' in screen and 'fixture.html' in screen and 'Bronversie 1' in screen
+        # #1168: a fresh received source shows the manual card with two actions.
+        assert '>Annoteren</button>' in screen and 'Bekijk status bouwopdrachten' in screen
+        assert '<h2>Fixture</h2>' in screen and 'Bronversie 1' in screen
 
 
 def test_unauthorized_start_and_storage_failure_never_call_provider(backend_state, tmp_path, monkeypatch, *, production_app, production_console):
