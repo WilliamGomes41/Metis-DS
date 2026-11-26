@@ -51,8 +51,7 @@ def test_annotation_entry_and_legacy_navigation_do_not_start_work(tmp_path, prod
     assert 'href="/source-selection" aria-current="page">Vorming</a>' in overview.text
     assert 'href="/formation-problems"' not in overview.text
     legacy = client.get('/formation-problems', params={'document': sid, 'offset': 100}, follow_redirects=False)
-    assert legacy.status_code == 303
-    assert legacy.headers['location'] == f'/source-selection?document={sid}&offset=100'
+    assert legacy.status_code == 404
     assert not StartForm(legacy.text).forms
     assert durable(console, sid) == before and not calls
     reads = []
@@ -84,7 +83,7 @@ def test_partial_resume_uses_rendered_command_after_restart(tmp_path, production
     app = console._metis_test_application
     with TestClient(app, base_url='https://testserver') as client:
         login(client)
-        page = client.get('/formation-problems', params={'document': sid})
+        page = client.get('/source-selection', params={'document': sid})
         assert page.status_code == 200 and page.url.path == '/source-selection'
         assert SECOND in page.text and 'Bekijk en behandel dit bronstuk' in page.text
         assert 'Hervatten</button>' in page.text and 'Naar Review' in page.text

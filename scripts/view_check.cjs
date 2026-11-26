@@ -58,7 +58,7 @@ async function run(input) {
     await context.route('**/*', async route => {
       const request = route.request();
       const url = new URL(request.url());
-      const paths = ['/source-selection','/review','/formation-problems','/inzicht/document/passages'];
+      const paths = ['/source-selection','/review','/inzicht/document/passages'];
       if (url.origin !== origin || request.method() !== 'GET' ||
           !(paths.includes(url.pathname) || url.pathname.startsWith('/brand/'))) return route.abort();
       return route.continue();
@@ -70,7 +70,7 @@ async function run(input) {
     page.on('request', request => {
       const route = new URL(request.url()).pathname;
       const asset = route.startsWith('/brand/');
-      if (asset ? assets.length >= 8 : !['/source-selection','/review','/formation-problems','/inzicht/document/passages'].includes(route) || requests.length >= 12) return;
+      if (asset ? assets.length >= 8 : !['/source-selection','/review','/inzicht/document/passages'].includes(route) || requests.length >= 12) return;
       const row = {route:asset ? '/brand/*' : route, state:'pending', reference:null};
       (asset ? assets : requests).push(row);
       request._viewObservation = row;

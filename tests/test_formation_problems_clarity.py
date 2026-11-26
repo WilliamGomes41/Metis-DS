@@ -59,15 +59,15 @@ def test_real_problem_page_shows_source_without_losing_findings_or_writing(tmp_p
     console, sid, author, reviewer, calls, mode, _ = received(tmp_path, production_console, monkeypatch)
     client = TestClient(console._metis_test_application)
     login(client)
-    initial = client.get('/formation-problems', params={'document': sid})
-    # #1168: before any processing the legacy bookmark opens the manual card on Vorming.
+    initial = client.get('/source-selection', params={'document': sid})
+    # #1168: before any processing the document opens the manual card on Vorming.
     assert 'Bekijk status bouwopdrachten' in initial.text and not calls
     execute(console, sid, author, 'clarity-initial')
     before = deepcopy(console._envelope(sid)), console.snapshot_objects(sid), console.object_review_bindings(sid)
     report = collect(console, actor_id=author, snapshot_id=sid)
     assert len(report['problems']) == 2
     assert all(row['source_excerpt']['quotes'][0]['text'] == SECOND for row in report['problems'])
-    page = client.get('/formation-problems', params={'document': sid})
+    page = client.get('/source-selection', params={'document': sid})
     assert page.status_code == 200 and '1 bronstuk · 2 meldingen' in page.text
     assert page.text.count('class="formation-item"') == 1
     assert SECOND in page.text and 'Technische details' in page.text

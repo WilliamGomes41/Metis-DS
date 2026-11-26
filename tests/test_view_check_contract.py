@@ -35,7 +35,7 @@ def test_capability_does_not_authorize_mutations_other_documents_or_diagnostics(
 def test_capability_allows_only_the_fixed_read_scenario():
     assert allowed_request('GET', '/review', QueryParams('document=one&task=inventory'), 'one')
     assert allowed_request('GET', '/source-selection', QueryParams('document=one'), 'one')
-    assert allowed_request('GET', '/formation-problems', QueryParams('document=one'), 'one')
+    assert not allowed_request('GET', '/formation-problems', QueryParams('document=one'), 'one')
     assert allowed_request('GET', '/inzicht/document/passages', QueryParams('document=one'), 'one')
 
 
