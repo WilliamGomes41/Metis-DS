@@ -154,6 +154,25 @@ def test_pdf_strength_label_with_punctuation_leaves_no_unaccounted_source(tmp_pa
     assert obj['metadata'][STRENGTH_LABEL_EVIDENCE]['text'] == LABEL
 
 
+def test_rejected_derived_proposal_keeps_the_manual_label(tmp_path, production_console, monkeypatch):
+    """A shared heading may contradict the selected label; review then decides, the build does not fail."""
+    from src.vorming import semantic_passage_v1 as passage
+
+    def conflicting(*_args, **_kwargs):
+        raise passage.SemanticPassageError('recommendation_strength_evidence_conflict')
+
+    monkeypatch.setenv('METIS_PDF_EXTRACTOR', 'legacy-comparison')
+    console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
+    actor, sid, view, selection = prepare_recommendation_pdf(console, 'following')
+    selection['selection']['recommendation_strength_label'] = label_anchor(view)
+    annotation.save(console, actor_id=actor, **selection)
+    monkeypatch.setattr(passage, '_recommendation_semantics_from_proposal', conflicting)
+    execute_build(console, actor, sid)
+    obj = candidate(restart_production(console), sid)
+    assert obj['metadata'][STRENGTH_LABEL_EVIDENCE]['selection'] == 'manual'
+    assert not obj.get('proposed_recommendation_semantics')
+
+
 @pytest.mark.parametrize('labels,reason', [
     ((), None),
     (('Een volgende, afzonderlijke uitspraak.', LABEL), 'recommendation_strength_label_not_applicable'),

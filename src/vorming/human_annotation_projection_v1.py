@@ -150,6 +150,7 @@ def bind_candidate(candidate, decision, *, fragments):
         if manual:
             candidate['metadata'][REFERENCE_KEY][STRENGTH_LABEL_SELECTION] = deepcopy(manual)
         proposed_semantics = decision.get('recommendation_semantics')
+        derived = False
         if proposed_semantics is None and manual and label:
             from src.vorming.recommendation_semantics_v1 import source_label_direction, source_literal_strength
             if direction := source_label_direction(label['text']):
@@ -159,12 +160,21 @@ def bind_candidate(candidate, decision, *, fragments):
                     'strength_status': 'explicit', 'strength': source_literal_strength(label['text']),
                     'strength_evidence': {key: label['label'][key] for key in ('block_id', 'start', 'end')},
                 }
+                derived = True
         if proposed_semantics is not None:
-            semantics, binding = _recommendation_semantics_from_proposal(
-                proposed_semantics, proposed_type=decision['proposed_object_type'],
-                selected=selected_with_sections, evidence_by_id=source_blocks)
-            candidate['proposed_recommendation_semantics'] = semantics
-            candidate['recommendation_semantics_evidence'] = binding
+            from src.vorming.semantic_passage_v1 import SemanticPassageError
+            try:
+                semantics, binding = _recommendation_semantics_from_proposal(
+                    proposed_semantics, proposed_type=decision['proposed_object_type'],
+                    selected=selected_with_sections, evidence_by_id=source_blocks)
+            except SemanticPassageError:
+                # A proposal derived from the bound label is only a convenience. When
+                # wider source context rejects it, the label stays and review decides.
+                if not derived:
+                    raise
+            else:
+                candidate['proposed_recommendation_semantics'] = semantics
+                candidate['recommendation_semantics_evidence'] = binding
 
 
 def validate_object_fields(obj, fragments):
