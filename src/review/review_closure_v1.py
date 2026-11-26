@@ -250,7 +250,6 @@ def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) ->
                     "<article class='doc-card'>"
                     f"<p class='doc-title'>{_esc(text)}</p>"
                     "<p>Legacy herstelstatus. Dit object moet opnieuw via Review worden beoordeeld.</p>"
-                    f"<p><a href='/source-selection?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=repair'>Herstellen in Vorming</a></p>"
                     "</article>"
                 )
         from src.operations_console_app import _nav, _page
