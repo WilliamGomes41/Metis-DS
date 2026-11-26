@@ -550,6 +550,10 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                 rows = con.execute(f"""
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.content_kind,
                            d.publication_eligibility,(d.source_selection_summary || COALESCE(p.payload,'{{}}'::jsonb)) AS summary,
+                           EXISTS(SELECT 1 FROM workflow.annotation_sets a WHERE a.snapshot_id=d.snapshot_id)
+                               AS annotation_source_prepared,
+                           EXISTS(SELECT 1 FROM workflow.document_objects o WHERE o.snapshot_id=d.snapshot_id)
+                               AS annotation_has_formed_work,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id)
                            = ARRAY(SELECT jsonb_array_elements_text(COALESCE(
@@ -566,9 +570,38 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                 raise WorkflowDocumentStoreError('workflow_source_summary_backfill_required')
             if any(not row['reviewers_consistent'] for row in rows):
                 raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
-            return [{**{k: v for k, v in row.items() if k not in {'summary', 'reviewers_consistent'}},
-                     **{k: v for k, v in row['summary'].items()
-                        if k != 'schema_version' and k not in row}} for row in rows]
+            documents = [{**{k: v for k, v in row.items() if k not in {'summary', 'reviewers_consistent'}},
+                          **{k: v for k, v in row['summary'].items() if k != 'schema_version' and k not in row}}
+                         for row in rows]
+            from src.vorming.human_annotation_source_v1 import received_prose
+            candidates = [
+                row for row in documents
+                if not row['annotation_source_prepared'] and received_prose(row)
+                and not row['annotation_has_formed_work']
+            ]
+            if candidates:
+                # Confirm absence of replay only for received sources without
+                # formed objects. Formed documents keep the compact read above.
+                with self._connect() as con:
+                    flags = con.execute("""
+                        SELECT d.snapshot_id,
+                               EXISTS(SELECT 1 FROM workflow.processing_attempts a
+                                      WHERE a.snapshot_id=d.snapshot_id
+                                        AND a.payload->>'kind'='human_annotation_source')
+                                   AS annotation_source_started,
+                               CASE WHEN d.document_storage_version=1 THEN
+                                   COALESCE(i.refs->'replay' NOT IN ('{}'::jsonb,'null'::jsonb),false)
+                               ELSE
+                                   COALESCE(d.envelope_payload->'semantic_replay' NOT IN ('{}'::jsonb,'null'::jsonb),false)
+                               END AS annotation_has_formed_work
+                        FROM workflow.documents d
+                        LEFT JOIN workflow.document_inputs i ON i.snapshot_id=d.snapshot_id
+                        WHERE d.snapshot_id=ANY(%s)
+                    """, ([row['snapshot_id'] for row in candidates],)).fetchall()
+                by_snapshot = {row['snapshot_id']: row for row in flags}
+                for row in candidates:
+                    row.update(by_snapshot[row['snapshot_id']])
+            return documents
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_source_summaries_read_failed") from exc
 

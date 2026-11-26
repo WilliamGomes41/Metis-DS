@@ -31,8 +31,12 @@ const fs = require('fs');
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).waitFor();
   if (await page.locator('form[action="/source-selection/start"]').count()) throw Error('receipt offers AI start');
   await page.screenshot({path:output+'/received.png',fullPage:true});
-  await page.goto(base+'/source-selection?document='+sid);
-  await page.getByRole('link',{name:'Bekijk diagnose in Inzicht',exact:true}).click();
+  await page.goto(base+'/source-selection?selected_document='+sid);
+  const manualCard = page.locator(`[data-source-document="${sid}"]`);
+  if (await manualCard.getByRole('link',{name:'Bekijk diagnose in Inzicht',exact:true}).count()) {
+    throw Error('manual card still shows the diagnosis entry');
+  }
+  await page.goto(base+'/inzicht/document?document='+encodeURIComponent(sid));
   await page.getByRole('heading',{name:'Oordeel',exact:true}).waitFor();
   const diagnosisURL = new URL(page.url());
   if (diagnosisURL.pathname!=='/inzicht/document' || diagnosisURL.searchParams.get('document')!==sid)
@@ -59,7 +63,7 @@ const fs = require('fs');
   await page.setViewportSize({width:1440,height:1000});
   await page.goto(base+'/source-selection?document='+sid);
   await page.reload();
-  await page.getByRole('link',{name:'Bron openen voor annotatie',exact:true}).waitFor();
+  await manualCard.getByRole('button',{name:'Annoteren',exact:true}).waitFor();
   // Exercise the retained legacy command explicitly; fresh-upload UI offers annotation.
   await page.evaluate(async ({sid,revision}) => {
     const response = await fetch('/source-selection/start',{method:'POST',

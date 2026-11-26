@@ -45,8 +45,18 @@ def test_source_open_returns_progress_before_extractor_finishes(production_conso
     monkeypatch.setattr(console, '_extract', held)
     with TestClient(application_for(console)) as client, ThreadPoolExecutor(1) as pool:
         client.post('/login', data={'username':'source-worker','password':'fixture-only'})
-        page = client.get('/annotations', params={'document':sid})
+        page = client.get('/source-selection', params={'selected_document': sid})
+        assert page.status_code == 200 and page.url.path == '/source-selection'
+        assert 'Bekijk status bouwopdrachten' in page.text and '>Annoteren<' in page.text
+        assert 'Bekijk diagnose in Inzicht' not in page.text and 'data-source-attempt=' not in page.text
+        assert client.get('/annotations/build', params={'document': sid}).status_code == 200
+        assert client.get('/annotations/source', params={'document': sid}).status_code == 405
         fields = form_data(page, '/annotations/source')
+        missing = client.post('/annotations/source', data={k: v for k, v in fields.items() if k != 'command_id'},
+                              follow_redirects=False)
+        assert missing.status_code == 409
+        with console.workflow_document_store._connect() as con:
+            assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts').fetchone()['n'] == 0
         future = pool.submit(client.post, '/annotations/source', data=fields, follow_redirects=False)
         try:
             assert entered.wait(3)
@@ -60,6 +70,9 @@ def test_source_open_returns_progress_before_extractor_finishes(production_conso
             assert 'Bron wordt voorbereid' in progress.text
             assert 'refresh' in progress.text
             assert 'data-source-block=' not in progress.text
+            again = client.get('/source-selection', params={'selected_document': sid})
+            assert '>Annoteren</a>' in again.text and 'data-source-attempt=' not in again.text
+            assert client.get('/source-selection/progress', params={'snapshot': sid}).json() == {'rows': []}
             assert client.get('/tree').status_code == 200
         finally:
             release.set()
@@ -73,6 +86,10 @@ def test_source_open_returns_progress_before_extractor_finishes(production_conso
         from src.vorming.human_annotation_source_v1 import progress as preparation_progress
         assert 'data-source-block=' in opened.text, preparation_progress(console, actor_id=actor['account_id'], snapshot_id=sid)
         assert console.snapshot_objects(sid) == []
+        ready_card = client.get('/source-selection', params={'selected_document': sid}, follow_redirects=False)
+        assert ready_card.status_code == 200
+        assert '>Annoteren</a>' in ready_card.text
+        assert client.get('/source-selection', params={'document': sid}, follow_redirects=False).status_code == 303
 
 
 def reservation(console, actor, sid, command='prepare-source'):
@@ -120,7 +137,15 @@ def test_failed_extraction_is_visible_and_explicit_retry_preserves_source(produc
         failed = client.get('/annotations', params={'document':sid})
         assert 'Bronvoorbereiding gestopt' in failed.text
         assert 'Bronvoorbereiding opnieuw proberen' in failed.text
+        assert 'Het uitlezen van de PDF duurde te lang.' in failed.text
+        card = client.get('/source-selection', params={'selected_document': sid})
+        assert '>Annoteren</a>' in card.text and 'action="/annotations/source"' not in card.text
         assert 'http-equiv="refresh"' not in failed.text
+        with monkeypatch.context() as patch:
+            patch.setenv('METIS_PROCESSING_ADMISSION', 'closed')
+            paused = client.get('/annotations', params={'document':sid})
+            assert 'Nieuwe voorbereidingen zijn tijdelijk gepauzeerd.' in paused.text
+            assert 'Bronvoorbereiding opnieuw proberen' not in paused.text
     retry = reservation(console, actor, sid, 'explicit-retry')
     console.execute_source_selection(actor_id=actor['account_id'], snapshot_id=sid, attempt=retry)
     assert source.progress(console, actor_id=actor['account_id'], snapshot_id=sid)['ready']
@@ -442,3 +467,77 @@ def test_guard_removed_after_admission_blocks_worker_before_extraction(productio
     state = source.progress(console, actor_id=actor['account_id'], snapshot_id=sid)
     assert state['state'] == 'failed' and state['error_code'] == 'annotation_source_storage_not_ready'
     assert not state['ready']
+
+
+@pytest.mark.parametrize('storage', ['legacy', 'v1'])
+def test_formed_replay_keeps_existing_card_and_rejects_direct_prepare(production_console, tmp_path, monkeypatch, storage):
+    from tests.test_review_formation_problems import execute, received as received_for_formation
+    from src.operations_console_v1 import ConsoleError
+    from src.vorming.human_annotation_source_v1 import reserve
+
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', storage)
+    console, sid, author, _, _, _, _ = received_for_formation(tmp_path, production_console, monkeypatch)
+    execute(console, sid, author, 'existing-formation')
+    envelope = console.workflow_document_store.get_envelope(sid)
+    if storage == 'v1':
+        assert envelope['_document_inputs']['replay']
+    else:
+        assert envelope['semantic_replay']
+    assert console.snapshot_objects(sid)
+    revision = console.objects_revision(sid)
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': console._account(author)['username'], 'password': 'fixture-only'})
+        card = client.get('/source-selection', params={'selected_document': sid})
+        assert card.status_code == 200
+        assert 'Bekijk diagnose in Inzicht' in card.text and 'Bekijk status bouwopdrachten' not in card.text
+        with pytest.raises(ConsoleError, match='annotation_existing_work_requires_takeover'):
+            reserve(console, actor_id=author, snapshot_id=sid, command_id='invalid-takeover', expected_revision=revision)
+    assert console.objects_revision(sid) == revision
+
+
+def test_decision_tree_retains_its_card_and_cannot_start_annotation(production_console, tmp_path):
+    console, actor, reviewer, _ = received(production_console, tmp_path)
+    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
+
+    tree_id = console.receive_source(
+        actor_id=actor['account_id'], filename='tree.json', data=_boom_freeze_bytes(),
+        content_type='application/json', ingest_kind='new', title='Beslisboomcontrole', version='1.0',
+        date='2026-11-10', live_url='', class_='beslisboom', family='test',
+        named_reviewers=[reviewer['account_id']],
+    )['snapshot_id']
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username':'source-worker','password':'fixture-only'})
+        response = client.get('/source-selection', params={'selected_document': tree_id})
+        assert response.status_code == 200
+        tree_card = response.text.split(f'id="source-{tree_id}"', 1)[1].split('</article>', 1)[0]
+        assert 'Bekijk diagnose in Inzicht' in tree_card and 'Bekijk status bouwopdrachten' not in tree_card
+        refused = client.post('/annotations/source', data={'document': tree_id, 'command_id': 'bad-tree',
+                              'expected_revision': console.objects_revision(tree_id)}, follow_redirects=False)
+        assert refused.status_code == 409 and 'Open de beslisboom in Vorming.' in refused.text
+    with console.workflow_document_store._connect() as con:
+        assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s',
+                           (tree_id,)).fetchone()['n'] == 0
+
+
+
+def test_stopped_automatic_attempt_hands_back_the_same_card_without_polling(production_console, tmp_path):
+    from src.operations_console_v1 import ConsoleError
+    from src.vorming.source_processing_dispatch_v1 import claim
+
+    console, actor, _, sid = received(production_console, tmp_path)
+    account_id = actor['account_id']
+    attempt, fresh = console.reserve_source_selection(actor_id=account_id, snapshot_id=sid,
+        command_id='previous-automatic-route', expected_revision=console.objects_revision(sid))
+    assert fresh
+    active = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'], actor_id=account_id)
+    assert active
+    console._record_processing_failure(sid, attempt['attempt_id'], ConsoleError('processing_timeout'),
+                                       claim_token=active['dispatch'].get('token'))
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username':'source-worker','password':'fixture-only'})
+        row, = client.get('/source-selection/progress', params={'snapshot': sid}).json()['rows']
+        assert row['snapshot'] == sid
+        assert '>Annoteren</button>' in row['manual_detail']
+        assert 'data-source-attempt' not in row['manual_detail']
+        card = client.get('/source-selection', params={'selected_document': sid})
+        assert 'Bekijk status bouwopdrachten' in card.text and 'data-source-poll' not in card.text

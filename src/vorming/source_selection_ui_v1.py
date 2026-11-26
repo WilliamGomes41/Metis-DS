@@ -615,11 +615,17 @@ def _progress_script():
       return false;
     }
     if (current.attempt !== row.attempt || !current.detail || id !== picker.value) return;
+    replaceCard(card, current.detail);
+  }
+
+  function replaceCard(card, html) {
     const template = document.createElement('template');
-    template.innerHTML = current.detail;
+    template.innerHTML = html;
     const replacement = template.content.firstElementChild;
-    if (replacement?.dataset.sourceDocument !== id) return;
-    replacement.querySelector('.source-estimate').textContent = card.querySelector('.source-estimate').textContent;
+    if (replacement?.dataset.sourceDocument !== card.dataset.sourceDocument) return;
+    replacement.dataset.selected = card.dataset.selected;
+    const estimate = replacement.querySelector('.source-estimate');
+    if (estimate) estimate.textContent = card.querySelector('.source-estimate').textContent;
     const replace = () => {
       if (card.isConnected && !card.contains(document.activeElement)) card.replaceWith(replacement);
     };
@@ -685,7 +691,11 @@ def _progress_script():
         const current = new Map(rows.map(row => [row.snapshot, row]));
         for (const [id, card] of group) {
           const row = current.get(id);
-          if (row) lostAccess = (await apply(card, row, manual) === false) || lostAccess;
+          if (row?.manual_detail) {
+            cards.delete(id);
+            replaceCard(card, row.manual_detail);
+            if (!cards.size) controls.hidden = true;
+          } else if (row) lostAccess = (await apply(card, row, manual) === false) || lostAccess;
           else {
             hideCard(id, card);
             lostAccess = true;
@@ -721,12 +731,38 @@ def _progress_script():
 </script>"""
 
 
+def _manual_card(envelope):
+    from src.vorming.human_annotation_source_v1 import received_prose
+
+    latest = next(reversed(envelope.get('processing_attempts') or []), {})
+    active_other_processing = latest.get('state') == 'running' and latest.get('kind') != 'human_annotation_source'
+    return envelope['annotation_source_prepared'] or (
+        received_prose(envelope) and not envelope['annotation_has_formed_work'] and not active_other_processing
+    )
+
+
 def install(app, console, require, page, nav, esc):
     from src.vorming.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
 
     def render_card(envelope, actor, observations, *, selected, detail, offset):
         sid = envelope['snapshot_id']
+        if _manual_card(envelope):
+            query = esc(urlencode({'document': sid}))
+            if envelope['annotation_source_prepared'] or envelope['annotation_source_started']:
+                annotate = f'<a class="btn-primary" href="/annotations?{query}">Annoteren</a>'
+            else:
+                from src.vorming.human_annotation_ui_v1 import source_preparation_form
+
+                # This card was captured without formed objects. The POST compares
+                # the empty-frontier token against the locked current document.
+                revision = console.workflow_document_store.revision_for_rows([])
+                annotate = source_preparation_form(sid, revision, 'Annoteren', esc)
+            return (f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}"'
+                    f' data-selected="{str(sid == selected).lower()}"><h2>{esc(envelope["title"])}</h2>'
+                    f'<p class="source-meta">Bronversie {esc(envelope["version"])}</p>'
+                    f'<div class="source-actions">{annotate}<a class="btn-secondary" href="/annotations/build?{query}">'
+                    'Bekijk status bouwopdrachten</a></div></article>'), None
         # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
         report = None
         if detail:
@@ -745,8 +781,6 @@ def install(app, console, require, page, nav, esc):
             pass  # Active details already show progress; completion owns Naar Review below.
         elif result['state'] == UNCHECKED:
             action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
-        elif envelope.get('received_source') and envelope.get('class') != 'beslisboom' and result['state'] == 'nog niet gestart':
-            action = '<a class="btn-primary" href="/annotations?' + esc(urlencode({'document':sid})) + '">Bron openen voor annotatie</a>'
         elif result['can_start']:
             label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
             from src.vorming.processing_document_budget_v1 import enabled as document_budget_enabled
@@ -809,7 +843,7 @@ def install(app, console, require, page, nav, esc):
                 f'<div class="source-actions">{action}{review}{diagnosis_link}</div>{problems}</article>'), result
 
     @app.get('/source-selection', response_class=HTMLResponse)
-    def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0),
+    def selection_get(request: Request, document: str = '', selected_document: str = '', offset: int = Query(0, ge=0),
                       object: str = '', context_target: str = '', context_mode: str = '',
                       context_page: int = 0, context_q: str = '', context_saved: str = '',
                       task: str = '', q: str = '', review_page: int = Query(1, alias='page'),
@@ -817,7 +851,7 @@ def install(app, console, require, page, nav, esc):
                       repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = '', review_revision: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
-        if document:
+        if document and not selected_document:
             from src.vorming.human_annotation_v1 import owns_source
             if owns_source(console, document):
                 params = {'document': document}
@@ -864,8 +898,12 @@ def install(app, console, require, page, nav, esc):
             return render_source_accountability(console, actor, document)
         # Overview owns compact progress inputs; only the chosen document loads detail.
         scoped_document = actor.get('_view_document')
-        documents = ([console._envelope(scoped_document)] if scoped_document else
-                     console.source_selection_documents(actor_id=actor['account_id'], document=document))
+        documents = console.source_selection_documents(
+            actor_id=actor['account_id'],
+            document=document if not selected_document and not scoped_document else '',
+            snapshot_ids=[scoped_document] if scoped_document else None,
+        )
+        document = selected_document or document
         visible = documents
         if document and document not in {row['snapshot_id'] for row in visible}:
             raise ConsoleError('reviewer_not_named_on_snapshot')
@@ -893,7 +931,7 @@ def install(app, console, require, page, nav, esc):
             script += _progress_script()
         return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Vorming</h1>' + notice
                     + '<form method="get" class="source-picker"><label for="source-document">Document</label>'
-                    + '<div class="source-picker-row"><select id="source-document" name="document">' + options + '</select>'
+                    + '<div class="source-picker-row"><select id="source-document" name="selected_document">' + options + '</select>'
                     + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>' + controls
                     + (''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) or '<p data-source-empty>Geen documenten beschikbaar voor bronverwerking.</p>') + '</section>' + script),
                             headers={'Cache-Control': 'no-store'})
@@ -910,6 +948,15 @@ def install(app, console, require, page, nav, esc):
                          if requested else [])
             rows = []
             for envelope in documents:
+                if _manual_card(envelope):
+                    # A legacy processing card might become eligible for manual
+                    # annotation when its attempt stops before producing work.
+                    latest = next(reversed(envelope.get('processing_attempts') or []), {})
+                    if latest.get('kind') not in {None, 'human_annotation_source', 'human_annotation_build'}:
+                        sid = envelope['snapshot_id']
+                        card, _ = render_card(envelope, actor, {}, selected=detail or sid, detail=False, offset=offset)
+                        rows.append({'snapshot': sid, 'manual_detail': card})
+                    continue
                 result = summary_projection(console, envelope=envelope, observations={})
                 sid = result['snapshot_id']
                 running = result['state'] in ACTIVE_PROGRESS

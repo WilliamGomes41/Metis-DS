@@ -165,6 +165,15 @@ def test_same_workspace_check_build_review_and_publication(
     published = console.publish(actor_id=publisher['account_id'], snapshot_id=sid)
     assert published['published_items'] == 1
     assert console.snapshot_is_published(sid)
+    forbidden_preparation = client.post('/annotations/source', data={
+        'document': sid, 'command_id': 'no-preparation-after-publication',
+        'expected_revision': console.objects_revision(sid),
+    }, follow_redirects=False)
+    assert forbidden_preparation.status_code == 409
+    assert 'Deze versie is gepubliceerd.' in forbidden_preparation.text
+    with console.workflow_document_store._connect() as con:
+        assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s',
+                           (sid,)).fetchone()['n'] == 1
 
 
 def test_annotation_round_history_survives_operational_restore(tmp_path, monkeypatch, production_console):
