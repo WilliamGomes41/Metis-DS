@@ -19,7 +19,8 @@ from tests.production_support import restart_production
 from tests.test_human_annotation_postgres import anchor, command
 
 
-def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=False, source_status="unknown", context_function=None, heading='', **options):
+def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=False, source_status="unknown",
+                 context_function=None, heading='', claim_tail='', second_heading='', **options):
     console = production_console(root=tmp_path, **options)
     actor = console.create_account(username='builder', password='human-build-secret', roles=('researcher', 'reviewer'))['account_id']
     reviewer = console.create_account(username='reviewer', password='human-build-secret', roles=('reviewer',))['account_id']
@@ -27,7 +28,9 @@ def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=
     if review_option == 'two_others':
         reviewers.append(console.create_account(username='reviewer2', password='human-build-secret', roles=('reviewer',))['account_id'])
     sid = console.receive_source(actor_id=actor, filename='human.html', content_type='text/html',
-        data=('<html><body>'+heading+'<p>De kwetsbare huid verklaart de pijn.</p>'+('<p>Alleen bij klachten.</p><p>Onderzoek beschrijft dit verband.</p><p>De beoordeling betreft volwassenen.</p>' if context_function else '')+'</body></html>').encode(),
+        data=('<html><body>'+heading+'<p>De kwetsbare huid verklaart de pijn.'+claim_tail+'</p>'
+              + ('<p>Alleen bij klachten.</p><p>Onderzoek beschrijft dit verband.</p>'+second_heading
+                 + '<p>De beoordeling betreft volwassenen.</p>' if context_function else '')+'</body></html>').encode(),
         ingest_kind='new', title='Menselijke opbouw', version='1.0', date='2026-11-08', live_url='',
         class_='richtlijn', family='test', named_reviewers=[reviewer] if review_option is None else [],
         review_choice={'contract':'review-configuration-v2','option':review_option,'four_eyes_required':four_eyes,

@@ -83,7 +83,8 @@ def test_same_workspace_check_build_review_and_publication(
     monkeypatch.delenv('METIS_ANNOTATION_DOCUMENT_CHECK')
     assert overview(resumed)['document_round']['phase'] == 'checking'
     panel = client.get('/annotations', params={'document': sid, 'overview': 'true'})
-    assert 'Verder annoteren' in panel.text and 'Overige begeleidende tekst' in panel.text
+    assert 'Verder annoteren' not in panel.text and 'Overige begeleidende tekst' in panel.text
+    assert panel.text.index('Opgeslagen annotaties') < panel.text.index('id="annotation-document-check-title"')
     assert 'data-confirmed-document-build' in panel.text
     prior = closing(overview())
     section_view = state()[coverage.KEY]

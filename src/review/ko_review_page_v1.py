@@ -256,11 +256,16 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
         fragments=inputs.fragments, stage='second_review' if second else None,
         confirmed_only=reading or published)
-    # #1064: a saved correction is rebuilt from the card; until then this version cannot be approved.
+    # #1064 and #1169: a saved correction needs a successful build before this version can be approved.
     rebuilding = None
+    document_check_flow = False
     if annotation and not published:
         from src.vorming.human_annotation_build_v1 import correction_state
         rebuilding = correction_state(console, sid, obj['object_id'])
+        if rebuilding == 'saved':
+            from src.vorming import annotation_document_check_v1 as document_check
+            with console.workflow_document_store._connect() as con:
+                document_check_flow = document_check.read(con, sid) is not None
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
                        and descriptor.can_confirm and not conflict and not rebuilding)
     lineage = (obj.get('metadata') or {}).get('revision_lineage') or {}
@@ -270,6 +275,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
                                               'review_revision': inputs.revision})
     if annotation:
         repair = '/annotations?' + urlencode({'document': sid, 'annotation': annotation['annotation_id']})
+        repair += '#annotation-controls'
     parent = next((row for row in inputs.objects if row['object_id'] == descriptor.parent_id), None)
     if parent is not None:
         from src.vorming.heading_parent_list_v1 import heading_visible_text
@@ -345,7 +351,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     elif rebuilding:
         notice = ('<p class="ko-notice" role="status" data-ko-rebuilding="' + rebuilding + '">'
                   + ('De nieuwe versie wordt opgebouwd. Deze pagina ververst vanzelf.' if rebuilding == 'building' else
-                     'Deze versie is aangepast. Bouw het kennisobject opnieuw in de kaart om de nieuwe versie te beoordelen.')
+                     'De correctie is opgeslagen. Goedkeuren kan zodra de bouw is geslaagd.')
                   + '</p>' + ('<script>setTimeout(()=>location.reload(),4000)</script>' if rebuilding == 'building' else ''))
     elif not can_approve:
         message = ('De passage kan nu niet worden goedgekeurd. Bekijk de bron of kies een gerichte correctie.'
@@ -419,7 +425,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             # #1067: where this object is and what happens next; only for objects from annotation.
             + (review_route(state, stage_second=second or _rejected_in_second_review(console, obj),
                             required_second=route_second, rebuilding=rebuilding or '',
-                            second_pending=second_pending)
+                            second_pending=second_pending, document_check_flow=document_check_flow)
                if annotation else '')
             + notice + '<div class="ko-review-layout" data-document-assessment="'
             + escape(inputs.document_assessment, quote=True) + '">'

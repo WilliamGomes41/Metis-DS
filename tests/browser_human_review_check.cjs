@@ -24,11 +24,27 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   const row = key => page.locator('#annotation-simple-rows dd[data-row='+key+']');
   await row('core').getByText('De kwetsbare huid verklaart de pijn.',{exact:true}).waitFor();
-  // No note about source corrections and no other way out: one button, back to review while nothing changed.
+  // An unchanged object has no separate save or rebuild action.
   assert.equal(await page.locator('#annotation-current-object').isVisible(),false);
-  assert.equal(await page.locator('#annotation-rebuild').innerText(),'Terug naar review');
-  assert.deepEqual(await page.locator('.annotation-task-actions button:visible').allInnerTexts(),['Terug naar review']);
+  assert.equal(await page.locator('#annotation-rebuild').count(),0);
+  assert.deepEqual(await page.locator('.annotation-task-actions button:visible').allInnerTexts(),[]);
   await page.screenshot({path:output+'/annotation-original-desktop.png',fullPage:true});
+  const save = page.getByRole('button', {name:'Aanpassing opslaan',exact:true});
+  const finish = page.getByRole('button', {name:'Afronden en bouwen',exact:true});
+  async function saveInDocumentCheck() {
+    await save.click();
+    await page.waitForFunction(() => document.activeElement.id==='annotation-document-check-title');
+    await finish.waitFor();
+    assert.equal(await finish.count(), 1);
+    assert.equal(await page.locator('.annotation-workspace-intro .ko-route').getAttribute('data-route'),'check');
+    await page.locator('#annotation-saved-list').getByText('Aanpassing opgeslagen', {exact:true}).waitFor();
+    assert.equal(await page.getByRole('link',{name:/Opbouw bekijken|Opgeslagen bouwopdracht bekijken/}).count(),0);
+  }
+  async function startBuild() {
+    await Promise.all([page.waitForURL(u => u.pathname==='/annotations/build'), finish.click()]);
+    return new URL(page.url()).searchParams.get('attempt');
+  }
+  await page.setViewportSize({width:390,height:844});
   // The reviewer turns the context sentence into evidence: '−' on Aanvullende context, then Onderbouwing in the menu.
   const moved='De beoordeling betreft volwassenen.';
   await row('context').locator('.annotation-line').filter({hasText:moved}).locator('button.annotation-sign').click();
@@ -36,15 +52,14 @@ const assert = require('node:assert/strict');
   await row('evidence').getByText(moved,{exact:true}).waitFor();
   // #1067: a wrong kind is corrected in the same card, like any other row.
   await page.locator('#annotation-simple-type-select').selectOption('definition');
-  await page.waitForFunction(() => document.getElementById('annotation-rebuild').textContent==='Kennisobject opnieuw bouwen' && !document.getElementById('annotation-rebuild').disabled);
-  await page.setViewportSize({width:390,height:844});
+  await saveInDocumentCheck();
   await page.screenshot({path:output+'/annotation-pending-mobile.png',fullPage:true});
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth+1));
+  const mobileAttempt = await startBuild();
+  assert.ok(mobileAttempt);
   await page.setViewportSize({width:1440,height:1000});
-  // One click: saved, built with the existing build, and back on this object's review card.
-  await Promise.all([page.waitForURL(u => u.pathname==='/review' && u.searchParams.get('object')===m.object),
-    page.locator('#annotation-rebuild').click()]);
   await page.screenshot({path:output+'/correction-overview-desktop.png',fullPage:true});
+  await page.goto(base+'/review?'+new URLSearchParams({document:m.document,object:m.object}));
   // While the build runs the card says so and refreshes itself; approving waits for the new version.
   for (let i=0; i<60 && await page.locator('[data-ko-rebuilding]').count(); i++) {
     assert.equal(await page.locator('[name=review_action][value=approve]').isDisabled(),true);
@@ -77,6 +92,20 @@ const assert = require('node:assert/strict');
   assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
   await page.goto(base+'/review?'+new URLSearchParams({document:m.document,object:m.object}));
   assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
+  const desktopPrevious = await page.locator('[data-full-knowledge-passage]').getAttribute('data-reviewed-version');
+
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('link', {name:'Aanpassen in de kaart', exact:true}).click();
+  assert.equal(new URL(page.url()).searchParams.get('annotation'),m.annotation);
+  await page.locator('#annotation-simple-type-select').selectOption('explanation');
+  await saveInDocumentCheck();
+  const desktopAttempt = await startBuild();
+  assert.ok(desktopAttempt && desktopAttempt!==mobileAttempt);
+  await page.locator('[data-build-state=succeeded]').waitFor();
+  await page.goto(base+'/review?'+new URLSearchParams({document:m.document,object:m.object}));
+  assert.notEqual(await page.locator('[data-full-knowledge-passage]').getAttribute('data-reviewed-version'),desktopPrevious);
+  assert.match(await page.locator('.ko-progress').innerText(),new RegExp('opnieuw gebouwd na correctie van versie '+desktopPrevious.replaceAll('.','\\.')));
+
   const recommendation = await browser.newPage({viewport:{width:1440,height:1000}});
   recommendation.on('pageerror', error => errors.push(error.message));
   await recommendation.goto(base+'/login');

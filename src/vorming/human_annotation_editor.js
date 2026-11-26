@@ -9,6 +9,27 @@ import {bindRange} from '/annotations/binding.mjs';
   const el = id => document.getElementById('annotation-' + id);
   const fieldContract = state.field_contract;
   const sourceWorkHost = el('source-work-host');
+  const documentCheckHost = el('document-check-host');
+  function focusDocumentCheck() {
+    const heading=el('document-check-title');
+    if(!heading) return;
+    heading.focus({preventScroll:true});
+    heading.scrollIntoView({block:'center',behavior:'instant'});
+    // A late offer or refresh can still change the layout above the heading.
+    // Keep the focused heading in view until the person acts, at most briefly.
+    const keep=()=>{
+      const current=el('document-check-title');
+      if(!current || document.activeElement!==current) return;
+      const box=current.getBoundingClientRect();
+      if(box.top<0 || box.bottom>innerHeight) current.scrollIntoView({block:'center',behavior:'instant'});
+    };
+    const observer=new ResizeObserver(keep);
+    observer.observe(document.body);
+    const events=['pointerdown','keydown','wheel','touchstart'];
+    const stop=()=>{observer.disconnect();events.forEach(type=>removeEventListener(type,stop,true));};
+    events.forEach(type=>addEventListener(type,stop,true));
+    setTimeout(stop,2000);
+  }
   const gapId = gap => `bronrest-${gap.block_id}-${gap.start}-${gap.end}`;
   let sourceWork = state.source_work;
   let sourceWorkGeneration = state.generation;
@@ -290,16 +311,23 @@ import {bindRange} from '/annotations/binding.mjs';
     // A selected statement alone is a complete object: saving commits it first.
     // A saved object that lost its statement must get one back before leaving.
     const provisional=!hasCore() && !!selected,busy=finalizing || checking || deriving,object=built();
-    el('ready').hidden=!!object || !hasCore() && !provisional;
-    el('ready').disabled=busy || !(provisional || complete);
-    el('finish').hidden=state.document_check_flow || !!object;
-    el('finish').disabled=busy || hasCore() && !complete;
-    // #1064: an object that is already built has one way forward: rebuild it when something changed,
-    // otherwise go back to its review.
-    el('rebuild').hidden=!object;
-    if(object) {
-      el('rebuild').textContent=changedSinceBuild() ? (state.document_check_flow ? 'Opslaan voor documentcontrole' : 'Kennisobject opnieuw bouwen') : 'Terug naar review';
-      el('rebuild').disabled=finalizing || checking || deriving || rebuilding || changedSinceBuild() && (!hasCore() || !complete);
+    if(state.document_check_flow && object) {
+      el('ready').textContent='Aanpassing opslaan';
+      el('ready').hidden=confirmedReady;
+      el('ready').disabled=busy || saving || !hasCore() || !complete;
+    } else {
+      el('ready').textContent='Opslaan en naar volgend kennisobject';
+      el('ready').hidden=!!object || !hasCore() && !provisional;
+      el('ready').disabled=busy || !(provisional || complete);
+    }
+    if(!state.document_check_flow) {
+      el('finish').hidden=!!object;
+      el('finish').disabled=busy || hasCore() && !complete;
+      el('rebuild').hidden=!object;
+      if(object) {
+        el('rebuild').textContent=changedSinceBuild() ? 'Kennisobject opnieuw bouwen' : 'Terug naar review';
+        el('rebuild').disabled=busy || rebuilding || changedSinceBuild() && (!hasCore() || !complete);
+      }
     }
     renderRows();
     renderMenu();
@@ -319,7 +347,10 @@ import {bindRange} from '/annotations/binding.mjs';
       else if(item.status!=='ready') {label='Nog aanpassen';detail='Concept opgeslagen.';}
       else if(binding && !binding.pending) {label='Beschikbaar voor Review';detail='Kennisobject opgebouwd.';}
       else if(buildPhase?.state==='running') {label='Wordt gebouwd';detail='Annotatie opgeslagen.';}
-      else if(binding?.pending) {label='Nog aanpassen';detail='Aanpassing opgeslagen; opnieuw bouwen.';}
+      else if(binding?.pending) {
+        label=state.document_check_flow ? 'Aanpassing opgeslagen' : 'Nog aanpassen';
+        detail=state.document_check_flow ? 'Nog niet gebouwd voor Review.' : 'Aanpassing opgeslagen; opnieuw bouwen.';
+      }
       let row=savedRows.get(id);
       if(!row) {
         row=document.createElement('li');row.dataset.annotationId=id;
@@ -346,10 +377,11 @@ import {bindRange} from '/annotations/binding.mjs';
     });
     el('saved-summary').textContent=entries.length ? entries.length+' '+(entries.length===1 ? 'annotatie opgeslagen.' : 'annotaties opgeslagen.') :
       'Nog geen annotaties opgeslagen. Je opgeslagen uitspraken verschijnen hier.';
+    if(state.document_check_flow) return;
     const notice=buildNotice || (buildPhase && !['running','succeeded'].includes(buildPhase.state) ?
       'De laatste opbouw is gestopt. Je opgeslagen annotaties zijn bewaard. Controleer het documentoverzicht.' : '');
     el('saved-notice').textContent=notice;el('saved-notice').hidden=!notice;
-    el('saved-overview').hidden=state.document_check_flow || !entries.length;
+    el('saved-overview').hidden=!entries.length;
     el('saved-overview').setAttribute('aria-disabled',String(finalizing || saving || checking || deriving || rebuilding));
     el('saved-build').hidden=!buildPhase;
     if(buildPhase) el('saved-build').href='/annotations/build?'+new URLSearchParams({document:state.snapshot_id,attempt:buildPhase.attempt_id});
@@ -829,7 +861,14 @@ import {bindRange} from '/annotations/binding.mjs';
     if(request!==sourceWorkRequest || next.generation!==state.generation) return;
     sourceWorkGeneration=next.generation;
     if(!coverageSaving && contentsRequest===coverageRequest && next.contents) replaceContents(next.contents);
-    if(next.document_check_html!==undefined) el('document-check-host').innerHTML=next.document_check_html;
+    if(next.document_check_html!==undefined) {
+      const headingFocused=document.activeElement === el('document-check-title');
+      documentCheckHost.innerHTML=next.document_check_html;
+      if(headingFocused) el('document-check-title')?.focus({preventScroll:true});
+    }
+    if(next.workplace_route_html!==undefined) {
+      document.querySelector('.annotation-workspace-intro .ko-route').outerHTML=next.workplace_route_html;
+    }
     const open=[...sourceWorkHost.querySelectorAll('details[open] > summary')].map(item=>item.textContent);
     sourceWork=next.work;
     sourceWorkHost.innerHTML=next.html;
@@ -1016,7 +1055,7 @@ import {bindRange} from '/annotations/binding.mjs';
     return checkRun;
   }
 
-  // ---- Finishing: this object, then the next; or the document check; or a rebuild of a built object.
+  // ---- Finish a card or open Documentcontrole with the saved generation.
   // Marks the current object ready through the existing check and save. True when it is saved as ready.
   async function finishCurrent() {
     if(entry.status==='ready' && dirty===committed) return true;
@@ -1048,6 +1087,15 @@ import {bindRange} from '/annotations/binding.mjs';
   }
   const toOverview = () => { window.location.href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,overview:'true'}); };
   el('ready').addEventListener('click',async()=>{
+    if(saving || finalizing) return;
+    if(state.document_check_flow && built()) {
+      if(!await saveCard()) return;
+      try {
+        await refreshSourceWork();
+        focusDocumentCheck();
+      } catch(error) {status(error.message);}
+      return;
+    }
     if(await saveCard()) {
       const focus=entry.ranges.find(a=>a.role==='core')?.block_id;
       load('');status('Opgeslagen. Selecteer de volgende uitspraak.');requestOffer(focus);
@@ -1060,18 +1108,22 @@ import {bindRange} from '/annotations/binding.mjs';
     if(entry.revision) {await discardObject();if(entry.revision) return;}
     await continueAfterSave();
   }
-  el('finish').addEventListener('click',()=>finishSourceSelection());
-  el('saved-overview').addEventListener('click',event=>{
+  el('finish')?.addEventListener('click',()=>finishSourceSelection());
+  el('saved-overview')?.addEventListener('click',event=>{
     event.preventDefault();finishSourceSelection().catch(error=>status(error.message));
   });
   let changingRound=false;
-  el('document-check-host').addEventListener('submit',async event=>{
+  documentCheckHost.addEventListener('submit',async event=>{
     const form=event.target;
     const buildForm=form.matches('[data-confirmed-document-build]');
     if(!buildForm && !form.matches('[data-annotation-round]')) return;
     event.preventDefault();
-    if(changingRound) return;
+    if(changingRound || saving || finalizing) return;
     changingRound=true;
+    const feedback=el('document-check-feedback');
+    feedback.textContent='';
+    const submitter=event.submitter;
+    if(submitter) submitter.disabled=true;
     const changeRound=async()=>{
       await flush();
       const data=new FormData(form);
@@ -1082,7 +1134,7 @@ import {bindRange} from '/annotations/binding.mjs';
       const target=new URL(result.location,location.origin);
       const active=new URLSearchParams(location.search).get('annotation');
       if(active) target.searchParams.set('annotation',active);
-      target.hash=location.hash;
+      target.hash='annotation-document-check-title';
       history.replaceState(null, "", target);
       location.reload();
     };
@@ -1094,31 +1146,32 @@ import {bindRange} from '/annotations/binding.mjs';
         await flush();
         if(selectionPending || expected!==state.generation || !form.isConnected) {
           await refreshSourceWork();
-          status(selectionPending ? 'Sla de geselecteerde uitspraak op of wis de selectie.' :
-            'Controleer de actuele bevindingen en start de bouw opnieuw.');
+          feedback.textContent=selectionPending ? 'Sla de geselecteerde uitspraak op of wis de selectie.' :
+            'Controleer de actuele bevindingen en start de bouw opnieuw.';
           return;
+        }
+        const active=new URLSearchParams(location.search).get('annotation');
+        if(active) {
+          const input=document.createElement('input');
+          input.type='hidden';input.name='annotation';input.value=active;form.append(input);
         }
         HTMLFormElement.prototype.submit.call(form);
         return;
       }
-      if(new FormData(form).get('phase')==='checking') await finishSourceSelection(changeRound);
-      else await changeRound();
-    } catch(error) {status(error.message);}
-    finally {changingRound=false;}
+      await finishSourceSelection(changeRound);
+    } catch(error) {feedback.textContent=error.message;}
+    finally {
+      if(submitter) submitter.disabled=false;
+      changingRound=false;
+    }
   });
   const changedSinceBuild = () => !!built()?.pending || dirty!==committed || entry.status!=='ready';
-  el('rebuild').addEventListener('click',async()=>{
+  el('rebuild')?.addEventListener('click',async()=>{
     const object=built();
     if(!object || rebuilding) return;
     const review='/review?'+new URLSearchParams({document:state.snapshot_id,object:object.object_id});
     if(!changedSinceBuild()) {window.location.href=review;return;}
     if(!await saveCard()) return;
-    if(state.document_check_flow) {
-      await refreshSourceWork();
-      el('document-check-host').scrollIntoView({block:'nearest'});
-      status('Opgeslagen. Ga verder met documentcontrole.');
-      return;
-    }
     rebuilding=true;renderCard();status('Kennisobject wordt opnieuw gebouwd…');
     try {
       const response=await fetch('/annotations/rebuild',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1211,5 +1264,6 @@ import {bindRange} from '/annotations/binding.mjs';
   el('initializing').hidden=true;
   status(loadedStatus());
   if(!entry.revision) requestOffer(state.blocks.find(b=>location.hash==='#'+b.block_id)?.block_id);
-  if(buildPhase?.state==='running') setTimeout(refreshSavedBuild,2000);
+  if(state.document_check_flow && location.hash==='#annotation-document-check-title') focusDocumentCheck();
+  if(!state.document_check_flow && buildPhase?.state==='running') setTimeout(refreshSavedBuild,2000);
 })();

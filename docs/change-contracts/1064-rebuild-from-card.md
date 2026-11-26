@@ -1,5 +1,7 @@
 # #1064 — Kennisobject opnieuw bouwen vanuit de kaart
 
+Voor werkrevisies met Documentcontrole beschrijft [#1156](1156-annotation-document-check.md) de correctieroute van #1169. De werkplek gebruikt daar **Aanpassing opslaan** en **Afronden en bouwen**.
+
 Change class: B
 Promise: Een reviewer past een kennisobject uit annotatie aan in dezelfde kaart, bouwt het met één knop opnieuw en vindt de nieuwe versie terug in Review, met de vorige versie in de versieregel.
 Proof: Native browser/PostgreSQL-proef van reviewkaart naar kaart, opnieuw bouwen en terug naar de reviewkaart van de nieuwe versie, plus kerntests voor de bouwstatus en de nieuwe route.
