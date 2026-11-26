@@ -139,7 +139,7 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
 
 
 @pytest.mark.parametrize("review_client", [None, "retained"], indirect=True)
-@pytest.mark.parametrize("path", ["/review", "/source-selection", "/settings/technical/processing"])
+@pytest.mark.parametrize("path", ["/review", "/source-selection", "/inzicht/document"])
 def test_http_overview_does_not_serialize_full_source_per_candidate(review_client, monkeypatch, path):
     import src.integrity_kernel as kernel
 

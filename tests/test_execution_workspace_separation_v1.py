@@ -58,7 +58,7 @@ def test_task_help_and_management_are_separate_readonly_destinations(tmp_path, *
     before = deepcopy(console.snapshot_objects(sid)), deepcopy(console._envelope(sid))
     client = client_for(console, production_app=production_app)
     assert client.get('/help/review').status_code == 401
-    assert client.get('/settings/technical/processing', params={'document': sid}).status_code == 401
+    assert client.get('/inzicht/document', params={'document': sid}).status_code == 401
     login(client, 'researcher.anne')
     for path in ['/ingest', '/review', '/tree']:
         response = client.get(path)
@@ -87,7 +87,7 @@ def test_task_help_and_management_are_separate_readonly_destinations(tmp_path, *
     assert (console.snapshot_objects(sid), console._envelope(sid)) == before
     stranger = console.create_account(username='stranger', password=TEST_PASSWORD, roles=('reviewer',))
     login(client, stranger['username'])
-    assert client.get('/settings/technical/processing', params={'document': sid}).status_code == 400
+    assert client.get('/inzicht/document', params={'document': sid}).status_code == 400
     assert client.get('/settings/technical', params={'document': sid}).status_code == 400
 
 
@@ -128,7 +128,7 @@ def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_
     monkeypatch.setattr(console, 'processing_status', lambda document, actor_id=None: {
         'retry_allowed': True, 'error_code': 'pre_review_llm_provider_unavailable',
         'reason_code': 'pre_review_llm_provider_unavailable', 'retry_not_before': None})
-    page = client.get('/settings/technical/processing', params={'document': sid})
+    page = client.get('/inzicht/document', params={'document': sid})
     assert page.status_code == 200
     assert f'href="/source-selection?document={sid}"' in page.text
     assert 'action="/tree/reprocess"' not in page.text

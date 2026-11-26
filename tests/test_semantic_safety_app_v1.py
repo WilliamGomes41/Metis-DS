@@ -92,13 +92,10 @@ def test_safety_tests_require_researcher(tmp_path, *, production_app, production
     assert anonymous.get("/inzicht/veiligheidstests").status_code == 401
 
 
-def test_retired_audit_addresses_redirect_and_review_signals_stay(tmp_path, *, production_app, production_console):
+def test_retired_audit_addresses_return_404_and_review_signals_stay(tmp_path, *, production_app, production_console):
     _console, client = _system(tmp_path, production_app=production_app, production_console=production_console)
-    for old, new in (("/audit", "/inzicht?tab=controles"), ("/audit/new", "/inzicht?tab=controles"),
-                     ("/audit/archive", "/inzicht?tab=controles"),
-                     ("/audit/semantic-safety", "/inzicht/veiligheidstests")):
-        response = client.get(old, follow_redirects=False)
-        assert response.status_code == 303 and response.headers["location"] == new, old
+    for old in ("/audit", "/audit/new", "/audit/archive", "/audit/semantic-safety"):
+        assert client.get(old, follow_redirects=False).status_code == 404, old
     assert client.get("/audit/audit-0123456789abcdef").status_code == 404
     assert client.post("/audit", data={"type": "experiment"}).status_code in (404, 405)
     controls = client.get("/inzicht?tab=controles").text

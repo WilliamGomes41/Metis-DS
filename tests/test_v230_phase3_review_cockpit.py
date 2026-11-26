@@ -610,10 +610,10 @@ def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path, *, product
     assert not any(obj in ordinary for obj in blocked_audit_lane(objects))
     client = _client(console, production_app=production_app)
     index = client.get(
-        f"/review?document={receipt['snapshot_id']}&task=individual"
+        f"/review?document={receipt['snapshot_id']}&task=contextual"
     ).text
     control = client.get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=repair"
     ).text
     slow = index.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
     assert DJG not in slow

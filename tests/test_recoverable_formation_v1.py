@@ -125,14 +125,14 @@ def test_review_points_to_problems_with_or_without_candidate(tmp_path, *, produc
     assert incomplete(state._envelope(sid))
     client = TestClient(production_app(state))
     client.cookies.set(COOKIE, state.authenticate('reviewer', 'strong-test-password')['token'])
-    page = client.get('/review', params={'document': sid, 'task': 'individual'}).text
+    page = client.get('/review', params={'document': sid, 'task': 'contextual'}).text
     assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
     assert f'/source-selection?document={sid}' in page
     # The current-state projection decides, not the stored flag alone.
     real_status = state.processing_status
     for change in ({'formation_incomplete': False},):
         state.processing_status = lambda snapshot_id, change=change, **kwargs: {**real_status(snapshot_id, **kwargs), **change}
-        assert 'data-formation-incomplete' not in client.get('/review', params={'document': sid, 'task': 'individual'}).text
+        assert 'data-formation-incomplete' not in client.get('/review', params={'document': sid, 'task': 'contextual'}).text
     state.processing_status = real_status
 
     # Independent candidates and problems are both reachable, even after
@@ -140,7 +140,7 @@ def test_review_points_to_problems_with_or_without_candidate(tmp_path, *, produc
     partial, partial_sid, *_ = system(tmp_path / 'partial', production_console=production_console)
     partial_client = TestClient(production_app(partial))
     partial_client.cookies.set(COOKIE, partial.authenticate('reviewer', 'strong-test-password')['token'])
-    assert 'data-formation-incomplete' in partial_client.get('/review', params={'document': partial_sid, 'task': 'individual'}).text
+    assert 'data-formation-incomplete' in partial_client.get('/review', params={'document': partial_sid, 'task': 'contextual'}).text
 
 
 def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path, *, production_console):
@@ -176,7 +176,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
     assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code in {302, 303, 401, 403}
     assert len(calls) == 2
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
-    page = client.get('/settings/technical/processing', params={'document': sid})
+    page = client.get('/inzicht/document', params={'document': sid})
     assert 'Naar Vorming voor Starten of Hervatten' in page.text and 'publicatie is geblokkeerd' in page.text
     assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False

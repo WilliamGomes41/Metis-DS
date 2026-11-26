@@ -266,7 +266,7 @@ def test_blocked_passages_offer_correction_without_technical_diagnostics() -> No
         },
     }
 
-    html = _render_review_index("snap-1", [blocked], "richtlijn", task="control")
+    html = _render_review_index("snap-1", [blocked], "richtlijn", task="repair")
 
     assert "Passages corrigeren (1)" in html
     assert "task=repair" in html

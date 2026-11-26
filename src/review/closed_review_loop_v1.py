@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any, Iterator
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
 from src.review.review_command_state_v1 import review_bindings_view
@@ -684,12 +684,6 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             f"<section class='room'>{body}</section>",
             title=title,
         )
-
-    @app.get("/audit/review-signals", include_in_schema=False)
-    def legacy_review_signals(request: Request) -> RedirectResponse:
-        account_for(request)
-        query = request.url.query
-        return RedirectResponse("/inzicht/reviewsignalen" + ("?" + query if query else ""), status_code=303)
 
     @app.get("/inzicht/reviewsignalen", response_class=HTMLResponse)
     def audit_review_signals(request: Request) -> str:

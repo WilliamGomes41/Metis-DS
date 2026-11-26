@@ -69,7 +69,7 @@ def test_production_composition_navigation_never_requests_badges(tmp_path, monke
 
     monkeypatch.setattr(console, "waiting_task_counts", forbidden)
     for path in ("/", "/ingest", "/tree", "/review", "/publish", "/settings", "/over-console",
-                 "/inzicht", "/audit/review-signals", "/review/repair"):
+                 "/inzicht", "/inzicht/reviewsignalen", "/review/repair"):
         response = client.get(path)
         assert response.status_code == 200, path
         assert '<nav class="rooms">' in response.text

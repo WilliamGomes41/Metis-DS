@@ -268,7 +268,7 @@ def test_control_diagnostics_stay_on_the_existing_read_path() -> None:
     ]
     before = deepcopy(objects)
 
-    html = _render_review_index("snap-1", objects, "richtlijn", task="control")
+    html = _render_review_index("snap-1", objects, "richtlijn", task="repair")
 
     assert objects == before
     assert 'class="processing-diagnostics"' not in html

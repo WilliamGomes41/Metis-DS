@@ -426,7 +426,7 @@ def test_extract_does_not_emit_kennisplatform_chrome_as_objects_or_koppen(tmp_pa
     assert "Inleiding" in koppen_texts
     assert "Verantwoording" in koppen_texts
     html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&task=headings"
+        f"/review?document={receipt['snapshot_id']}&task=structure"
     ).text
     titles = _visible_text(html)
     review_body = html.split("</nav>", 1)[-1] if "</nav>" in html else html

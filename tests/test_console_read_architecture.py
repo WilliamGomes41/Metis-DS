@@ -101,7 +101,7 @@ def test_all_main_pages_and_detail_apis_keep_workflow_state(tmp_path, production
     before = (store.get_envelope(sid), store.list_document_objects(sid), console.workflow_review_store.read_bindings())
     paths = ['/', '/ingest', '/source-selection', '/review', '/publish', '/tree', '/settings', '/inzicht',
              '/inzicht/api/documents', '/inzicht/api/quality', '/telemetry/api/summary', '/raad/meldingen',
-             '/inzicht/document?document=' + sid, '/review?document=' + sid + '&task=individual',
+             '/inzicht/document?document=' + sid, '/review?document=' + sid + '&task=contextual',
              '/publish?document=' + sid, '/source-selection?document=' + sid,
              '/inzicht/document/diagnostiek?document=' + sid,
              '/inzicht/document/passages?document=' + sid]

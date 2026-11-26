@@ -48,8 +48,8 @@ def test_each_task_view_only_contains_its_own_work():
         _obj("d1", "definition"),
     ]
 
-    individual = _render_review_index("snap-1", objects, "richtlijn", task="individual", fragments=source_fragments(), bindings=approved_bindings(objects))
-    headings = _render_review_index("snap-1", objects, "richtlijn", task="headings", fragments=source_fragments(), bindings=approved_bindings(objects))
+    individual = _render_review_index("snap-1", objects, "richtlijn", task="contextual", fragments=source_fragments(), bindings=approved_bindings(objects))
+    headings = _render_review_index("snap-1", objects, "richtlijn", task="structure", fragments=source_fragments(), bindings=approved_bindings(objects))
 
     assert "Passage r1." in individual
     assert "Passage d1." not in individual

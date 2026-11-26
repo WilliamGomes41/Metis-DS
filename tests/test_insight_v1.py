@@ -44,7 +44,7 @@ def test_quality_api_is_the_same_measurement_as_the_table_page(tmp_path, *, prod
     assert data['routes'] == expected['routes']
     assert data['documents'][0]['snapshot_id'] == sid and data['documents'][0]['doc_ref'] == doc_ref(sid)
     assert data['trend'] and data['trend'][-1]['calculation_id'] == data['calculation_id']
-    table = client.get('/settings/quality')
+    table = client.get('/inzicht?tab=kwaliteit&view=table')
     assert 'href="/inzicht?tab=kwaliteit"' in table.text and 'aria-current="page">Kwaliteit' in table.text
     assert client.get('/inzicht/api/quality?from=invalid').status_code == 400
 
@@ -71,7 +71,7 @@ def test_settings_hub_channels_inzicht_beheer_and_uitleg(tmp_path, *, production
     assert 'href="/settings/quality"' not in settings and 'href="/telemetry"' not in settings
     technical = client.get('/settings/technical').text
     assert 'href="/settings/llm"' in technical
-    for removed in ('href="/inzicht', 'href="/settings/quality', 'href="/settings/technical/exports', 'Verwerkingsproblemen herstellen'):
+    for removed in ('href="/inzicht', 'href="/inzicht?tab=kwaliteit&view=table', 'href="/inzicht/document', 'Verwerkingsproblemen herstellen'):
         assert removed not in technical
 
 

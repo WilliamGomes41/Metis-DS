@@ -170,7 +170,7 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     # Production routes require the assigned reviewer, not the uploader.
     client.cookies.clear()
     assert client.post("/login", data={"username": "reviewer", "password": REVIEWER_PASSWORD}).status_code == 200
-    response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "individual"})
+    response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "contextual"})
     assert response.status_code == 200
     visible = VisibleRows()
     visible.feed(response.text)
@@ -190,7 +190,7 @@ def test_other_blocked_candidates_are_readable_and_remain_accessible():
         {"object_id": f"console-eenzaamheid-p001-f{index:03d}-u01", "object_type": "unclassified", "proposed_object_type": "unclassified", "content": {"clean_text": text}, "metadata": {"admission": {"gate_result": GATE_BLOCKED}}}
         for index, text in enumerate(["Een passage over sociale contacten.", "Een passage over het netwerk van de oudere."], 1)
     ]
-    rendered = _render_review_index("snap-test", objects, "richtlijn", task="control")
+    rendered = _render_review_index("snap-test", objects, "richtlijn", task="repair")
     visible = VisibleRows()
     visible.feed(rendered)
     assert "Passages corrigeren (2)" in rendered

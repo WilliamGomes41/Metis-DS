@@ -434,7 +434,7 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *,
     client = _client(console, production_app=production_app)
     pages = [
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("headings", "individual", "control")
+        for task in ("structure", "contextual", "repair")
     ]
     html = "".join(pages)
     titles = _index_link_titles(html)
@@ -474,7 +474,7 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path, *
                                       for index in range(1, 13)])
     receipt = _ingest(console, accounts, data=html_src, filename="many.html", title="Veel passages")
     html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=repair"
     ).text
     titles = _index_link_titles(html)
     assert "unclassified" not in {title.lower() for title in titles}
@@ -501,8 +501,8 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path, *, producti
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
-    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
-    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=structure").text
+    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     lower = (dashboard + headings + individual).lower()
     assert 'data-workboard-document=' in dashboard
     assert "review-task-dashboard" not in dashboard
@@ -629,7 +629,7 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path, *, 
     assert refreshed.get("proposed_object_type") == "heading"
     assert review_lane(refreshed) == "slow"
     html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&task=individual"
+        f"/review?document={receipt['snapshot_id']}&task=contextual"
     ).text
     assert heading["object_id"] not in html
     from src.review.knowledge_path_v1 import content_reviewable

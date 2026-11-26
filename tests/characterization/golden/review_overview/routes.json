@@ -145,36 +145,6 @@
       ]
     ],
     [
-      "/audit",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/audit/archive",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/audit/new",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/audit/review-signals",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/audit/semantic-safety",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/brand",
       []
     ],
@@ -569,12 +539,6 @@
       ]
     ],
     [
-      "/review/passages-export",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/review/policy",
       [
         "GET"
@@ -584,30 +548,6 @@
       "/review/policy",
       [
         "POST"
-      ]
-    ],
-    [
-      "/review/processing-diagnostic-replay",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/review/processing-diagnostics",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/review/processing-diagnostics-detail",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/review/processing-evidence-export",
-      [
-        "GET"
       ]
     ],
     [
@@ -737,73 +677,7 @@
       ]
     ],
     [
-      "/settings/quality",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/settings/quality/compare",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/settings/quality/compare",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}/analyze",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}/assess/{label}",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}/cancel",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}/close",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}/run/{route}",
-      [
-        "POST"
-      ]
-    ],
-    [
       "/settings/technical",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/settings/technical/exports",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/settings/technical/processing",
       [
         "GET"
       ]
@@ -815,25 +689,7 @@
       ]
     ],
     [
-      "/source-selection/blockage",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/source-selection/processing-trace",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/source-selection/progress",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/source-selection/publication-evidence",
       [
         "GET"
       ]
@@ -854,12 +710,6 @@
       "/source-selection/transition",
       [
         "POST"
-      ]
-    ],
-    [
-      "/telemetry",
-      [
-        "GET"
       ]
     ],
     [

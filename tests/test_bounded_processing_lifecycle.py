@@ -122,7 +122,7 @@ def test_native_stall_reserves_before_call_and_recovers_same_source(workflow_pos
     with monkeypatch.context() as status_clock:
         status_clock.setattr('src.vorming.processing_retry_v1.now',lambda:observed)
         assert cmd_processing_status(Namespace(snapshot_id=sid,actor_id=reviewer))==_client(console).get(
-            '/review/processing-diagnostics',params={'document':sid}).json()['processing']
+            '/inzicht/document/diagnostiek',params={'document':sid}).json()['processing']
     original_hash=envelope['sha256']
     future=now()+timedelta(minutes=1)
     monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)

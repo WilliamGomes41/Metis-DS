@@ -90,7 +90,7 @@ def test_failure_deduplication_success_http_and_restart(workflow_postgres, tmp_p
     assert final._envelope(sid)["sha256"] == before["sha256"]
     # The initial failed ingest attempt plus the failed retry and the success.
     assert len(final._envelope(sid)[KEY]) == len(before.get(KEY) or []) + 2
-    diagnostics = _client(final).get("/review/processing-diagnostics", params={"document": sid}).json()
+    diagnostics = _client(final).get("/inzicht/document/diagnostiek", params={"document": sid}).json()
     assert diagnostics["processing_attempts"][0]["validation_code"] == attempt["validation_code"]
 
 

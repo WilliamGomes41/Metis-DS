@@ -389,7 +389,7 @@ def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path, *, produc
     app = production_app(console)
     client = TestClient(app, base_url="https://testserver")
     client.post("/login", data={"username": "anne", "password": "anne-secret"})
-    response = client.get("/audit/review-signals")
+    response = client.get("/inzicht/reviewsignalen")
     assert response.status_code == 200
     assert "Signalen uit Review" in response.text
     assert "Context ontbreekt." in response.text

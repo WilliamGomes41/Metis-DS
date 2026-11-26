@@ -267,7 +267,7 @@ def test_review_default_document_dashboard_uses_projection_without_snapshot_read
 
 def test_review_task_detail_keeps_one_bounded_selected_snapshot_read(hotpath):
     h=hotpath
-    review=h.client.get('/review',params={'document':h.snapshots[1],'task':'headings'})
+    review=h.client.get('/review',params={'document':h.snapshots[1],'task':'structure'})
     assert review.status_code==200 and 'Unpublished fixture' in review.text
     assert h.calls['statuses']==1 and h.calls['current_window']==1,dict(h.calls)
     assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)

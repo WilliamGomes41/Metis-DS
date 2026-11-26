@@ -402,7 +402,7 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(tmp_path
     assert {obj["object_id"] for obj in leftover}.isdisjoint({obj["object_id"] for obj in duty})
     client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
-    html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    html = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     visible = _visible_text(dashboard + html + control)
     assert 'data-workboard-document=' in dashboard
@@ -459,7 +459,7 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(tmp_path: Pat
     assert koppen
     assert all(review_lane(obj) == "fast" for obj in koppen)
     html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&task=headings"
+        f"/review?document={receipt['snapshot_id']}&task=structure"
     ).text
     fast = _section(html, "review-section review-lane-fast")
     assert "/review/headings/batch-confirm" in fast
@@ -553,7 +553,7 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path, *, production
     duty = slow_review_duty(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]))
     leftover = remaining_unclassified(objects, fragments=source_fragments())
     client = _client(console, production_app=production_app)
-    html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    html = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     slow = _section(html, "review-lane-slow")
     titles = _index_link_titles(slow)
     assert len(titles) == len(duty)

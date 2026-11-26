@@ -4,7 +4,7 @@ Producers stay where the work happens (request diagnostics, console performance,
 structured logging, processing trace, publication evidence, publish refusals and
 the Storeopdracht). They all feed this hub, which owns the event model, the
 correlation context, bounded local storage, safe error fingerprints, analysis,
-remediation guidance and the /telemetry page. Operational evidence only: never
+remediation guidance and the Inzicht system tab. Operational evidence only: never
 domain state, never an authority.
 """
 from src.telemetry.errors import exception_evidence

@@ -92,7 +92,7 @@ def test_read_benchmark(tmp_path, production_console, production_app, monkeypatc
                 ('/review', {}), ('/review/repair', {}), ('/inzicht/routevergelijking', {}), ('/publish', {}), ('/tree', {}), ('/settings', {}), ('/inzicht', {}),
                 ('/inzicht/api/documents', {}), ('/inzicht/api/quality', {}),
                 ('/inzicht/document', {'document': sid}),
-                ('/review', {'document': sid, 'task': 'individual'}),
+                ('/review', {'document': sid, 'task': 'contextual'}),
                 ('/publish', {'document': sid}), ('/source-selection', {'document': sid})]:
             calls.clear(); metrics.clear(); json_volume[0] = 0
             started = time.perf_counter()

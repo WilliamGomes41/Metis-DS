@@ -198,7 +198,7 @@ def test_individual_review_surface_orders_focus_before_secondary_across_duty_lan
         "snap-priority",
         [summary_recommendation, focus_unclassified],
         "richtlijn",
-        task="individual",
+        task="contextual",
         fragments=source_fragments())
 
     assert html.index("Conclusies") < html.index("Samenvatting")

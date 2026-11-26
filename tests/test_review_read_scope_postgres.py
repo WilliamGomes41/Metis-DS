@@ -24,7 +24,7 @@ def test_review_get_reuses_the_request_envelope_reads(workflow_postgres, tmp_pat
     sid, _researcher, _reviewer = ingest(console)
     client = _client(console)
     # Production defaults to the workboard; select the actual review room.
-    params = {"document": sid, "task": "individual"}
+    params = {"document": sid, "task": "contextual"}
     expected = client.get("/review", params=params)
     assert expected.status_code == 200 and sid in expected.text
 

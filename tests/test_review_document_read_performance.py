@@ -11,7 +11,7 @@ import pytest
 from tests.test_review_render_source_reuse import review_client  # noqa: F401
 
 
-@pytest.mark.parametrize('task', ['individual', 'batch', 'inventory'])
+@pytest.mark.parametrize('task', ['contextual', 'batch', 'inventory'])
 def test_document_tasks_use_compact_inputs_and_prepared_source(review_client, monkeypatch, task):
     import src.vorming.knowledge_materialisation_v1 as materialisation
 
@@ -56,7 +56,7 @@ def test_document_tasks_use_compact_inputs_and_prepared_source(review_client, mo
 
 
 @pytest.mark.parametrize('review_client', ['large'], indirect=True)
-@pytest.mark.parametrize('task', ['individual', 'inventory'])
+@pytest.mark.parametrize('task', ['contextual', 'inventory'])
 def test_document_queue_pages_preserve_every_candidate(review_client, task):
     console, client, sid = review_client
     before = deepcopy(console.snapshot_objects(sid))
@@ -81,7 +81,7 @@ def test_complete_document_does_not_transfer_processing_archives(review_client, 
     console, client, sid = review_client
     sizes = []
     monkeypatch.setattr(performance._LOGGER, 'info', lambda _format, *args: sizes.append(args[-1]))
-    params = {'document': sid, 'task': 'individual'}
+    params = {'document': sid, 'task': 'contextual'}
     assert client.get('/review', params=params).status_code == 200
     baseline = sizes[-1]
     store = console.workflow_document_store
@@ -145,7 +145,7 @@ def test_queue_navigation_keeps_document_return_filters(review_client):
     from html import unescape
     from urllib.parse import parse_qs, urlsplit
     _console, client, sid = review_client
-    page = client.get('/review', params={'document': sid, 'task': 'individual',
+    page = client.get('/review', params={'document': sid, 'task': 'contextual',
         'q': 'zorg & huid', 'page': 2, 'theme': 'huid'})
     assert page.status_code == 200
     next_link = re.search(r'href="([^"]+)">Volgende</a>', page.text)[1]
@@ -158,7 +158,7 @@ def test_queue_navigation_keeps_document_return_filters(review_client):
     assert query['q'] == ['zorg & huid'] and query['page'] == ['2'] and query['theme'] == ['huid']
 
 
-@pytest.mark.parametrize('task', ['individual', 'inventory', 'batch'])
+@pytest.mark.parametrize('task', ['contextual', 'inventory', 'batch'])
 def test_open_document_keeps_full_formation_warning(tmp_path, production_console, monkeypatch, task):
     import src.vorming.knowledge_materialisation_v1 as materialisation
     from fastapi.testclient import TestClient

@@ -34,10 +34,9 @@ def test_heading_form_post_refresh_native_restart_and_old_workplace(tmp_path, mo
     assert '/review/headings/batch-confirm' not in old
     assert not any(i.get('name') == 'object_ids' for f in Forms(old).forms for i in f['inputs'])
     baseline = dict(calls)
-    for task in ('structure', 'headings'):
-        response = client.get('/review', params={'document': sid, 'task': task}, follow_redirects=False)
-        assert response.status_code == 303
-        assert response.headers['location'] == f'/source-selection?document={sid}&task=structure'
+    response = client.get('/review', params={'document': sid, 'task': 'structure'}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers['location'] == f'/source-selection?document={sid}&task=structure'
     detail = client.get('/review', params={'document': sid, 'object': ids[0]})
     assert detail.status_code == 200
     assert 'data-heading-owner' in detail.text

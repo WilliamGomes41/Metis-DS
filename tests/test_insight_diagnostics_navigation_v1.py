@@ -10,7 +10,6 @@ from copy import deepcopy
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.review.review_ledger import read_events
@@ -104,37 +103,26 @@ def test_diagnosis_roles_keep_processing_passages_and_publication_evidence_separ
     assert export['selection'] == {'status': 'not_found', 'attempt_id': None}
 
 
-@pytest.mark.parametrize(('old', 'new'), [
-    ('/settings/technical/processing', '/inzicht/document'),
-    ('/settings/technical/exports', '/inzicht/document'),
-    ('/source-selection/processing-trace', '/inzicht/document/verwerkingsspoor'),
-    ('/source-selection/publication-evidence', '/inzicht/document/publicatiebewijs'),
-    ('/source-selection/blockage', '/inzicht/document/blokkade'),
-    ('/review/passages-export', '/inzicht/document/passages'),
-    ('/review/processing-evidence-export', '/inzicht/document/verwerkingsbewijs'),
-    ('/review/processing-diagnostics', '/inzicht/document/diagnostiek'),
-    ('/review/processing-diagnostics-detail', '/inzicht/document/detaildiagnostiek'),
-    ('/review/processing-diagnostic-replay', '/inzicht/document/poging'),
-    ('/settings/quality', '/inzicht'),
-    ('/settings/quality/compare', '/inzicht/routevergelijking'),
-    ('/settings/quality/compare/comparison-1', '/inzicht/routevergelijking/comparison-1'),
-])
-def test_legacy_get_redirects_preserve_document_attempt_format_report_and_filters(tmp_path, old, new, *, production_app, production_console):
-    state, users, sid, _ = _system(tmp_path, production_console=production_console)
-    app = production_app(state)
-    client = login(app, users['reviewer_a']['username'])
-    params = {'document': sid, 'attempt': 'pa_' + 'a' * 32, 'format': 'csv', 'report': 'report1', 'from': '2026-09-01', 'q': 'Zorg & herstel', 'download': '1'}
-    response = client.get(old, params=params, follow_redirects=False)
-    assert response.status_code == 303
-    target = urlsplit(response.headers['location'])
-    assert target.path == new
-    for key, value in params.items():
-        assert parse_qs(target.query)[key] == [value]
-    if old == '/settings/quality':
-        override = client.get(old, params={**params, 'tab': 'systeem', 'view': 'other'}, follow_redirects=False)
-        assert parse_qs(urlsplit(override.headers['location']).query)['tab'] == ['kwaliteit']
-        assert parse_qs(urlsplit(override.headers['location']).query)['view'] == ['table']
-    assert TestClient(app).get(old, params=params, follow_redirects=False).status_code == 401
+def test_removed_insight_addresses_return_404(installed):
+    client, _, _, _, _, _, command = installed
+    sid = command["snapshot_id"]
+    for path in (
+        '/settings/technical/processing',
+        '/settings/technical/exports',
+        '/source-selection/processing-trace',
+        '/source-selection/publication-evidence',
+        '/source-selection/blockage',
+        '/review/passages-export',
+        '/review/processing-evidence-export',
+        '/review/processing-diagnostics',
+        '/review/processing-diagnostics-detail',
+        '/review/processing-diagnostic-replay',
+        '/settings/quality',
+        '/settings/quality/compare',
+        '/settings/quality/compare/comparison-1',
+    ):
+        response = client.get(path, params={'document': sid, 'format': 'csv'}, follow_redirects=False)
+        assert response.status_code == 404, path
 
 
 def test_quality_table_history_and_graphs_stay_in_one_tab_and_same_report(tmp_path, *, production_app, production_console):
@@ -163,11 +151,11 @@ def test_configuration_has_no_diagnostics_and_controls_use_insight_addresses(tmp
     assert '/settings/quality/compare' not in insight and '/settings/technical/exports' not in insight
 
 
-def test_installed_review_signals_keep_researcher_access_and_old_bookmark(installed):
+def test_installed_review_signals_keep_researcher_access_after_bookmark_removal(installed):
     client, _, researcher, _, _, _, _ = installed
     assert client.get('/inzicht/reviewsignalen').status_code == 403
     assert client.post('/login', data={'username': researcher['username'], 'password': 'anne-secret'}, follow_redirects=False).status_code == 303
     old = client.get('/audit/review-signals?q=zorg', follow_redirects=False)
-    assert old.status_code == 303 and old.headers['location'] == '/inzicht/reviewsignalen?q=zorg'
-    page = client.get(old.headers['location'])
+    assert old.status_code == 404
+    page = client.get('/inzicht/reviewsignalen?q=zorg')
     assert page.status_code == 200 and 'Signalen uit Review' in page.text

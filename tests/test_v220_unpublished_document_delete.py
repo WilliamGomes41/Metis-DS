@@ -768,8 +768,8 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path, *, product
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
     client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
-    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
-    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=structure").text
+    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     html = dashboard + headings + individual + control
     assert SLOGAN not in html

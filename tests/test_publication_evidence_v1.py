@@ -136,14 +136,14 @@ def test_http_export_and_product_readback_after_new_instances(tmp_path, *, produ
     authority = console.canonical_publication_store
     sid = receipt['snapshot_id']
     client = TestClient(production_app(console), base_url='https://testserver')
-    assert client.get('/source-selection/publication-evidence', params={'document':sid}, follow_redirects=False).status_code == 401
+    assert client.get('/inzicht/document/publicatiebewijs', params={'document':sid}, follow_redirects=False).status_code == 401
     assert client.post('/login', data={'username':'reviewer.bert','password':TEST_PASSWORD}, follow_redirects=False).status_code == 303
-    assert client.get('/source-selection/publication-evidence', params={'document':sid}).status_code == 403
+    assert client.get('/inzicht/document/publicatiebewijs', params={'document':sid}).status_code == 403
     client.post('/login', data={'username':'publisher.carla','password':TEST_PASSWORD}, follow_redirects=False)
     # Real Publish room and command, no mocked authorization/readiness boundary.
     assert client.get('/publish').status_code == 200
     result = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=sid)
-    response = client.get('/source-selection/publication-evidence', params={'document':sid})
+    response = client.get('/inzicht/document/publicatiebewijs', params={'document':sid})
     assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
     read = response.json()
     assert publication_report(read)['exact_release_active'] is True

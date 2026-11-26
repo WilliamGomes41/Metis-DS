@@ -10,9 +10,9 @@ from tests.test_review_direct_workspace_v1 import Console, client, document
 from tests.test_review_render_source_reuse import review_client  # noqa: F401
 
 
-@pytest.mark.parametrize('task', ['history', 'decisions'])
+@pytest.mark.parametrize('task', ['history', 'decisions', 'individual', 'headings', 'together', 'control', 'closure'])
 @pytest.mark.parametrize('object_id', ['', 'previous-object'])
-def test_history_bookmarks_redirect_before_document_reads(monkeypatch, task, object_id):
+def test_history_bookmarks_return_404_before_document_reads(monkeypatch, task, object_id):
     console = Console(documents=[('one', document('Document'))])
 
     def forbidden(*args, **kwargs):
@@ -27,18 +27,17 @@ def test_history_bookmarks_redirect_before_document_reads(monkeypatch, task, obj
         'document': 'one', 'object': object_id, 'task': task,
         'after': 'previous', 'context_mode': 'source',
     }, follow_redirects=False)
-    assert response.status_code == 303
-    assert response.headers['location'] == '/review?document=one'
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize('task', ['history', 'decisions'])
-def test_history_bookmarks_still_require_authentication(task):
+def test_history_bookmarks_are_absent_without_authentication(task):
     response = client(Console(), login=False).get(
         '/review', params={'task': task}, follow_redirects=False)
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
-@pytest.mark.parametrize('route', ['/review', '/review/bronpassage'])
+@pytest.mark.parametrize('route', ['/review', '/review/bronpassage', '/review/context-section'])
 def test_native_retired_page_does_not_read_or_mutate_review_evidence(review_client, monkeypatch, route):
     from src.review.review_ledger import read_events
     console, browser, sid = review_client
@@ -55,17 +54,20 @@ def test_native_retired_page_does_not_read_or_mutate_review_evidence(review_clie
         import src.review.review_passage_read_v1 as reads
         for name in ('read_review_document', 'read_review_passage', 'read_review_navigation'):
             patch.setattr(reads, name, forbidden)
-        for task in ('history', 'decisions'):
+        for task in ('history', 'decisions', 'individual', 'headings', 'together', 'control', 'closure'):
             response = browser.get(route, params={
                 'document': sid, 'task': task, 'object': before[-1]['object_id'],
             }, follow_redirects=False)
-            assert response.status_code == 303
-            assert response.headers['location'] == '/review?document=' + sid
+            assert response.status_code == 404
+        if route == '/review':
+            for selection in ({'work': 'all'}, {'document': sid, 'receipt_interaction': 'saved', 'receipt_object': 'previous'}):
+                response = browser.get(route, params={**selection, 'task': 'individual'}, follow_redirects=False)
+                assert response.status_code == 404
         browser.cookies.clear()
         response = browser.get(route, params={
             'document': sid, 'task': 'history', 'object': before[-1]['object_id'],
         }, follow_redirects=False)
-        assert response.status_code == 401
+        assert response.status_code == 404
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
     assert read_events(console._ledger_path) == events

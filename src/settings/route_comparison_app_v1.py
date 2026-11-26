@@ -110,7 +110,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
                       'niet gestart. Vastgelegde vergelijkingen blijven hieronder leesbaar.</p>'
                       '<ul>' + listing + '</ul>')
 
-    @app.post("/settings/quality/compare", include_in_schema=False)
     @app.post("/inzicht/routevergelijking")
     async def create(request: Request):
         try:
@@ -191,7 +190,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
             comparison_id, owner=row["owner_account_id"], allowed_scope=set(allowed),
             expected_version=version, operation=lambda target: operation(target, account, form))
 
-    @app.post("/settings/quality/compare/{comparison_id}/run/{route}", include_in_schema=False)
     @app.post("/inzicht/routevergelijking/{comparison_id}/run/{route}")
     async def run(request: Request, comparison_id: str, route: str):
         try:
@@ -228,7 +226,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/assess/{label}", include_in_schema=False)
     @app.post("/inzicht/routevergelijking/{comparison_id}/assess/{label}")
     async def assess_route(request: Request, comparison_id: str, label: str):
         try:
@@ -249,7 +246,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/analyze", include_in_schema=False)
     @app.post("/inzicht/routevergelijking/{comparison_id}/analyze")
     async def analyze_route(request: Request, comparison_id: str):
         try:
@@ -259,7 +255,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/close", include_in_schema=False)
     @app.post("/inzicht/routevergelijking/{comparison_id}/close")
     async def close_route(request: Request, comparison_id: str):
         try:
@@ -269,7 +264,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/cancel", include_in_schema=False)
     @app.post("/inzicht/routevergelijking/{comparison_id}/cancel")
     async def cancel_route(request: Request, comparison_id: str):
         try:

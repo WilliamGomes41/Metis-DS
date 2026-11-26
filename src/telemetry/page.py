@@ -1,4 +1,4 @@
-"""HTML body of the /telemetry page: one filter row, insights, charts, drill-down.
+"""HTML body of the Inzicht system tab: one filter row, insights, charts, drill-down.
 
 Self-contained (no external scripts). Every dynamic value is inserted with
 ``textContent``; charts are inline SVG with a hover layer and a table view.

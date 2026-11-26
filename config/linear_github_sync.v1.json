@@ -378,6 +378,10 @@
     {
       "github_issue": 1167,
       "linear_issue": "MET-147"
+    },
+    {
+      "github_issue": 1176,
+      "linear_issue": "MET-149"
     }
   ]
 }
