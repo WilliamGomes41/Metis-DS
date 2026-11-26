@@ -336,6 +336,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.setViewportSize({width:1440,height:1000});
  // The card no longer offers that route: a selection is the statement.
  await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ await page.getByRole('button',{name:'Opslaan en naar volgend kennisobject',exact:true}).click();
+ await page.getByRole('heading',{name:'Selecteer de uitspraak in de bron',exact:true}).waitFor();
  await tasks.selectText(page,block(support),support);
  await row('core').getByText(support,{exact:true}).waitFor();
  assert.equal(await page.locator('#annotation-simple').getByText(/geen uitspraak/i).count(),0);
