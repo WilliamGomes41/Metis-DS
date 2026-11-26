@@ -32,6 +32,8 @@ const assert = require('node:assert/strict');
   assert.equal(uploaded.status, 200, JSON.stringify(uploaded));
   const sid = new URL(uploaded.url).searchParams.get('document');
   assert.ok(sid, uploaded.url);
+  await page.goto(base+'/annotations/build?document='+sid);
+  await page.getByText('Er is nog geen bouwopdracht voor dit document.').waitFor();
   await page.goto(base+'/annotations?document='+sid);
   await page.getByRole('button', {name:'Bron openen voor annotatie'}).click();
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
@@ -111,11 +113,19 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-finalize').click();
   await page.waitForURL(url => url.pathname === '/annotations/build');
   await page.waitForFunction(() => document.getElementById('annotation-build-status').dataset.buildState === 'succeeded', {timeout:30000});
+  const completedAttempt = new URL(page.url()).searchParams.get('attempt');
+  assert.ok(completedAttempt);
+  await page.goto(base+'/annotations/build?document='+sid);
+  await page.getByRole('heading',{name:'Laatste bouwopdracht'}).waitFor();
+  assert.equal(await page.locator('#annotation-build-status').innerText(),'Geslaagd');
+  assert.equal(await page.getByText('Kennisobjecten gebouwd',{exact:true}).locator('+ dd').innerText(),'1');
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:1000});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
     await page.screenshot({path:`${output}/human-build-${width}.png`,fullPage:true});
   }
+  await page.goto(base+'/annotations/build?document='+sid+'&attempt='+completedAttempt);
+  await page.getByRole('heading',{name:'Laatste bouwopdracht'}).waitFor();
   await page.locator('#annotation-build-review').click();
   await page.waitForURL(url => url.pathname === '/review');
 

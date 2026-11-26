@@ -999,47 +999,96 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         return JSONResponse({'review_url':'/review?'+urlencode({'document':document,'object':result['object_id']})},
                             headers={'Cache-Control':'no-store'})
 
-    def build_status(actor, document, attempt_id):
-        envelope = console._envelope(document)
-        domain.authorize(console, actor['account_id'], envelope)
-        from src.vorming.worker_handover_v1 import native_attempt
-        attempt = native_attempt(console, document, attempt_id)
-        if not attempt or attempt.get('kind') != 'human_annotation_build':
-            raise ConsoleError('annotation_build_unknown')
-        state = attempt['state']
-        message = ('De kennisobjecten zijn opgebouwd. De bij ontvangst gekozen beoordeling blijft gelden.' if state == 'succeeded'
-            else 'De kennisobjecten worden opgebouwd. Je kunt deze pagina verlaten; de opdracht is opgeslagen.' if state == 'running'
-            else 'De opbouw is gestopt. Je opgeslagen annotaties zijn bewaard. Controleer het documentoverzicht.')
-        return {'state':state, 'message':message, 'title':envelope['title'],
-                'detail':ERRORS.get(attempt.get('error_code'), '') if state != 'running' else ''}
+    def build_state_label(attempt):
+        if attempt['state'] == 'running':
+            return 'Wacht op verwerking' if attempt['dispatch_state'] == 'pending' else 'Bezig'
+        return 'Geslaagd' if attempt['state'] == 'succeeded' else 'Gestopt'
+
+    def build_status(actor, document, attempt, *, history=False):
+        from src.vorming.human_annotation_build_read_v1 import status_overview
+        return status_overview(console, actor, document, attempt, history=history)
 
     @app.get('/annotations/build/api')
-    def get_build_status(request: Request, document: str, attempt: str):
-        return JSONResponse(build_status(require(request), document, attempt), headers={'Cache-Control':'no-store'})
+    def get_build_status(request: Request, document: str, attempt: str = ''):
+        envelope, selected, _ = build_status(require(request), document, attempt)
+        result = {'title': envelope['title'], 'attempt_id': None}
+        if selected:
+            result.update(attempt_id=selected['attempt_id'], state=selected['state'],
+                          message=build_state_label(selected), duration_seconds=selected['duration_seconds'],
+                          current=selected['current'], started_at=selected['claimed_at'],
+                          detail=ERRORS.get(selected['error_code'], ''))
+        return JSONResponse(result, headers={'Cache-Control': 'no-store'})
 
     @app.get('/annotations/build', response_class=HTMLResponse)
-    def build_page(request: Request, document: str, attempt: str):
+    def build_page(request: Request, document: str, attempt: str = ''):
+        from datetime import datetime, timezone
+
+        def show_time(value):
+            if not value:
+                return 'Niet vastgelegd'
+            timestamp = datetime.fromisoformat(value) if isinstance(value, str) else value
+            return ('<time datetime="' + esc(timestamp.isoformat()) + '">' +
+                    timestamp.astimezone(timezone.utc).strftime('%d-%m-%Y %H:%M UTC') + '</time>')
+
         actor = require(request)
-        status = build_status(actor, document, attempt)
-        body = '<h1>Opbouw van het document</h1><h2>'+esc(status['title'])+'</h2>'
-        body += '<p id="annotation-build-status" role="status" aria-live="polite" data-build-state="'+esc(status['state'])+'">'+esc(status['message'])+'</p>'
-        body += '<p id="annotation-build-detail">'+esc(status['detail'])+'</p>'
-        with console.workflow_document_store._connect() as con:
-            outline = con.execute(
-                'SELECT s.payload->%s AS definition FROM workflow.annotation_build_commands c '
-                'JOIN workflow.annotation_seals s USING(seal_id) WHERE c.snapshot_id=%s AND c.attempt_id=%s',
-                (structure.KEY, document, attempt),
-            ).fetchone()
-        if outline and outline['definition'] is not None:
-            body += '<details><summary>Bevestigde inhoudsopgave</summary><ul>' + ''.join(
-                f'<li style="margin-inline-start:{row["level"] - 1}rem">{esc(row["title"])}</li>'
-                for row in outline['definition']['entries']
-            ) + '</ul></details>'
-        body += '<p><a id="annotation-build-review"'+(' hidden' if status['state']!='succeeded' else '')+' href="/review?'+esc(urlencode({'document':document}))+'">Kennisobjecten en toepasselijke beoordeling openen</a></p>'
-        body += '<p><a href="/annotations?'+esc(urlencode({'document':document,'overview':'true'}))+'">Terug naar documentcontrole</a></p>'
-        body += '<p><a href="'+esc(str(request.url))+'">Status opnieuw laden</a></p>'
-        body += '<script src="/annotations/build.js" defer></script>'
-        return HTMLResponse(page(nav(actor,'selection')+'<section class="room">'+body+'</section>', title='Opbouw van het document'), headers={'Cache-Control':'no-store'})
+        envelope, selected, attempts = build_status(actor, document, attempt, history=True)
+        title = 'Bouwopdrachten'
+        body = '<h1>' + title + '</h1><p class="lead">' + esc(envelope['title'])
+        if envelope.get('version'):
+            body += ' · Bronversie ' + esc(envelope['version'])
+        body += '</p>'
+        if not selected:
+            body += '<p>Er is nog geen bouwopdracht voor dit document.</p>'
+        else:
+            params = {'document': document, 'attempt': selected['attempt_id']}
+            poll_url = '/annotations/build/api?' + urlencode(params)
+            label = 'Laatste bouwopdracht' if selected['latest'] else 'Geselecteerde bouwopdracht'
+            body += f'<article class="doc-card"><h2>{label}</h2>'
+            body += (f'<p id="annotation-build-status" class="banner" role="status" '
+                     f'data-build-state="{esc(selected["state"])}" data-status-url="{esc(poll_url)}">'
+                     f'{build_state_label(selected)}</p>')
+            if not selected['current']:
+                body += '<p class="banner warn">Deze opdracht hoort bij een eerdere bouw of annotatieversie.</p>'
+            duration = selected['duration_seconds']
+            built_count, review_count = selected['built_count'], selected['review_count']
+            fields = (
+                ('Annotatieversie', str(selected['generation']), ''),
+                ('Opdracht ingediend', show_time(selected['started_at']), ''),
+                ('Gestart', show_time(selected['claimed_at']), ' id="annotation-build-started"'),
+                ('Duur sinds indienen', f'{duration} s' if duration is not None else 'Niet vastgelegd', ' id="annotation-build-duration"'),
+                ('Kennisobjecten gebouwd', str(built_count) if built_count is not None else 'Onbekend', ''),
+                ('Klaar voor Review', str(review_count) if review_count is not None else 'Onbekend', ''),
+            )
+            body += '<dl>' + ''.join(f'<div><dt>{key}</dt><dd{attr}>{value}</dd></div>'
+                                     for key, value, attr in fields) + '</dl>'
+            if selected['state'] not in {'running', 'succeeded'}:
+                reason = ERRORS.get(selected['error_code'], '')
+                if not reason:
+                    reason = ('Meldcode: ' + selected['error_code'] if selected['error_code']
+                              else 'De reden is niet vastgelegd.')
+                body += '<p id="annotation-build-detail">' + esc(reason) + '</p>'
+            outline = selected['outline']
+            if outline and outline['entries']:
+                body += '<details><summary>Bevestigde inhoudsopgave</summary><ul>' + ''.join(
+                    f'<li>{esc(row["title"])}</li>' for row in outline['entries']) + '</ul></details>'
+            if selected['current'] and review_count:
+                review = '/review?' + urlencode({'document': document})
+                body += f'<p><a id="annotation-build-review" class="btn-primary" href="{esc(review)}">Naar Review</a></p>'
+            elif selected['can_recover']:
+                recovery = '/annotations?' + urlencode({'document': document, 'overview': 'true'})
+                body += f'<p><a class="btn-secondary" href="{esc(recovery)}">Naar Documentcontrole</a></p>'
+            body += '<p id="annotation-build-feedback" class="muted" role="status" hidden></p></article>'
+            other_attempts = [row for row in attempts if row['attempt_id'] != selected['attempt_id']]
+            if other_attempts:
+                items = []
+                for row in other_attempts:
+                    link = '/annotations/build?' + urlencode({'document': document, 'attempt': row['attempt_id']})
+                    items.append(f'<li><a href="{esc(link)}">{build_state_label(row)} · '
+                                 f'{show_time(row["started_at"])} · Annotatieversie {row["generation"]}</a></li>')
+                body += '<details><summary>Andere bouwopdrachten</summary><ul>' + ''.join(items) + '</ul></details>'
+            body += '<script src="/annotations/build.js" defer></script>'
+        return HTMLResponse(page(nav(actor, 'selection') + '<section class="room annotation-build-room">' +
+                            body + '</section>', title=title), headers={'Cache-Control': 'no-store'})
 
     @app.get('/annotations/build.js')
     def build_script(request: Request):
