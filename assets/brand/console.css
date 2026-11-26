@@ -2610,3 +2610,26 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
   .publication-room .banner.ok { animation-name: metis-reveal-banner; animation-duration: 240ms; }
 }
 
+
+.annotation-build-room {
+  max-width: 48rem;
+}
+.annotation-build-room .doc-card {
+  margin-block-end: var(--space-4);
+}
+.annotation-build-room dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: var(--space-3);
+  margin-block: var(--space-4);
+}
+.annotation-build-room dt {
+  color: var(--muted);
+}
+.annotation-build-room dd {
+  margin-inline-start: 0;
+  font-weight: 700;
+}
+.annotation-build-room li {
+  margin-block: var(--space-2);
+}
