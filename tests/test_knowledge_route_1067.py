@@ -21,34 +21,34 @@ def following(html):
 
 
 def test_the_second_review_appears_only_when_it_applies():
-    assert 'Tweede review' not in milestones(annotation_route(overview=False, second_review=False))
-    assert milestones(annotation_route(overview=False, second_review=True)) == [
+    assert 'Tweede review' not in milestones(annotation_route(checking=False, second_review=False))
+    assert milestones(annotation_route(checking=False, second_review=True)) == [
         'Inleveren', 'Annoteren', 'Documentcontrole', 'Bouwen', 'Review', 'Tweede review', 'Publicatie']
 
 
 def test_earlier_milestones_are_marked_done_and_one_is_current():
-    html = annotation_route(overview=True, second_review=False)
+    html = annotation_route(checking=True, second_review=False)
     assert current(html) == 'Documentcontrole'
     assert html.count('data-route-done') == 2 and html.count('aria-current') == 1
 
 
 @pytest.mark.parametrize('kwargs,expected_current,expected_next', [
-    (dict(overview=False, second_review=False), 'Annoteren', 'controleer je het document'),
-    (dict(overview=True, second_review=False), 'Documentcontrole', 'bouwt Metis de kennisobjecten'),
-    (dict(overview=True, second_review=False, finalized='running'), 'Bouwen', 'Daarna gaan ze naar de review'),
-    (dict(overview=True, second_review=True, finalized='succeeded'), 'Review', 'de reviewer beoordeelt'),
+    (dict(checking=False, second_review=False), 'Annoteren', 'Ik ben klaar met dit document'),
+    (dict(checking=True, second_review=False), 'Documentcontrole', 'Afronden en bouwen'),
+    (dict(checking=True, second_review=False, finalized='running'), 'Bouwen', 'Daarna gaan ze naar de review'),
+    (dict(checking=True, second_review=True, finalized='succeeded'), 'Review', 'de reviewer beoordeelt'),
 ])
 def test_annotation_pages_say_what_follows(kwargs, expected_current, expected_next):
     html = annotation_route(**kwargs)
     assert current(html) == expected_current
-    assert following(html).startswith('Hierna: ') and expected_next in following(html)
+    assert expected_next in following(html)
 
 
 @pytest.mark.parametrize('state,kwargs,expected_current,expected_next', [
     (IN_REVIEW, dict(stage_second=False, required_second=False), 'Review', 'klaar voor publicatie'),
     (IN_REVIEW, dict(stage_second=False, required_second=True), 'Review', 'beoordeelt een tweede reviewer'),
     (TWEEDE_REVIEW, dict(stage_second=True, required_second=True), 'Tweede review', 'klaar voor publicatie'),
-    (IN_REVIEW, dict(stage_second=False, required_second=False, rebuilding='saved'), 'Bouwen', 'bouw het kennisobject opnieuw'),
+    (IN_REVIEW, dict(stage_second=False, required_second=False, rebuilding='saved'), 'Bouwen', 'Rond Documentcontrole af'),
     (IN_REVIEW, dict(stage_second=False, required_second=False, rebuilding='building'), 'Bouwen', 'komt terug in de review'),
     (GOEDGEKEURD, dict(stage_second=False, required_second=False), 'Publicatie', 'gepubliceerd met het document'),
     # Codex P2: approved once under a four-eyes review; the second approval is still missing.
@@ -99,6 +99,8 @@ def test_document_check_route_follows_the_real_build(tmp_path, production_consol
     fields.update(type_evidence_spans={'core': True}, **{TYPE_CORE_FIELDS['explanation']: {'core': True}})
     request['selection'].update(object_type='explanation', field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
+    from tests.test_human_annotation_build_postgres import open_document_check
+    open_document_check(console, actor, sid)
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username': 'route', 'password': 'route-secret-1067'})
         page = lambda: client.get('/annotations', params={'document': sid, 'overview': 'true'}).text

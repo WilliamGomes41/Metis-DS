@@ -78,7 +78,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                                     'browser_saved_annotations_check.cjs':2,
                                     'browser_source_first_card_check.cjs':9,
                                     'browser_one_offer_check.cjs':2,
-                                    'browser_annotation_source_selection_check.cjs':4,
+                                    'browser_annotation_source_selection_check.cjs':7,
                                     'browser_annotation_binding_check.cjs':2,
                                     'browser_annotation_document_check.cjs':2,
                                     'browser_annotation_strength_label_check.cjs':2,
@@ -86,8 +86,6 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                                     'browser_test_document_deletion_check.cjs':5,
                                     'browser_human_build_check.cjs':10,
                                     'browser_human_review_check.cjs':8}.get(script,6)
-            if script == 'browser_annotation_source_selection_check.cjs' and env.get('METIS_ANNOTATION_CONFIRMED_STRUCTURE') == '1':
-                expected_screenshots += 3
             assert len(list(tmp_path.glob('*.png'))) == expected_screenshots
         finally:
             server.terminate()

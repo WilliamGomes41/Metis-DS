@@ -122,6 +122,8 @@ def test_list_item_leaning_on_its_introduction_goes_from_annotation_to_approved_
     checked = annotation.check_current(console, actor_id=actor, snapshot_id=sid, annotation_id=request['annotation_id'])
     assert checked['codes'] == []
     assert {'subject_missing', 'predicate_missing', 'supported_object_missing'} <= set(checked['signals'])
+    from tests.test_human_annotation_build_postgres import open_document_check
+    open_document_check(console, actor, sid)
     overview = build.overview(console, actor_id=actor, snapshot_id=sid)
     assert overview['can_finalize'] and overview['inspection']['findings'] == []
 

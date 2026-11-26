@@ -19,8 +19,7 @@ const fs=require('node:fs');
   await Promise.all([page.waitForURL(url=>url.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
   const sid=new URL(page.url()).searchParams.get('document');
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
-  const confirmStructure=process.env.METIS_ANNOTATION_CONFIRMED_STRUCTURE==='1';
-  if(confirmStructure){
+  {
     const confirm=page.getByRole('button',{name:'Bevestig en ga annoteren'});
     await confirm.waitFor();
     await page.getByLabel('Kop 1',{exact:true}).fill('Bevestigde bronselectie');
@@ -42,8 +41,9 @@ const fs=require('node:fs');
   assert.equal(await headings.count(),2);
   const destinations=await headings.evaluateAll(links=>links.map(link=>decodeURIComponent(link.hash.slice(1))));
   assert.notEqual(destinations[0],destinations[1],'Repeated heading text must navigate to separate source blocks');
-  if(confirmStructure){
+  {
     assert.equal(await contents.locator('[data-section-status]').count(),0);
+    await page.getByRole('button',{name:'Ik ben klaar met dit document',exact:true}).click();
     await contents.getByRole('button',{name:'Dekking hele richtlijn controleren',exact:true}).click();
     const firstSection=contents.locator('li').filter({has:page.getByRole('link',{name:'Herhaalde kop',exact:true})}).first();
     await firstSection.getByRole('button',{name:'Markeer als nagekeken: Herhaalde kop',exact:true}).click();
@@ -93,7 +93,7 @@ const fs=require('node:fs');
   const touchPage=await mobile.newPage();touchPage.on('pageerror',error=>errors.push(error.message));
   await touchPage.goto(base+'/annotations?'+new URLSearchParams({document:sid,annotation}));
   const mobileContents=touchPage.getByRole('navigation',{name:'Inhoudsopgave',exact:true});
-  if(confirmStructure){
+  {
     await mobileContents.getByRole('link',{name:'Bevestigde bronselectie',exact:true}).waitFor();
     assert.equal(await mobileContents.locator('[data-section-status="checked"]').count(),1);
     await touchPage.screenshot({path:output+'/section-coverage-mobile.png',fullPage:true});

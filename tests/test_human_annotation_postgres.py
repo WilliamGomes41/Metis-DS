@@ -172,7 +172,14 @@ def test_http_source_and_autosave_contract(tmp_path, production_console, product
     client = TestClient(production_app(console),base_url='https://testserver')
     assert client.post('/login',data={'username':'annotator','password':'annotation-secret'},follow_redirects=False).status_code==303
     response = client.get('/annotations?document='+sid)
-    assert response.status_code==200
+    assert response.status_code==200 and 'Inhoudsopgave bevestigen' in response.text
+    from src.vorming import confirmed_document_structure_v1 as structure
+    outline = structure.proposed(view['blocks'])
+    confirm = {'document': sid, 'basis': view['extraction_hash'],
+               'anchor': [row['block_id'] for row in outline],
+               'title': [row['title'] for row in outline], 'level': [row['level'] for row in outline]}
+    assert client.post('/annotations/structure', data=confirm).status_code == 200
+    response = client.get('/annotations?document='+sid)
     assert 'id="annotation-simple-rows"' in response.text and 'data-source-block' in response.text
     # #1060 slice 5: the card is the only input; the step form is gone from the page.
     assert 'annotation-steps' not in response.text and 'Gebruik als kernuitspraak' not in response.text
@@ -183,7 +190,9 @@ def test_http_source_and_autosave_contract(tmp_path, production_console, product
     stale = client.post('/annotations/api',json=command(view,ranges=[]))
     assert stale.status_code==409 and stale.json()['error']=='annotation_write_conflict'
     summary = client.get('/annotations?document='+sid+'&overview=true')
-    assert summary.status_code==200 and 'Voorwaarde' in summary.text and 'Selectie nog niet gereed' in summary.text
+    assert summary.status_code==200
+    assert 'Opgeslagen annotaties' in summary.text and 'Ik ben klaar met dit document' in summary.text
+    assert 'action="/annotations/finalize"' not in summary.text
     assert client.get('/annotations/api',params={'document':sid}).json()['entries'][0]['ranges'][0]['quote']==request['selection']['ranges'][0]['quote']
     original = client.get('/annotations/original',params={'document':sid})
     assert original.status_code==200 and original.headers['content-disposition'].startswith('attachment')

@@ -161,9 +161,7 @@ def test_text_that_is_no_statement_is_accounted_for_in_the_document(smetten):
     with TestClient(application_for(env['console'])) as client:
         client.post('/login', data={'username': 'voorstel', 'password': 'human-proposal-secret'})
         page = client.get('/annotations', params={'document': env['sid'], 'overview': 'true'}).text
-        assert 'Nog niet verantwoord bronmateriaal' in page and '/annotations/source-role' not in page
-        editor = client.get('/annotations', params={'document': env['sid']}).text
-        assert 'Zonder voorstel' in editor and 'Kop of documentstructuur' in editor
+        assert 'Inhoudsopgave bevestigen' in page and '/annotations/source-role' not in page
         view = annotation.overview(env['console'], actor_id=env['actor'], snapshot_id=env['sid'], include_source_work=True)
         gap = next(gap for gap in view['source_work']['ranges'] if gap['block_id'] == intro['block_id'])
         form = {'document': env['sid'], 'command_id': 'gap-1', 'expected_generation': str(view['generation']),
@@ -173,7 +171,7 @@ def test_text_that_is_no_statement_is_accounted_for_in_the_document(smetten):
         assert refused.status_code == 409 and 'Kies een bronfunctie' in refused.text
         saved = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-2', 'reason': 'structure:document_structure'},
                             follow_redirects=False)
-        assert saved.status_code == 303 and saved.headers['location'].endswith('#annotation-source-work')
+        assert saved.status_code == 303 and saved.headers['location'].endswith('#annotation-controls')
         # Repeating the same command is the same receipt, not a second annotation.
         again = client.post('/annotations/source-role', data={**form, 'command_id': 'gap-2', 'reason': 'structure:document_structure'},
                             follow_redirects=False)
@@ -224,7 +222,7 @@ def test_source_group_confirmation_saves_only_current_selected_members(tmp_path,
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username': 'bronrestjes', 'password': 'fixture-only'})
         editor = client.get('/annotations', params={'document': sid})
-        assert editor.status_code == 200 and 'Voorstel: Documentgegevens (3)' in editor.text
+        assert editor.status_code == 200 and 'Inhoudsopgave bevestigen' in editor.text
         assert view()['generation'] == opened['generation']
         before = build.overview(console, actor_id=actor, snapshot_id=sid)
         assert not before['can_finalize']
@@ -263,5 +261,4 @@ def test_source_group_confirmation_saves_only_current_selected_members(tmp_path,
         assert [span['quote'] for span in saved['ranges']] == ['Versie: 2.4', 'Datum: november 2026']
         assert [item['key'] for item in after['source_work']['ranges']] == [group['members'][2], clinical['key']]
         overview = client.get('/annotations', params={'document': sid, 'overview': 'true'}).text
-        assert 'Verantwoorde restbereiken: 2' in overview and 'Open bronbereiken: 2' in overview
         assert '/annotations/source-role' not in overview

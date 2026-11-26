@@ -653,7 +653,7 @@ def overview(console, *, actor_id, snapshot_id, include_source_work=False, inclu
         from src.vorming.human_annotation_preview_v1 import inspect_for_overview, source_work
         inspection = inspect_for_overview(entries, fragments=fragments, confirmed_headings=structure.anchors(confirmation))
         coverage['source_work'] = source_work(inspection, blocks)
-    if (include_source_work or include_coverage) and confirmation is not None and structure.enabled():
+    if (include_source_work or include_coverage) and confirmation is not None:
         from src.vorming import annotation_section_coverage_v1 as section_coverage
         coverage[section_coverage.KEY] = section_coverage.project(confirmation, blocks, entries, capture.get(section_coverage.KEY))
     for entry in entries:
@@ -709,7 +709,7 @@ def _capture_heads(console, snapshot_id, *, include_coverage=False):
         capture = _annotation_heads(con, snapshot_id)
         from src.vorming import confirmed_document_structure_v1 as structure
         capture[structure.KEY] = structure.read(con, snapshot_id)
-        if include_coverage and structure.enabled() and capture[structure.KEY] is not None:
+        if include_coverage and capture[structure.KEY] is not None:
             from src.vorming import annotation_section_coverage_v1 as section_coverage
             capture[section_coverage.KEY] = section_coverage.read(con, snapshot_id)
         history = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (snapshot_id,)).fetchall()]

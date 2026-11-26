@@ -25,6 +25,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
     await Promise.all([page.waitForURL(url=>url.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
     const sid=new URL(page.url()).searchParams.get('document');
     await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click();
     await page.locator('#annotation-editor-inputs:enabled').waitFor();
     assert.equal(await page.locator('#annotation-saved').count(),1,'the saved list must stay in the annotation workplace');
     const list=()=>page.locator('#annotation-saved-list li');
@@ -78,7 +79,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
       await page.setViewportSize({width,height:1100});
       await page.evaluate(()=>window.scrollTo(0,0));
       assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-      for(const link of await page.locator('#annotation-saved-list a, #annotation-saved-overview').all())
+      for(const link of await page.locator('#annotation-saved-list a').all())
         assert((await link.boundingBox()).height>=44,'compact rows must retain touch targets');
       if([1440,390].includes(width)) await page.screenshot({path:output+'/saved-annotations-'+width+'.png',fullPage:true});
     }
@@ -86,13 +87,10 @@ const tasks=require('./browser_annotation_tasks.cjs');
     await page.getByText('Wijs een eigen uitspraak aan:',{exact:false}).waitFor();
     await page.locator('.annotation-instruction summary').click();
 
-    await page.locator('#annotation-saved-overview').click();
-    await page.waitForURL(url=>url.searchParams.get('overview')==='true');
-    await page.locator('#annotation-finalize').click();
+    await page.getByRole('button',{name:'Ik ben klaar met dit document',exact:true}).click();
+    await page.getByRole('button',{name:'Afronden en bouwen',exact:true}).click();
     await page.waitForURL(url=>url.pathname==='/annotations/build');
-    await page.goto(base+'/annotations?document='+sid);
-    await savedRow(first).getByText('Wordt gebouwd',{exact:true}).waitFor();
-    await savedRow(second).getByText('Wordt gebouwd',{exact:true}).waitFor();
+    await page.locator('[data-build-state=running]').waitFor();
     let fullSourceReads=0;
     page.on('request',request=>{
       if(request.method()==='GET' && new URL(request.url()).pathname==='/annotations/api') fullSourceReads+=1;
@@ -103,20 +101,21 @@ const tasks=require('./browser_annotation_tasks.cjs');
       if(failPoll) {failPoll=false;return route.fulfill({status:503,contentType:'application/json',body:'{}'});}
       return route.continue();
     });
-    await page.locator('#annotation-saved-notice').filter({hasText:'De voortgang kon niet worden opgehaald'}).waitFor();
-    assert.equal(await list().count(),2);
+    await page.locator('#annotation-build-feedback').filter({hasText:'Verversen lukt tijdelijk niet'}).waitFor();
     assert.equal(fullSourceReads,0,'a progress tick must not reload the entire source and annotation set');
     await page.evaluate(()=>fetch('/browser-release-build',{method:'POST'}));
+    await page.locator('[data-build-state=succeeded]').waitFor({timeout:20000});
+    await page.goto(base+'/annotations?document='+sid);
     await savedRow(first).getByText('Beschikbaar voor Review',{exact:true}).waitFor({timeout:20000});
     await savedRow(second).getByText('Beschikbaar voor Review',{exact:true}).waitFor();
-    assert.equal(await page.locator('#annotation-saved-notice').isVisible(),false);
     assert.equal(Object.keys((await read()).object_bindings).length,2);
     await savedRow(first).getByRole('link').click();
-    await page.getByRole('button',{name:'Terug naar review',exact:true}).waitFor();
+    await page.locator('#annotation-editor-inputs:enabled').waitFor();
+    assert.equal(await page.getByRole('button',{name:'Terug naar review',exact:true}).count(),0);
     assert.deepEqual(errors,[]);
     fs.writeFileSync(output+'/saved-annotations.json',JSON.stringify({
       savedAcrossNextAndReload:true,keyboardReopen:true,failedSaveKeepsReceipt:true,
-      withdrawal:true,documentCheck:true,runningBuild:true,failedPollPreservesList:true,
+      withdrawal:true,documentCheck:true,runningBuild:true,failedPollPreservesBuildStatus:true,
       completedBuild:true,widths:[1440,390],errors
     },null,2));
   } finally {await browser.close();}

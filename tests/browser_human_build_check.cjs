@@ -36,10 +36,11 @@ const assert = require('node:assert/strict');
   await page.getByText('Er is nog geen bouwopdracht voor dit document.').waitFor();
   await page.goto(base+'/annotations?document='+sid);
   await page.getByRole('button', {name:'Bron openen voor annotatie'}).click();
+  await page.getByRole('button', {name:'Bevestig en ga annoteren'}).click();
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
-  await page.goto(base+'/annotations?document='+sid+'&overview=true');
-  assert.equal(await page.locator('#annotation-finalize').count(),0);
-  await page.getByRole('heading',{name:'Nog niet verantwoord bronmateriaal'}).waitFor();
+  await page.getByRole('button',{name:'Ik ben klaar met dit document',exact:true}).click();
+  await page.getByRole('heading',{name:'Documentcontrole',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Afronden en bouwen',exact:true}).count(),0);
   assert.equal(await page.locator('form[action="/annotations/source-role"]').count(),0);
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:1000});
@@ -47,7 +48,6 @@ const assert = require('node:assert/strict');
     await page.screenshot({path:`${output}/human-incomplete-${width}.png`,fullPage:true});
   }
   await page.setViewportSize({width:1440,height:1000});
-  await page.getByRole('link',{name:'Verder aanwijzen'}).click();
   // A person selects in a card that is ready; a selection made while the page still loads is no card behaviour.
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
   const core = page.locator('[data-source-block]').first();
@@ -93,8 +93,7 @@ const assert = require('node:assert/strict');
   const after = (await page.evaluate(async sid => (await fetch('/annotations/api?document='+sid)).json(), sid)).entries;
   assert.equal(after.filter(entry => entry.status !== 'withdrawn').length,1);
   await page.goto(base+'/annotations?document='+sid+'&overview=true');
-  await page.waitForURL(url => url.searchParams.get('overview') === 'true');
-  await page.locator('#annotation-finalize').waitFor();
+  await page.getByRole('button',{name:'Afronden en bouwen',exact:true}).waitFor();
   assert.match(await page.locator('body').innerText(), /De kwetsbare huid verklaart de pijn\./);
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:1000});
@@ -102,7 +101,7 @@ const assert = require('node:assert/strict');
     await page.screenshot({path:`${output}/human-overview-${width}.png`,fullPage:true});
   }
   await page.locator('[name=overview_hash]').evaluate(input => {input.value='stale-view';});
-  await page.locator('#annotation-finalize').click();
+  await page.getByRole('button',{name:'Afronden en bouwen',exact:true}).click();
   await page.getByRole('heading',{name:'Document nog niet afgesloten'}).waitFor();
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:1000});
@@ -110,7 +109,7 @@ const assert = require('node:assert/strict');
     await page.screenshot({path:`${output}/human-stale-${width}.png`,fullPage:true});
   }
   await page.getByRole('link',{name:'Terug naar documentcontrole'}).click();
-  await page.locator('#annotation-finalize').click();
+  await page.getByRole('button',{name:'Afronden en bouwen',exact:true}).click();
   await page.waitForURL(url => url.pathname === '/annotations/build');
   await page.waitForFunction(() => document.getElementById('annotation-build-status').dataset.buildState === 'succeeded', {timeout:30000});
   const completedAttempt = new URL(page.url()).searchParams.get('attempt');
@@ -134,27 +133,19 @@ const assert = require('node:assert/strict');
   const groupedId=new URL(groupedUpload.url).searchParams.get('document');
   await page.goto(base+'/annotations?document='+groupedId);
   await page.getByRole('button',{name:'Bron openen voor annotatie'}).click();
+  await page.getByRole('button',{name:'Bevestig en ga annoteren'}).click();
   await page.locator('#annotation-editor-inputs:enabled').waitFor();
-  assert.equal(await page.locator('.annotation-source-rest-label').count(),3);
   await page.setViewportSize({width:390,height:1000});
-  await page.getByRole('link',{name:'Voorstel: Documentgegevens'}).first().focus();
-  await page.keyboard.press('Enter');
-  const group=page.locator('#annotation-source-work details').filter({hasText:'Voorstel: Documentgegevens (3)'});
-  await group.getByRole('checkbox',{name:'Versie: 2.3'}).uncheck();
+  await page.getByRole('button',{name:'Ik ben klaar met dit document',exact:true}).click();
+  await page.getByRole('heading',{name:'Documentcontrole',exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Afronden en bouwen',exact:true}).count(),0);
+  assert.equal(await page.locator('form[action="/annotations/source-role"]').count(),0);
+  await page.getByText('Versie: 2.3',{exact:true}).waitFor();
+  await page.getByText('Controleer de huid dagelijks.',{exact:true}).waitFor();
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),false);
-  await group.getByRole('button',{name:'Bevestig geselecteerde tekst als documentgegevens'}).click();
-  await page.locator('#annotation-editor-inputs:enabled').waitFor();
-  await page.waitForFunction(() => document.querySelectorAll('.annotation-source-rest-label').length===1);
-  await page.goto(base+'/annotations?document='+groupedId+'&overview=true');
-  assert.match(await page.locator('body').innerText(), /Verantwoorde restbereiken: 2 · Open bronbereiken: 2/);
-  await page.getByRole('link',{name:'Beoordelen in document'}).last().click();
-  await page.locator('#annotation-source-work details[open]').getByText('Controleer de huid dagelijks.',{exact:true}).waitFor();
-  await page.locator('#annotation-source-work details[open]').getByRole('link',{name:'Ga naar tekst'}).click();
-  await page.locator('mark[data-source-rest-focus]').filter({hasText:'Controleer de huid dagelijks.'}).waitFor();
-  assert.equal(await page.locator('.annotation-source-rest-label').count(),1);
   assert.deepEqual(errors,[]);
   fs.writeFileSync(output+'/result.json', JSON.stringify({upload:true,ingestChoice:'uploader_sole',mouse:true,
-    exactFields:true,pause:true,newSession:true,overview:true,seal:true,durableDispatch:true,
-    humanBuild:true,reviewRoute:true,sourceGroups:true,widths:[1440,390]},null,2));
+    exactFields:true,pause:true,newSession:true,documentCheck:true,seal:true,durableDispatch:true,
+    humanBuild:true,reviewRoute:true,sourcePreserved:true,widths:[1440,390]},null,2));
   await browser.close();
 })().catch(async error => {console.error(error);await tasks.describeCard(globalThis.metisProofPage);process.exit(1);});

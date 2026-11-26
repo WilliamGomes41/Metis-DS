@@ -1,6 +1,4 @@
 """Actual PG/ASGI correction fixture; no test endpoints in product code."""
-import os
-
 from src.vorming import annotation_document_check_v1 as document_check
 from src.vorming import annotation_section_coverage_v1 as coverage
 from src.vorming import confirmed_document_structure_v1 as structure
@@ -13,9 +11,7 @@ from tests.test_reviewer_recommendation_semantics_1067 import prepared_recommend
 app = browser_application('human-review')
 console = app.state.operations_kernel
 recommendation_sid, recommendation, _, _ = prepared_recommendation(console, explicitly_proposed=True)
-os.environ['METIS_ANNOTATION_DOCUMENT_CHECK'] = '1'
-os.environ['METIS_ANNOTATION_CONFIRMED_STRUCTURE'] = '1'
-_, actor, sid, original = saved_source(lambda **kwargs: console, console.root, context_function='supported_by')
+_, actor, sid, original = saved_source(lambda **kwargs: console, console.root, context_function='supported_by', for_build=False)
 scope = {'actor_id': actor, 'snapshot_id': sid}
 initial = annotation.overview(console, **scope)
 structure.confirm(console, **scope, extraction_hash=initial['extraction_hash'], entries=[])

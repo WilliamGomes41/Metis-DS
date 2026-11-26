@@ -12,6 +12,8 @@ from uuid import uuid4
 import pytest
 
 from src.operations_console_v1 import ConsoleError
+from src.vorming import annotation_document_check_v1 as document_check
+from src.vorming import confirmed_document_structure_v1 as structure
 from src.vorming import human_annotation_v1 as annotation
 from src.vorming import human_annotation_build_v1 as build
 from src.vorming.source_bound_fields_v3 import FIELDS
@@ -20,7 +22,7 @@ from tests.test_human_annotation_postgres import anchor, command
 
 
 def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=False, source_status="unknown",
-                 context_function=None, heading='', claim_tail='', second_heading='', **options):
+                 context_function=None, heading='', claim_tail='', second_heading='', for_build=True, **options):
     console = production_console(root=tmp_path, **options)
     actor = console.create_account(username='builder', password='human-build-secret', roles=('researcher', 'reviewer'))['account_id']
     reviewer = console.create_account(username='reviewer', password='human-build-secret', roles=('reviewer',))['account_id']
@@ -57,7 +59,22 @@ def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=
         fields['condition_span']={'span':{k:condition[k] for k in ('block_id','start','end')},
                                   'quote':condition['quote'],'missing_reason':None}
     annotation.save(console, actor_id=actor, **request)
+    if for_build:
+        open_document_check(console, actor, sid)
     return console, actor, sid, request
+
+
+def open_document_check(console, actor, sid):
+    scope = {'actor_id': actor, 'snapshot_id': sid}
+    view = annotation.overview(console, **scope)
+    checked = build.overview(console, **scope)
+    if checked['document_round'] and checked['document_round']['phase'] == 'checking':
+        return
+    if view.get(structure.KEY) is None:
+        structure.confirm(console, **scope, extraction_hash=view['extraction_hash'],
+                          entries=structure.proposed(view['blocks']))
+    document_check.transition(console, **scope, phase='checking', expected_generation=view['generation'],
+                              expected_round=(checked['document_round'] or {}).get('revision', 0))
 
 
 def closing(view):
@@ -326,6 +343,7 @@ def test_multiple_core_ranges_across_paragraphs_build_one_claim_with_essential_c
     request = command(view, ranges=[first,last,condition], status='ready')
     request['selection'].update(object_type='explanation', evidence_not_applicable=True, field_evidence=fields)
     annotation.save(console, actor_id=actor, **request)
+    open_document_check(console, actor, sid)
     receipt = build.finalize(console, actor_id=actor, **closing(build.overview(console, actor_id=actor, snapshot_id=sid)))
     from src.vorming.worker_handover_v1 import native_attempt
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=native_attempt(console, sid, receipt['attempt_id']))
@@ -418,7 +436,7 @@ def test_version_ten_upgrade_keeps_input_but_never_invents_a_seal(tmp_path, prod
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
     from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
     from src.workflows.formation_recovery_v1 import BUILD_TABLES, STRUCTURE_TABLE, COVERAGE_TABLE, ROUND_TABLE
-    console, _, _, _ = saved_source(production_console, tmp_path)
+    console, _, _, _ = saved_source(production_console, tmp_path, for_build=False)
     current = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
     old = deepcopy(current)
     old['workflow_recovery_version'] = 10

@@ -1,6 +1,6 @@
 # #1064 — Kennisobject opnieuw bouwen vanuit de kaart
 
-Voor werkrevisies met Documentcontrole beschrijft [#1156](1156-annotation-document-check.md) de correctieroute van #1169. De werkplek gebruikt daar **Aanpassing opslaan** en **Afronden en bouwen**.
+Sinds #1170 is bouw per object uit de console verwijderd. Voor de huidige werkplek beschrijft [#1156](1156-annotation-document-check.md) de correctieroute van #1169. De werkplek gebruikt daar **Aanpassing opslaan** en **Afronden en bouwen**.
 
 Change class: B
 Promise: Een reviewer past een kennisobject uit annotatie aan in dezelfde kaart, bouwt het met één knop opnieuw en vindt de nieuwe versie terug in Review, met de vorige versie in de versieregel.

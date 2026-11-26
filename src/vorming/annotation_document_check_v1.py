@@ -1,6 +1,4 @@
 """The annotation round and the input to the existing build seal."""
-import os
-
 from src.vorming import annotation_section_coverage_v1 as coverage
 from src.vorming import confirmed_document_structure_v1 as structure
 from src.vorming import human_annotation_v1 as annotations
@@ -8,10 +6,6 @@ from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from src.workflows.workflow_transaction_v1 import workflow_transaction
 
 KEY = 'document_check'
-
-
-def enabled():
-    return os.getenv('METIS_ANNOTATION_DOCUMENT_CHECK') == '1'
 
 
 def storage_available(con):
@@ -26,7 +20,9 @@ def read(con, snapshot_id):
 
 
 def transition(console, *, actor_id, snapshot_id, phase, expected_generation, expected_round):
-    if phase not in ('annotating', 'checking') or type(expected_generation) is not int or type(expected_round) is not int:
+    if type(expected_generation) is not int or type(expected_round) is not int:
+        annotations.fail('annotation_document_round_invalid')
+    if phase != 'checking':
         annotations.fail('annotation_document_round_invalid')
     with console._store_write_lock(), workflow_transaction(console.workflow_document_store) as con:
         annotations._locked(console, con, actor_id, snapshot_id)
@@ -37,12 +33,10 @@ def transition(console, *, actor_id, snapshot_id, phase, expected_generation, ex
         if not storage_available(con):
             annotations.fail('annotation_document_round_unavailable')
         current = read(con, snapshot_id)
-        if current is None and (not enabled() or structure.has_seal(con, snapshot_id)):
+        if current is None and structure.has_seal(con, snapshot_id):
             annotations.fail('annotation_document_round_unavailable')
-        if current is None and structure.enabled() and structure.read(con, snapshot_id) is None:
+        if structure.read(con, snapshot_id) is None:
             annotations.fail('annotation_structure_confirmation_required')
-        if current is None and phase != 'checking':
-            annotations.fail('annotation_document_round_stale')
         revision = current['revision'] if current else 0
         if active['generation'] != expected_generation:
             annotations.fail('annotation_document_round_stale')
