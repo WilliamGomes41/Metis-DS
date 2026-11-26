@@ -242,3 +242,74 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
         assert not guard.rows
     finally:
         unregister_backend(root / 'runtime/review_ledger.jsonl')
+
+
+def test_document_built_before_documentcontrole_rebuilds_a_correction_in_its_own_form(production_console, tmp_path,
+                                                                                         monkeypatch):
+    """#1170: a seal without a round keeps one rebuild path; untouched objects stay exact."""
+    from starlette.testclient import TestClient
+    from src.operations_console_v1 import ConsoleError
+    from src.vorming import annotation_document_check_v1 as document_check
+    from src.vorming import human_annotation_build_v1 as build
+    from src.vorming import human_annotation_v1 as annotation
+    from src.vorming.worker_handover_v1 import native_attempt
+    from tests.production_support import application_for
+    from tests.test_human_annotation_build_postgres import closing, saved_source
+    from tests.test_human_annotation_review_postgres import approve, correction_request, save_second_claim
+
+    for setting in ('METIS_ANNOTATION_CONFIRMED_STRUCTURE', 'METIS_ANNOTATION_DOCUMENT_CHECK'):
+        monkeypatch.delenv(setting, raising=False)
+    console, author, sid, first = saved_source(production_console, tmp_path / 'runtime', context_function='supported_by',
+                                               for_build=False)
+    second = save_second_claim(console, author, sid)
+    run_previous_annotation(console, tmp_path, """
+from src.vorming import human_annotation_build_v1 as build
+from src.vorming.worker_handover_v1 import native_attempt
+from uuid import uuid4
+
+view = build.overview(console, **scope)
+assert view['can_finalize'] and not view['document_check_flow'], view['inspection']
+receipt = build.finalize(console, actor_id=scope['actor_id'], snapshot_id=sid, command_id=str(uuid4()),
+                         overview_hash=view['overview_hash'], expected_generation=view['generation'],
+                         expected_revision=view['objects_revision'])
+console.execute_source_selection(**scope, attempt=native_attempt(console, sid, receipt['attempt_id']))
+""", author, sid)
+    scope = {'actor_id': author, 'snapshot_id': sid}
+    built = build.overview(console, **scope)
+    assert built['legacy_build'] and built['already_built'] and not built['can_finalize']
+    reviewer = console._envelope(sid)['named_reviewers'][0]
+    objects = {obj['metadata']['human_annotation']['annotation_id']: obj['object_id']
+               for obj in console.snapshot_objects(sid) if (obj.get('metadata') or {}).get('human_annotation')}
+    oid, untouched = objects[first['annotation_id']], objects[second['annotation_id']]
+    for item in (oid, untouched):
+        approve(console, sid, item, reviewer)
+    kept = next(obj for obj in console.snapshot_objects(sid) if obj['object_id'] == untouched)
+    before = next(obj for obj in console.snapshot_objects(sid) if obj['object_id'] == oid)
+
+    request = correction_request(console, sid, first)
+    next(a for a in request['selection']['ranges'] if a['role'] == 'evidence')['evidence_function'] = 'explains'
+    annotation.save(console, actor_id=reviewer, **request)
+    assert build.correction_state(console, sid, oid) == 'saved'
+    view = annotation.overview(console, **scope)
+    with pytest.raises(ConsoleError, match='annotation_document_round_unavailable'):
+        document_check.transition(console, **scope, phase='checking', expected_generation=view['generation'],
+                                  expected_round=0)
+    checked = build.overview(console, actor_id=reviewer, snapshot_id=sid)
+    assert checked['legacy_build'] and checked['can_finalize'], checked['inspection']
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username': 'reviewer', 'password': 'human-build-secret'})
+        panel = client.get('/annotations', params={'document': sid}).text.split('id="annotation-document-check-title"')[1]
+    assert 'Dit document is gebouwd vóór Documentcontrole.' in panel
+    assert 'Opnieuw bouwen' in panel and 'Afronden en bouwen' not in panel
+    assert 'Ik ben klaar met dit document' not in panel
+
+    receipt = build.finalize(console, actor_id=reviewer, **closing(checked))
+    console.execute_source_selection(actor_id=reviewer, snapshot_id=sid,
+                                     attempt=native_attempt(console, sid, receipt['attempt_id']))
+    after = {obj['object_id']: obj for obj in console.snapshot_objects(sid)}
+    assert after[oid]['object_version'] != before['object_version']
+    assert after[oid]['metadata']['revision_lineage']['previous_object_version'] == before['object_version']
+    assert after[untouched]['object_version'] == kept['object_version']
+    assert after[untouched]['governance'] == kept['governance']
+    assert build.correction_state(console, sid, oid) is None
+    assert build.overview(console, **scope)['legacy_build']

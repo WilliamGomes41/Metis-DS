@@ -100,6 +100,16 @@ def _capture(con, snapshot_id, store, actor_id):
     return row, entries, {**basis, 'overview_hash': stable_hash(basis)}
 
 
+def legacy_document(con, snapshot_id, basis):
+    """#1170: a document sealed before Documentcontrole keeps building in that form.
+
+    It has no round and can no longer get one, so a correction rebuilds through
+    the same materialiser without a round. Untouched objects stay identical.
+    """
+    from src.vorming import confirmed_document_structure_v1 as structure
+    return document_check.KEY not in basis and structure.has_seal(con, snapshot_id)
+
+
 def latest_build(connection, snapshot_id):
     """Project the existing durable build command; never start or change a build."""
     active = connection.execute("SELECT a.attempt_id,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
@@ -114,6 +124,7 @@ def overview(console, *, actor_id, snapshot_id):
         con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         row, entries, basis = _capture(con, snapshot_id, console.workflow_document_store, actor_id)
         active = latest_build(con, snapshot_id)
+        legacy = legacy_document(con, snapshot_id, basis)
     fragments = stored_extraction({**row['source_identity'], 'prepared_source_extraction': row['extraction']})
     if fragments is None or row['extraction']['record_hash'] != row['extraction_hash']:
         annotations.fail('annotation_representation_stale')
@@ -123,26 +134,26 @@ def overview(console, *, actor_id, snapshot_id):
     check_input = basis.get(document_check.KEY)
     inspection = inspect_for_overview(entries, fragments=fragments,
                                       confirmed_headings=structure.anchors(basis.get(structure.KEY)),
-                                      allow_unselected=True)
-    if not any(row['payload']['status'] == 'ready' and row['payload'].get('disposition') is None
-               for row in entries):
+                                      allow_unselected=not legacy)
+    if not legacy and not any(row['payload']['status'] == 'ready' and row['payload'].get('disposition') is None
+                              for row in entries):
         inspection['findings'].append({'annotation_id': None, 'code': 'annotation_knowledge_required'})
-    if check_input is None:
-        inspection['findings'].append({'annotation_id': None, 'code': 'annotation_document_round_required'})
-    else:
+    if check_input is not None:
         inspection['findings'].extend(document_check.findings(check_input, basis.get(structure.KEY), entries, fragments))
+    elif not legacy:
+        inspection['findings'].append({'annotation_id': None, 'code': 'annotation_document_round_required'})
     # Display is the existing source reader. A concurrent save requires a new
     # overview; its entries may never be presented under this seal's hash.
     view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
     if view['generation'] != basis['generation'] or view.get(structure.KEY) != basis.get(structure.KEY):
         annotations.fail('annotation_overview_stale')
-    if structure.KEY not in basis:
+    if structure.KEY not in basis and not legacy:
         inspection['findings'].append({'annotation_id': None, 'code': 'annotation_structure_confirmation_required'})
     from src.review.knowledge_route_v1 import build_is_current
     already_built = (active and active['state'] == 'succeeded'
                      and build_is_current(view['entries'], view['object_bindings']))
     return {**view, 'title': basis['context']['title'], 'overview_hash': basis['overview_hash'],
-            'document_round': check_input['round'] if check_input else None,
+            'document_round': check_input['round'] if check_input else None, 'legacy_build': legacy,
             'already_built': bool(already_built), 'materialization_context': basis['context'],
             'inspection': inspection, 'current_build': dict(active) if active else None,
             'can_finalize': not already_built and not inspection['findings'] and view['objects_revision'] == row['objects_revision']
@@ -211,7 +222,8 @@ def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
         receipt = issued_receipt(con)
         if receipt:
             return receipt
-        if (basis.get(document_check.KEY, {}).get('round', {}).get('phase') != 'checking'
+        if not legacy_document(con, snapshot_id, basis) and (
+                basis.get(document_check.KEY, {}).get('round', {}).get('phase') != 'checking'
                 or 'confirmed_document_structure' not in basis):
             annotations.fail('annotation_document_incomplete')
         if (basis['overview_hash'] != overview_hash or view['overview_hash'] != overview_hash

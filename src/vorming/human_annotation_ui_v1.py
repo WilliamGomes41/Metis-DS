@@ -409,17 +409,20 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
     def document_check_panel(state, actor, document):
         if console.snapshot_is_published(document):
             return ''
-        if (state.get('document_round') or {}).get('phase') != 'checking':
-            if state.get('document_round') is None and state.get('current_build'):
-                return '<p>Deze eerdere bouw heeft geen Documentcontrole.</p>'
+        legacy = state.get('document_round') is None and state.get('current_build')
+        if (state.get('document_round') or {}).get('phase') != 'checking' and not legacy:
             return round_form(state, document)
         from src.vorming import human_annotation_build_v1 as build
         checked = build.overview(console, actor_id=actor['account_id'], snapshot_id=document)
-        if (checked.get('document_round') or {}).get('phase') != 'checking':
+        legacy = checked['legacy_build']
+        if (checked.get('document_round') or {}).get('phase') != 'checking' and not legacy:
             return ''
         findings = checked['inspection']['findings']
         body = '<section class="annotation-document-check" aria-labelledby="annotation-document-check-title">'
         body += '<h2 id="annotation-document-check-title" tabindex="-1">Documentcontrole</h2>'
+        if legacy:
+            # #1170: built before Documentcontrole; a correction rebuilds in that same form.
+            body += '<p>Dit document is gebouwd vóór Documentcontrole. Metis bouwt het opnieuw in dezelfde vorm.</p>'
         active = checked['current_build']
         if active and active['state'] == 'running':
             body += '<p role="status">Metis bouwt de opgeslagen annotaties.</p>'
@@ -456,7 +459,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                       'expected_generation': str(checked['generation']), 'expected_revision': checked['objects_revision']}
             hidden = ''.join(f'<input type="hidden" name="{key}" value="{esc(value)}">' for key, value in fields.items())
             body += ('<form method="post" action="/annotations/finalize" data-confirmed-document-build>'
-                     + hidden + '<button class="btn-primary" type="submit">Afronden en bouwen</button></form>')
+                     + hidden + '<button class="btn-primary" type="submit">'
+                     + ('Opnieuw bouwen' if legacy else 'Afronden en bouwen') + '</button></form>')
         return body + '</section>'
 
     @app.get('/annotations', response_class=HTMLResponse)
