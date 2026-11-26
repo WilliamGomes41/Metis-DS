@@ -258,14 +258,9 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         confirmed_only=reading or published)
     # #1064 and #1169: a saved correction needs a successful build before this version can be approved.
     rebuilding = None
-    document_check_flow = False
     if annotation and not published:
         from src.vorming.human_annotation_build_v1 import correction_state
         rebuilding = correction_state(console, sid, obj['object_id'])
-        if rebuilding == 'saved':
-            from src.vorming import annotation_document_check_v1 as document_check
-            with console.workflow_document_store._connect() as con:
-                document_check_flow = document_check.read(con, sid) is not None
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
                        and descriptor.can_confirm and not conflict and not rebuilding)
     lineage = (obj.get('metadata') or {}).get('revision_lineage') or {}
@@ -425,7 +420,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             # #1067: where this object is and what happens next; only for objects from annotation.
             + (review_route(state, stage_second=second or _rejected_in_second_review(console, obj),
                             required_second=route_second, rebuilding=rebuilding or '',
-                            second_pending=second_pending, document_check_flow=document_check_flow)
+                            second_pending=second_pending)
                if annotation else '')
             + notice + '<div class="ko-review-layout" data-document-assessment="'
             + escape(inputs.document_assessment, quote=True) + '">'

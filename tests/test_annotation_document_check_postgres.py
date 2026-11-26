@@ -35,11 +35,9 @@ from tests.test_vsa_publish_readiness_ui_v1 import MemorySourceStore, _complete_
 @pytest.mark.parametrize('scope', ['selection', 'full'])
 def test_same_workspace_check_build_review_and_publication(
         tmp_path, monkeypatch, production_console, production_app, scope):
-    monkeypatch.setenv('METIS_ANNOTATION_DOCUMENT_CHECK', '1')
-    monkeypatch.setenv('METIS_ANNOTATION_CONFIRMED_STRUCTURE', '1')
     store = MemorySourceStore()
     console, actor, sid, saved = saved_source(production_console, tmp_path,
-        review_option='uploader_sole', source_status='established', immutable_source_store=store,
+        review_option='uploader_sole', for_build=False, source_status='established', immutable_source_store=store,
         heading='<h1>Algemeen</h1><p>Overige begeleidende tekst.</p><h1>Diagnostiek</h1>')
 
     def state(kernel=console):
@@ -70,6 +68,7 @@ def test_same_workspace_check_build_review_and_publication(
     assert 'data-confirmed-document-build' not in old_link.text
     with console.workflow_document_store._connect() as con:
         assert check.read(con, sid) is None
+    prior = closing(overview())
     form = {'document': sid, 'phase': 'checking', 'expected_generation': baseline['generation'],
             'expected_round': 0}
     for _ in range(2):
@@ -80,13 +79,11 @@ def test_same_workspace_check_build_review_and_publication(
 
     resumed = restart_production(console)
     assert overview(resumed)['document_round']['revision'] == 1
-    monkeypatch.delenv('METIS_ANNOTATION_DOCUMENT_CHECK')
     assert overview(resumed)['document_round']['phase'] == 'checking'
     panel = client.get('/annotations', params={'document': sid, 'overview': 'true'})
     assert 'Verder annoteren' not in panel.text and 'Overige begeleidende tekst' in panel.text
     assert panel.text.index('Opgeslagen annotaties') < panel.text.index('id="annotation-document-check-title"')
     assert 'data-confirmed-document-build' in panel.text
-    prior = closing(overview())
     section_view = state()[coverage.KEY]
     if scope == 'full':
         coverage.write(console, actor_id=actor, snapshot_id=sid, basis=section_view['basis'], scope='full')
@@ -97,12 +94,10 @@ def test_same_workspace_check_build_review_and_publication(
         for section in section_view['sections']:
             coverage.write(console, actor_id=actor, snapshot_id=sid, basis=section_view['basis'],
                            section=section['block_id'], fingerprint=section['fingerprint'])
-    else:
-        # This is a new round even when the selected evidence stays the same.
-        for revision, phase in [(1, 'annotating'), (2, 'checking')]:
-            check.transition(resumed, actor_id=actor, snapshot_id=sid, phase=phase,
-                             expected_round=revision, expected_generation=baseline['generation'])
-            assert overview(resumed)['can_finalize'] == (phase == 'checking')
+    reverse = client.post('/annotations/round', data={**form, 'phase': 'annotating', 'expected_round': 1},
+                          follow_redirects=False)
+    assert reverse.status_code == 409
+    assert overview()['document_round']['phase'] == 'checking'
 
     assert_no_build()
     assert overview()['can_finalize']
@@ -110,7 +105,7 @@ def test_same_workspace_check_build_review_and_publication(
         build.finalize(resumed, actor_id=actor, **prior)
     outsider = console.create_account(username='outside', password='human-review-secret', roles=('reviewer',))
     with pytest.raises(ConsoleError, match='reviewer_not_named_on_snapshot'):
-        check.transition(resumed, actor_id=outsider['account_id'], snapshot_id=sid, phase='annotating',
+        check.transition(resumed, actor_id=outsider['account_id'], snapshot_id=sid, phase='checking',
                          expected_round=overview()['document_round']['revision'], expected_generation=baseline['generation'])
 
     close = closing(overview())
@@ -141,9 +136,7 @@ def test_same_workspace_check_build_review_and_publication(
     assert native_attempt(console, sid, first['attempt_id'])['state'] == 'succeeded'
     assert build.finalize(resumed, actor_id=actor, **close) == first
     assert not overview()['can_finalize']
-    with pytest.raises(ConsoleError, match='annotation_document_round_required'):
-        build.rebuild(console, actor_id=actor, snapshot_id=sid, annotation_id=saved['annotation_id'],
-                      command_id=str(uuid4()), expected_generation=overview()['generation'])
+    assert client.post('/annotations/rebuild', json={'document': sid}).status_code == 404
     objects = console.snapshot_objects(sid, include_blocked=True)
     assert sum(bool(o.get('metadata', {}).get('human_annotation')) for o in objects) == 1
     assert not any('Overige begeleidende tekst' in str(o['content']) for o in objects)
@@ -178,11 +171,17 @@ def test_same_workspace_check_build_review_and_publication(
 
 
 def test_annotation_round_history_survives_operational_restore(tmp_path, monkeypatch, production_console):
-    monkeypatch.setenv('METIS_ANNOTATION_DOCUMENT_CHECK', '1')
-    console, actor, sid, _ = saved_source(production_console, tmp_path)
-    for previous, phase in enumerate(('checking', 'annotating', 'checking')):
-        check.transition(console, actor_id=actor, snapshot_id=sid, phase=phase,
-                         expected_round=previous, expected_generation=1)
+    console, actor, sid, _ = saved_source(production_console, tmp_path, for_build=False)
+    view = annotation.overview(console, actor_id=actor, snapshot_id=sid)
+    structure.confirm(console, actor_id=actor, snapshot_id=sid, extraction_hash=view['extraction_hash'], entries=[])
+    # A previous supported writer persisted the inverse phase. The reader and
+    # restore path must still accept it, while current writes can only resume checking.
+    with console.workflow_document_store._connect() as con:
+        con.execute("INSERT INTO workflow.annotation_round_events(snapshot_id, revision, phase, generation, actor_id) "
+                    "VALUES (%s, 1, 'checking', 1, %s), (%s, 2, 'annotating', 1, %s)",
+                    (sid, actor, sid, actor))
+    check.transition(console, actor_id=actor, snapshot_id=sid, phase='checking',
+                     expected_round=2, expected_generation=1)
     result = build.finalize(console, actor_id=actor,
         **closing(build.overview(console, actor_id=actor, snapshot_id=sid)))
     config = console.workflow_document_store.config
@@ -202,9 +201,7 @@ def test_annotation_round_history_survives_operational_restore(tmp_path, monkeyp
 
 def test_full_plain_source_and_annotation_change_requires_new_section_check(
         tmp_path, monkeypatch, production_console):
-    monkeypatch.setenv('METIS_ANNOTATION_DOCUMENT_CHECK', '1')
-    monkeypatch.setenv('METIS_ANNOTATION_CONFIRMED_STRUCTURE', '1')
-    console, actor, sid, saved = saved_source(production_console, tmp_path)
+    console, actor, sid, saved = saved_source(production_console, tmp_path, for_build=False)
     inputs = {'actor_id': actor, 'snapshot_id': sid}
     view = annotation.overview(console, **inputs)
     assert not structure.proposed(view['blocks'])

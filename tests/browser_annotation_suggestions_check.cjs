@@ -19,7 +19,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('[name=class_]').selectOption('richtlijn');await page.locator('[name=review_option][value=uploader_sole]').check();
  await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
  const sid=new URL(page.url()).searchParams.get('document');
- await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
  await page.locator('.annotation-instruction summary').click();await page.getByText('Wijs een eigen uitspraak aan:',{exact:false}).waitFor();await page.locator('.annotation-instruction summary').click();
  const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
  const current=async()=>(await read()).entries.find(e=>e.annotation_id===new URL(page.url()).searchParams.get('annotation'));
@@ -40,7 +41,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.screenshot({path:output+'/meaning-proposed.png',fullPage:true});
  // #1067: the route says where the work is and what follows; '?' explains each row and stays open.
  assert.equal(await page.locator('nav.ko-route [aria-current=step]').innerText(),'Annoteren');
- assert.match(await page.locator('nav.ko-route .ko-route-next').innerText(),/^Hierna: /);
+ assert.match(await page.locator('nav.ko-route .ko-route-next').innerText(),/Ik ben klaar met dit document/);
  const help=page.locator('#annotation-simple-rows dt[data-row=context] .annotation-help-toggle');
  await help.click();
  await page.locator('#annotation-help-context').getByText('Wijs aan wat nodig is om de uitspraak te begrijpen',{exact:false}).waitFor();

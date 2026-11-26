@@ -235,8 +235,6 @@ def test_original_smetten_pdf_strength_label_reaches_review(tmp_path, production
 
     source = Path(os.environ['METIS_SMETTEN_PDF'])
     monkeypatch.setenv('METIS_PDF_EXTRACTOR', os.getenv('METIS_PDF_EXTRACTOR', 'docling'))
-    monkeypatch.setenv('METIS_ANNOTATION_CONFIRMED_STRUCTURE', '1')
-    monkeypatch.setenv('METIS_ANNOTATION_DOCUMENT_CHECK', '1')
     console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
     actor, sid, view, request = prepare_recommendation_pdf(console, 'same', source_bytes=source.read_bytes())
     inputs = {'actor_id': actor, 'snapshot_id': sid}

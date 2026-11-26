@@ -34,6 +34,7 @@ const assert=require('node:assert/strict');
    requestedModule();await gate;await route.continue();
   });
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click({noWaitAfter:true});
+  await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click({noWaitAfter:true});
   await page.locator('[data-source-block]').first().waitFor();
   await moduleRequested;
   // While the module is held the card cannot save; if its controls are closed, it says why.

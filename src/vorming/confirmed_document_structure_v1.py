@@ -1,6 +1,4 @@
 """The human-confirmed section structure belongs to one prepared annotation source."""
-import os
-
 from src.integrity_kernel import stamp_canonical_hashes
 from src.vorming import human_annotation_v1 as annotations
 from src.vorming.semantic_passage_v1 import semantic_source_blocks
@@ -9,10 +7,6 @@ from src.workflows.workflow_transaction_v1 import workflow_transaction
 
 KEY = 'confirmed_document_structure'
 SECTION_KEY = 'confirmed_section'
-
-
-def enabled():
-    return os.getenv('METIS_ANNOTATION_CONFIRMED_STRUCTURE') == '1'
 
 
 def in_source_contents(path):

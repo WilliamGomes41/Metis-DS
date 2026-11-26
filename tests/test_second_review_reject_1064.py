@@ -133,8 +133,10 @@ def test_a_correction_after_the_rejection_starts_again_at_the_first_review(produ
     request = correction_request(console, sid, original)
     next(a for a in request['selection']['ranges'] if a['role'] == 'evidence')['evidence_function'] = 'explains'
     saved = annotation.save(console, actor_id=first, **request)
-    result = build.rebuild(console, actor_id=first, snapshot_id=sid, annotation_id=original['annotation_id'],
-                           command_id='after-reject', expected_generation=saved['generation'])
+    from tests.test_human_annotation_build_postgres import closing
+    request = closing(build.overview(console, actor_id=first, snapshot_id=sid))
+    assert request['expected_generation'] == saved['generation']
+    result = build.finalize(console, actor_id=first, **{**request, 'command_id': 'after-reject'})
     from src.vorming.worker_handover_v1 import native_attempt
     console.execute_source_selection(actor_id=first, snapshot_id=sid, attempt=native_attempt(console, sid, result['attempt_id']))
     obj = current(console, sid, rejected)

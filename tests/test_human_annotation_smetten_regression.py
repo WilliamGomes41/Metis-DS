@@ -62,13 +62,17 @@ def test_smetten_exception_survives_human_annotation_build_and_review(tmp_path, 
     saved = annotation.save(console, actor_id=actor, **request)
 
     overview = build.overview(console, actor_id=actor, snapshot_id=sid)
-    assert overview['inspection']['unaccounted_ranges'] == [{**exception_span, 'quote': exception}]
+    pending = annotation.overview(console, actor_id=actor, snapshot_id=sid, include_source_work=True)
+    assert any({**exception_span, 'quote': exception}.items() <= gap.items()
+               for gap in pending['source_work']['ranges'])
     assert not overview['can_finalize']
 
     request.update(command_id=str(uuid4()), expected_revision=saved['revision'],
                    expected_generation=saved['generation'])
     request['selection']['ranges'].append(exception_range)
     annotation.save(console, actor_id=actor, **request)
+    from tests.test_human_annotation_build_postgres import open_document_check
+    open_document_check(console, actor, sid)
     overview = build.overview(console, actor_id=actor, snapshot_id=sid)
     assert overview['can_finalize'], overview['inspection']
     execute_build(console, actor, sid)

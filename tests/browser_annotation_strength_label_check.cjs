@@ -15,7 +15,9 @@ const {selectText} = require('./browser_annotation_tasks.cjs');
     await page.locator('[name=password]').fill(fixture.password);
     await Promise.all([page.waitForURL(url=>url.pathname!='/login'),page.locator('button[type=submit]').click()]);
     await page.goto(base+'/annotations?'+new URLSearchParams({document:fixture.snapshot,annotation:fixture.annotation}));
+    await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click();
     await page.locator('#annotation-editor-inputs:enabled').waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('annotation'), fixture.annotation);
 
     const block = page.locator('[data-source-block]').filter({hasText:fixture.label});
     const button = page.locator('#annotation-selection-menu').getByRole('button',{name:'Sterktelabel',exact:true});

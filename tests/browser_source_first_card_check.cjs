@@ -21,7 +21,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.locator('[name=class_]').selectOption('richtlijn');await page.locator('[name=review_option][value=uploader_sole]').check();
  await Promise.all([page.waitForURL(u=>u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
  const sid=new URL(page.url()).searchParams.get('document');
- await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
  const block=text=>page.locator('[data-source-block]').filter({hasText:text.slice(0,25)});
  const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
  const current=async()=>(await read()).entries.find(e=>e.annotation_id===new URL(page.url()).searchParams.get('annotation'));
@@ -35,7 +36,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // This fixture returns no initial offer. Wait for the request to settle before counting the actions.
  await page.locator('#annotation-offer-message').getByText('Geen voorstel gevonden.',{exact:false}).waitFor();
  // Only one action exists before anything is selected: there is nothing to save yet.
- assert.deepEqual(await page.locator('#annotation-controls button:visible').allInnerTexts(),['Opslaan en bronselectie beëindigen']);
+ assert.deepEqual(await page.locator('#annotation-controls button:visible').allInnerTexts(),['Ik ben klaar met dit document']);
  const minus=(key,text)=>row(key).locator('.annotation-line').filter({hasText:text}).locator('button.annotation-sign');
  // 1. Selecting is the statement: the text appears, nothing to confirm or fill in.
  await tasks.selectText(page,block(item),item.slice(0,40));
@@ -175,7 +176,8 @@ const tasks=require('./browser_annotation_tasks.cjs');
  // 3. Evidence is added when the source has it; the card asks no choice. One button finishes.
  assert.equal(await row('evidence').getByRole('button',{name:/Staat niet in de bron|niet van toepassing/}).count(),0);
  await page.locator('#annotation-ready:enabled').waitFor();
- assert.equal(await page.locator('#annotation-controls .btn-primary:visible').count(),1);
+ assert.equal(await page.locator('.annotation-task-actions .btn-primary:visible').count(),1);
+ assert.equal(await page.getByRole('button',{name:'Ik ben klaar met dit document',exact:true}).count(),1);
  await page.screenshot({path:output+'/card-complete.png',fullPage:true});
  // "−" (and a proposal's "+") share one column beside each text.
  const column=await page.evaluate(()=>[...document.querySelectorAll('#annotation-simple-rows .annotation-sign')].map(b=>Math.round(b.getBoundingClientRect().right)));
@@ -324,30 +326,16 @@ const tasks=require('./browser_annotation_tasks.cjs');
  await page.screenshot({path:output+'/card-mobile.png',fullPage:true});
  await page.setViewportSize({width:1440,height:1000});
  // Ending source selection saves and opens the document check, where the next phase starts.
- await page.locator('#annotation-saved-overview').click();
- await page.waitForURL(u=>u.searchParams.get('overview')==='true');
- // Open work is visible in the overview. The exact source link leads to the classification in the document.
- const gap=page.locator('#annotation-gaps+ul li').filter({has:page.locator('q',{hasText:/^Smetten$/})});
- await gap.getByRole('link',{name:'Beoordelen in document'}).click();
- const sourceGap=page.locator('#annotation-source-work li').filter({has:page.locator('q',{hasText:/^Smetten$/})});
- await sourceGap.locator('select').selectOption('structure:document_structure');
- await sourceGap.getByRole('button',{name:'Vastleggen'}).click();
- await sourceGap.waitFor({state:'detached'});
- const disposition=(await read()).entries.find(e=>e.status==='ready' && e.disposition?.reason==='document_structure' && e.ranges[0].quote==='Smetten');
- assert(disposition);
- await block('Smetten').locator(`mark[data-annotation="${disposition.annotation_id}"]`).click();
- await page.getByText('Geen uitspraak: kop of documentstructuur',{exact:true}).waitFor();
- const restMark=block('Smetten').locator('mark[data-current]');
- assert.equal(await restMark.getAttribute('data-role'),null);
- assert.equal(await restMark.getAttribute('title'),'Geen uitspraak');
- await page.goto(base+'/annotations?document='+sid+'&overview=true');
- assert.equal(await gap.count(),0);
+ await page.getByRole('button',{name:'Ik ben klaar met dit document',exact:true}).click();
+ await page.getByRole('heading',{name:'Documentcontrole',exact:true}).waitFor();
+ assert.equal(await page.locator('form[action="/annotations/source-role"]').count(),0);
+ await page.locator('[data-source-block]').filter({hasText:/^Smetten$/}).waitFor();
  await page.screenshot({path:output+'/document-check-gaps.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.setViewportSize({width:1440,height:1000});
  // The card no longer offers that route: a selection is the statement.
- await page.getByRole('link',{name:'Verder aanwijzen'}).click();await page.locator('#annotation-editor-inputs:enabled').waitFor();
+ await page.locator('#annotation-editor-inputs:enabled').waitFor();
  await tasks.selectText(page,block(support),support);
  await row('core').getByText(support,{exact:true}).waitFor();
  assert.equal(await page.locator('#annotation-simple').getByText(/geen uitspraak/i).count(),0);

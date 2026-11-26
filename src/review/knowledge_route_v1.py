@@ -51,38 +51,30 @@ def build_is_current(entries, bindings) -> bool:
                for entry in entries if entry.get('status') != 'withdrawn')
 
 
-def annotation_route(*, overview: bool, second_review: bool, finalized: str = '',
-                     document_check_flow: bool = False) -> str:
+def annotation_route(*, checking: bool, second_review: bool, finalized: str = '') -> str:
     """The annotation card and the document check. ``finalized`` is the build state after closing, if any."""
     if finalized == 'running':
         return route_html('build', 'Hierna: Metis bouwt de kennisobjecten. Daarna gaan ze naar de review.',
                           second_review=second_review)
     if finalized == 'succeeded':
         return route_html('review', 'Hierna: de reviewer beoordeelt elk kennisobject.', second_review=second_review)
-    if document_check_flow:
-        if overview:
-            return route_html('check', 'Gebruik ‘Afronden en bouwen’ zodra de documentcontrole gereed is.',
-                              second_review=second_review)
-        return route_html('annotate', 'Kies ‘Ik ben klaar met dit document’ om de documentcontrole te openen.',
+    if checking:
+        return route_html('check', 'Gebruik ‘Afronden en bouwen’ zodra de documentcontrole gereed is.',
                           second_review=second_review)
-    if overview:
-        return route_html('check', 'Hierna: na ‘Ik ben klaar met dit document’ bouwt Metis de kennisobjecten. '
-                          'Daarna beoordeelt de reviewer ze.', second_review=second_review)
-    return route_html('annotate', 'Hierna: als alle uitspraken gereed zijn, controleer je het document. '
-                      'Daarna bouwt Metis de kennisobjecten.', second_review=second_review)
+    return route_html('annotate', 'Kies ‘Ik ben klaar met dit document’ om de documentcontrole te openen.',
+                      second_review=second_review)
 
 
 def review_route(state: str | None, *, stage_second: bool, required_second: bool, rebuilding: str = '',
-                 second_pending: bool = False, document_check_flow: bool = False) -> str:
+                 second_pending: bool = False) -> str:
     """The review card of a knowledge object from annotation."""
     second = required_second or stage_second or state == TWEEDE_REVIEW
     if rebuilding == 'building':
         return route_html('build', 'Hierna: de nieuwe versie komt terug in de review. Deze pagina ververst vanzelf.',
                           second_review=second)
     if rebuilding:
-        next_step = ('Rond Documentcontrole af met ‘Afronden en bouwen’.' if document_check_flow
-                     else 'Hierna: bouw het kennisobject opnieuw in de kaart.')
-        return route_html('build', next_step + ' Tot de bouw slaagt is goedkeuren geblokkeerd.',
+        return route_html('build', 'Rond Documentcontrole af met ‘Afronden en bouwen’. '
+                          'Tot de bouw slaagt is goedkeuren geblokkeerd.',
                           second_review=second)
     if state == GEPUBLICEERD:
         return route_html('publish', 'Dit kennisobject is gepubliceerd.', second_review=second)

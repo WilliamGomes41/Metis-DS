@@ -17,13 +17,14 @@ from src.operations_console_v1 import ConsoleError
 from src.vorming import human_annotation_v1 as annotation
 from src.vorming import human_annotation_build_v1 as build
 from tests.production_support import restart_production
-from tests.test_human_annotation_build_postgres import saved_source, closing
+from tests.test_human_annotation_build_postgres import saved_source, closing, open_document_check
 from tests.test_human_annotation_postgres import anchor, command
 from tests.ko_review_fixture_support import affirmative_assessment
 from src.vorming.source_bound_fields_v3 import FIELDS
 
 
 def execute_build(console, actor, sid):
+    open_document_check(console, actor, sid)
     receipt = build.finalize(console, actor_id=actor,
         **closing(build.overview(console, actor_id=actor, snapshot_id=sid)))
     from src.vorming.worker_handover_v1 import native_attempt
@@ -447,6 +448,7 @@ def test_preparing_correction_does_not_hold_shared_writer_or_source_read_lock(pr
     request = correction_request(console, sid, original)
     next(a for a in request['selection']['ranges'] if a['role'] == 'evidence')['evidence_function'] = 'explains'
     annotation.save(console, actor_id=actor, **request)
+    open_document_check(console, actor, sid)
     receipt = build.finalize(console, actor_id=actor, **closing(build.overview(console, actor_id=actor, snapshot_id=sid)))
     from src.vorming.worker_handover_v1 import native_attempt
     paused, resume = Event(), Event()
@@ -532,8 +534,13 @@ def test_restore_cannot_resurrect_approval_for_pending_annotation(production_con
 def test_v11_human_proof_upgrade_preserves_absent_review_payload_without_invention(production_console, tmp_path):
     from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
-    console, actor, sid, _ = saved_source(production_console, tmp_path)
-    execute_build(console, actor, sid)
+    from tests.test_d5_code_rollback_postgres import run_previous_annotation
+    console, actor, sid, _ = saved_source(production_console, tmp_path, for_build=False)
+    run_previous_annotation(console, tmp_path, """
+from tests.test_human_annotation_review_postgres import execute_build
+
+execute_build(console, actor, sid)
+""", actor, sid)
     reviewer = console._envelope(sid)['named_reviewers'][0]
     approve(console, sid, candidate(console, sid)['object_id'], reviewer)
     state = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
@@ -666,8 +673,12 @@ def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(pr
     with TestClient(application_for(resumed)) as client:
         login(client)
         assert client.get('/annotations/api',params={'document':sid}).json()['entries'][0]['annotation_id'] == request['annotation_id']
+        confirmation = client.get('/annotations', params={'document':sid})
+        assert client.post('/annotations/structure', data=form_data(confirmation, '/annotations/structure')).status_code == 200
+        workspace = client.get('/annotations', params={'document':sid})
+        assert client.post('/annotations/round', data=form_data(workspace, '/annotations/round')).status_code == 200
         for cycle in range(2):
-            page = client.get('/annotations', params={'document':sid,'overview':'true'})
+            page = client.get('/annotations', params={'document':sid})
             assert page.status_code == 200 and 'Alleen bij klachten.' in page.text
             closed = client.post('/annotations/finalize', data=form_data(page, '/annotations/finalize'))
             assert closed.status_code == 200, closed.text
