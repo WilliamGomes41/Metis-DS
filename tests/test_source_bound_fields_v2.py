@@ -172,7 +172,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path,
     session = restarted.authenticate('reviewer', 'strong-test-password')
     client.cookies.set(COOKIE, session['token'])
     before = deepcopy(restarted._envelope(sid)), restarted.objects_revision(sid)
-    response = client.get('/review/processing-evidence-export', params={'document': sid})
+    response = client.get('/inzicht/document/verwerkingsbewijs', params={'document': sid})
     assert response.status_code == 200
     with ZipFile(io.BytesIO(response.content)) as archive:
         def rows(name):

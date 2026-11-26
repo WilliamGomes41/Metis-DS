@@ -329,8 +329,8 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path, *, production_app,
     assert all(review_lane(obj) == "slow" for obj in inhoud)
     client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
-    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
-    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=structure").text
+    individual = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     assert f"{len(koppen)} te controleren" not in dashboard
     assert 'data-workboard-document=' in dashboard
     assert not duty
@@ -363,7 +363,7 @@ def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Pat
     client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("headings", "individual", "together", "control")
+        for task in ("structure", "contextual", "batch", "repair")
     )
     css = CSS.read_text(encoding="utf-8")
     titles = _index_link_titles(html)
@@ -443,7 +443,7 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path, *, 
     assert advice_heading["object_type"] == "heading"
     assert advice_heading.get("proposed_recommendation_strength") in {None, ""}
     html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&task=individual"
+        f"/review?document={receipt['snapshot_id']}&task=contextual"
     ).text
     assert "DOEN" not in _index_link_titles(html) or all(
         title not in {"DOEN", "OVERWEEG", "NIET DOEN"} for title in _index_link_titles(html)
@@ -594,7 +594,7 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path, *
     client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("headings", "individual", "together", "control")
+        for task in ("structure", "contextual", "batch", "repair")
     )
     for obj in objects:
         assert _text_of(obj)[:40] in html or obj["object_id"] in html

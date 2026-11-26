@@ -263,7 +263,7 @@ def installed_app(console):
 
 @pytest.mark.parametrize('path,params',[
     ('/publish',{}),('/review',{'work':'all'}),('/review',{}),
-    ('/review',{'task':'disposition'}),('/review',{'task':'individual'}),
+    ('/review',{'task':'disposition'}),('/review',{'task':'contextual'}),
     ('/review',{'task':'detail'}),('/review/bronpassage',{})])
 def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend_state, tmp_path, monkeypatch, path, params, *, production_console):
     import re

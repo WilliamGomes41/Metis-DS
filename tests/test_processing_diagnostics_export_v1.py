@@ -148,7 +148,7 @@ def test_export_matches_pure_projection_and_does_not_mutate_state(tmp_path, *, p
     expected = processing_diagnostics(before_objects)
 
     response = client.get(
-        f"/review/processing-diagnostics?document={snapshot_id}"
+        f"/inzicht/document/diagnostiek?document={snapshot_id}"
     )
 
     assert response.status_code == 200
@@ -179,7 +179,7 @@ def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_stat
     expected = processing_diagnostic_rows(before_objects)
 
     response = client.get(
-        f"/review/processing-diagnostics-detail?document={snapshot_id}"
+        f"/inzicht/document/detaildiagnostiek?document={snapshot_id}"
     )
 
     assert response.status_code == 200
@@ -218,10 +218,10 @@ def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_stat
 def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path, *, production_app, production_console) -> None:
     console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path, production_console=production_console)
     paths = (
-        "/review/passages-export",
-        "/review/processing-evidence-export",
-        "/review/processing-diagnostics",
-        "/review/processing-diagnostics-detail",
+        "/inzicht/document/passages",
+        "/inzicht/document/verwerkingsbewijs",
+        "/inzicht/document/diagnostiek",
+        "/inzicht/document/detaildiagnostiek",
     )
 
     for path in paths:
@@ -250,16 +250,16 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
 
     for path in (
         "/settings/technical",
-        "/review/passages-export",
-        "/review/processing-evidence-export",
-        "/review/processing-diagnostics",
-        "/review/processing-diagnostics-detail",
+        "/inzicht/document/passages",
+        "/inzicht/document/verwerkingsbewijs",
+        "/inzicht/document/diagnostiek",
+        "/inzicht/document/detaildiagnostiek",
     ):
         missing = client.get(f"{path}?document=snap-does-not-exist")
         assert missing.status_code == 400
         assert "unknown_snapshot" in missing.text
 
-    control = client.get(f"/settings/technical/exports?document={snapshot_id}")
+    control = client.get(f"/inzicht/document?document={snapshot_id}")
     assert control.status_code == 200
     assert (
         f'href="/inzicht/document/diagnostiek?document={snapshot_id}"'
@@ -281,7 +281,7 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     envelope = deepcopy(console._envelope(snapshot_id))
     bindings = deepcopy(console.object_review_bindings(snapshot_id))
     expected = [obj for obj in objects if obj["object_type"] != "document"]
-    url = f"/review/passages-export?document={snapshot_id}"
+    url = f"/inzicht/document/passages?document={snapshot_id}"
     response = client.get(url)
     assert response.status_code == 200
     assert "attachment;" in response.headers["content-disposition"]
@@ -302,7 +302,7 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert [row["candidate_text"] for row in exported] == [row["candidate_text"] for row in payload["rows"]]
     assert json.loads(exported[0]["admission"]) == payload["rows"][0]["admission"]
     assert client.get(url + "&format=xml").status_code == 400
-    page = client.get(f"/settings/technical/exports?document={snapshot_id}")
+    page = client.get(f"/inzicht/document?document={snapshot_id}")
     assert "Bronpassages:" in page.text
     assert "&amp;format=csv" in page.text
     assert "&amp;format=json" in page.text
@@ -334,7 +334,7 @@ def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path, *
     assert detail.status_code == 200
     assert 'Mogelijk bronlabel' in detail.text
     assert 'De koppeling en betekenis zijn hiermee niet bevestigd.' not in detail.text
-    response = client.get(f'/review/passages-export?document={sid}&format=csv')
+    response = client.get(f'/inzicht/document/passages?document={sid}&format=csv')
     assert response.status_code == 200
     rows = list(csv.DictReader(io.StringIO(response.content.decode('utf-8-sig'))))
     row = next(r for r in rows if r['object_id'] == target['object_id'])
@@ -400,7 +400,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     monkeypatch.setattr(console, "_extract", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not reextract")))
     client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
-    response = client.get(f"/review/processing-evidence-export?document={snapshot_id}")
+    response = client.get(f"/inzicht/document/verwerkingsbewijs?document={snapshot_id}")
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["content-type"] == "application/zip"
@@ -433,7 +433,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
         assert all("must-not-be-exported" not in archive.read(name).decode("utf-8-sig") for name in archive.namelist())
     assert (console.snapshot_objects(snapshot_id), console._envelope(snapshot_id), console.object_review_bindings(snapshot_id)) == before
     monkeypatch.undo()  # The no-reextract guard applies to the export endpoint.
-    page = client.get(f"/settings/technical/exports?document={snapshot_id}")
+    page = client.get(f"/inzicht/document?document={snapshot_id}")
     assert f'/inzicht/document/verwerkingsbewijs?document={snapshot_id}' in page.text
 
 

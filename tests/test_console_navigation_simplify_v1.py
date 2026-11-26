@@ -39,10 +39,10 @@ def test_review_keeps_primary_next_step_and_removes_batch_source_shortcut() -> N
     html = '''
     <a href="/">Mijn werk</a>
     <section class="review-next-step" aria-labelledby="review-next-title">
-      <a class="btn-primary" href="/review?document=s1&amp;task=individual">Ga verder</a>
+      <a class="btn-primary" href="/review?document=s1&amp;task=contextual">Ga verder</a>
     </section>
-    <a class="review-task-card" href="/review?document=s1&amp;task=individual">Belangrijke passages beoordelen</a>
-    <a href="/review?document=s1&amp;object=o1&amp;task=together">Afzonderlijk beoordelen</a>
+    <a class="review-task-card" href="/review?document=s1&amp;task=contextual">Belangrijke passages beoordelen</a>
+    <a href="/review?document=s1&amp;object=o1&amp;task=batch">Afzonderlijk beoordelen</a>
     <a href="/review/bronpassage?document=s1&amp;object=o1">Bronpassage</a>
     '''
     result = simplify_console_html("/review", html)

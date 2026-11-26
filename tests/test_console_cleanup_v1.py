@@ -98,15 +98,15 @@ def test_review_action_is_visible_and_only_own_human_decisions_start_review(tmp_
 def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, *, production_app, production_console):
     console, _, first, second = _system(tmp_path, production_console=production_console)
     client = _client(console, production_app=production_app)
-    assert client.get("/settings/technical/exports").status_code == 401
+    assert client.get("/inzicht?tab=documenten").status_code == 401
     _login(client, "reviewer.a")
     snapshot = first["snapshot_id"]
-    landing = client.get("/settings/technical/exports")
+    landing = client.get("/inzicht?tab=documenten")
     assert landing.status_code == 200
     assert landing.url.path == "/inzicht"
     documents = client.get("/inzicht/api/documents").json()["documents"]
     assert [row["title"] for row in documents] == ["Document A"]
-    opened = client.get("/settings/technical/exports", params={"document": snapshot})
+    opened = client.get("/inzicht/document", params={"document": snapshot})
     downloads = [attrs["href"] for tag, attrs in Tags(opened.text).tags
                  if tag == "a" and attrs.get("href", "").startswith((
                      "/inzicht/document/passages?", "/inzicht/document/diagnostiek", "/inzicht/document/detaildiagnostiek"))]
@@ -117,7 +117,7 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, 
         denied = client.get(link.replace(snapshot, second["snapshot_id"]))
         assert denied.status_code == 400
         assert "reviewer_not_named_on_snapshot" in denied.text
-    assert client.get("/settings/technical/exports", params={"document": second["snapshot_id"]}).status_code == 400
+    assert client.get("/inzicht/document", params={"document": second["snapshot_id"]}).status_code == 400
     technical = client.get("/settings/technical", params={"document": snapshot})
     assert technical.status_code == 200
     assert "Documentdiagnose" in technical.text
@@ -130,7 +130,7 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, 
     assert "Passages corrigeren" in owner.text
     assert "Diagnostiek en brondekking" not in owner.text
     _login(client, "publisher.carla")
-    assert client.get("/settings/technical/exports").status_code == 200
+    assert client.get("/inzicht?tab=documenten").status_code == 200
     publisher_diagnosis = client.get("/inzicht/document", params={"document": snapshot})
     assert "/inzicht/document/publicatiebewijs?" in publisher_diagnosis.text
     assert "/inzicht/document/passages?" not in publisher_diagnosis.text

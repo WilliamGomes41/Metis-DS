@@ -143,7 +143,7 @@ FILENAME_HINT = (
     "De titel hieronder mag wél spaties bevatten."
 )
 BRAND_DIR = REPO_ROOT / "assets" / "brand"
-CANONICAL_REVIEW_TASKS = frozenset({
+REVIEW_TASKS = frozenset({
     "structure",
     "contextual",
     "batch",
@@ -153,22 +153,18 @@ CANONICAL_REVIEW_TASKS = frozenset({
     "inventory",
     "waiting",
 })
-LEGACY_REVIEW_TASK_ALIASES = {
-    "headings": "structure",
-    "individual": "contextual",
-    "together": "batch",
-    "control": "repair",
-    "closure": "disposition",
-}
-REVIEW_TASKS = frozenset({
-    *CANONICAL_REVIEW_TASKS,
-    *LEGACY_REVIEW_TASK_ALIASES,
-})
 
 
 def normalize_review_task(value: str) -> str:
     task = str(value or "").strip()
-    return LEGACY_REVIEW_TASK_ALIASES.get(task, task if task in CANONICAL_REVIEW_TASKS else "")
+    return task if task in REVIEW_TASKS else ""
+
+
+def requested_review_task(value: str) -> str:
+    task = value.strip()
+    if task and task not in REVIEW_TASKS:
+        raise HTTPException(status_code=404, detail="Not Found")
+    return task
 
 
 def _passage_formation_status_html(state: OperationsConsole) -> str:
@@ -5369,21 +5365,16 @@ def create_console_app(
     @app.get("/review/context-section", response_class=HTMLResponse)
     def review_context_section(request: Request, document: str, object: str, task: str = ""):
         from src.review.ko_document_context_ui_v1 import render_source_section
+        safe_task = requested_review_task(task)
         return HTMLResponse(render_source_section(state, _require(request), document, object,
-            task=normalize_review_task(task)), headers={'Cache-Control': 'no-store'})
+            task=safe_task), headers={'Cache-Control': 'no-store'})
 
     @app.get("/review/bronpassage", response_class=HTMLResponse)
     def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
+        safe_task = requested_review_task(task)
         account = _require(request)
-        if task.strip() in {"history", "decisions"}:
-            from src.review.review_participation_ui_v1 import require_overview
-            require_overview(account)
-            params = {"document": document} if document else {}
-            return RedirectResponse('/review' + ('?' + urlencode(params) if params else ''),
-                                    status_code=303)
         chosen = document.strip()
         object_id = object.strip()
-        safe_task = normalize_review_task(task)
         if not chosen or not object_id:
             raise ConsoleError("unknown_object")
         opened = state.open_source_passage(
@@ -6228,6 +6219,4 @@ def create_console_app(
     install_decision_review_routes(app, state, _require, _page)
     from src.review.review_participation_ui_v1 import install_routes as install_participation_routes
     install_participation_routes(app, state, _require, _page)
-    from src.settings.insight_v1 import install_insight_legacy_routes
-    install_insight_legacy_routes(app, _require)
     return app

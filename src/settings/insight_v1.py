@@ -13,12 +13,12 @@ import time
 import logging
 from html import escape
 from typing import Any, Callable
-from urllib.parse import parse_qsl, urlencode, urlsplit
+from urllib.parse import urlencode
 
 from src.vorming.source_selection_ui_v1 import _source_pages_html
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 TABS = (("systeem", "Systeem"), ("kwaliteit", "Kwaliteit & werkproces"),
         ("documenten", "Documenten"), ("controles", "Controles"))
@@ -729,11 +729,6 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             {source_exports}{publication_export}{passage_exports}</ul></div></div></section></section>'''
         return HTMLResponse(render_page(body, title="Documentdiagnose — Inzicht — Metis"), headers=_HEADERS)
 
-    @app.get("/telemetry")
-    def telemetry_alias(request: Request) -> RedirectResponse:
-        require_account(request)
-        return RedirectResponse("/inzicht?tab=systeem", status_code=303)
-
     @app.get("/inzicht/api/quality")
     def insight_quality(request: Request) -> JSONResponse:
         account = require_account(request)
@@ -756,48 +751,3 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         page = documents_projection(state, account, query=(params.get("q") or "")[:120],
                                     state_filter=params.get("state") or "", offset=offset, limit=limit)
         return JSONResponse(page, headers=_HEADERS)
-
-
-def install_insight_legacy_routes(app: FastAPI, require_account: Callable[[Request], dict]) -> None:
-    """Old GET addresses navigate to the same authorized owner, preserving context."""
-    destinations = {
-        "/settings/technical/processing": "/inzicht/document",
-        "/source-selection/processing-trace": "/inzicht/document/verwerkingsspoor",
-        "/source-selection/publication-evidence": "/inzicht/document/publicatiebewijs",
-        "/source-selection/blockage": "/inzicht/document/blokkade",
-        "/review/passages-export": "/inzicht/document/passages",
-        "/review/processing-evidence-export": "/inzicht/document/verwerkingsbewijs",
-        "/review/processing-diagnostics": "/inzicht/document/diagnostiek",
-        "/review/processing-diagnostics-detail": "/inzicht/document/detaildiagnostiek",
-        "/review/processing-diagnostic-replay": "/inzicht/document/poging",
-        "/settings/quality": "/inzicht?tab=kwaliteit&view=table",
-        "/settings/quality/compare": "/inzicht/routevergelijking",
-    }
-
-    def redirect_to(target: str):
-        def legacy(request: Request) -> RedirectResponse:
-            require_account(request)
-            destination = urlsplit(target)
-            fixed = parse_qsl(destination.query)
-            reserved = {key for key, _ in fixed}
-            context = [(key, value) for key, value in request.query_params.multi_items() if key not in reserved]
-            query = urlencode(fixed + context)
-            return RedirectResponse(destination.path + ("?" + query if query else ""), status_code=303, headers=_HEADERS)
-        return legacy
-
-    for old, target in destinations.items():
-        app.add_api_route(old, redirect_to(target), methods=["GET"], include_in_schema=False)
-
-    @app.get("/settings/technical/exports", include_in_schema=False)
-    def legacy_exports(request: Request) -> RedirectResponse:
-        require_account(request)
-        query = request.url.query
-        if request.query_params.get("document"):
-            return RedirectResponse("/inzicht/document?" + query + "#bewijs", status_code=303, headers=_HEADERS)
-        return redirect_to("/inzicht?tab=documenten")(request)
-
-    @app.get("/settings/quality/compare/{comparison_id}", include_in_schema=False)
-    def legacy_comparison(request: Request, comparison_id: str) -> RedirectResponse:
-        from urllib.parse import quote
-        target = "/inzicht/routevergelijking/" + quote(comparison_id, safe="")
-        return redirect_to(target)(request)

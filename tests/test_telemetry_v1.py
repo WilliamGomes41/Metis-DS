@@ -544,10 +544,10 @@ def test_page_and_api_require_login_and_render(hub, *, production_app, productio
     app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         assert client.get('/telemetry/api/summary').status_code == 401
-        assert client.get('/telemetry', follow_redirects=False).status_code == 401
+        assert client.get('/telemetry', follow_redirects=False).status_code == 404
         client.post('/login', data={'username': 'beheer', 'password': 'fixture-only'}, follow_redirects=False)
         alias = client.get('/telemetry', follow_redirects=False)
-        assert alias.status_code == 303 and alias.headers['location'] == '/inzicht?tab=systeem'
+        assert alias.status_code == 404
         page = client.get('/inzicht?tab=systeem')
         assert page.status_code == 200 and 'id="tm-insights"' in page.text and 'data-initial-tab="systeem"' in page.text
         summary = client.get('/telemetry/api/summary', params={'window': '1h', 'q': 'snap-8e5d062cf95bfe2f-6a00cd1d'})

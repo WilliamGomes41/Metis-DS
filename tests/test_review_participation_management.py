@@ -141,7 +141,7 @@ def test_http_all_mine_theme_readonly_and_escalation(tmp_path, *, production_app
         assert console._envelope(sid)['title'] not in client.get('/review?work=all&theme=nonexistent').text
         before=deepcopy(console._envelope(sid));bindings=deepcopy(console.object_review_bindings(sid))
         assert client.get('/review/trajectory',params={'document':sid}).status_code==200
-        assert client.get('/review',params={'document':sid,'task':'individual'}).status_code==200
+        assert client.get('/review',params={'document':sid,'task':'contextual'}).status_code==200
         assert console._envelope(sid)==before and console.object_review_bindings(sid)==bindings
         denied=client.post('/review/participants',data={'document':sid,'action':'add_optional','reviewer_id':accounts['reviewer']['account_id'],'reason':'self','command_id':'bad','expected_revision':console.objects_revision(sid)})
         assert denied.status_code>=400

@@ -425,7 +425,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     with TestClient(production_app(restarted), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "test-secret-long"},
                            follow_redirects=False).status_code == 303
-        response = client.get("/review/processing-diagnostics", params={"document": sid})
+        response = client.get("/inzicht/document/diagnostiek", params={"document": sid})
         assert response.status_code == 200
         pre_review = response.json()["pre_review"]
         assert pre_review["blocked"] and pre_review["object_count"] == 0
@@ -437,7 +437,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
         else:
             # The failure names the page, never its text.
             assert diagnostic["unverified_pages"] == [2]
-            page = client.get("/settings/technical/processing", params={"document": sid}).text
+            page = client.get("/inzicht/document", params={"document": sid}).text
             assert "Pagina’s zonder verwerkbare brontekst: 2" in page
     # A long document's complete list is kept, never silently cut short.
     from src.vorming.attempt_diagnostics_v1 import finish_diagnostic

@@ -63,7 +63,7 @@ def test_http_technical_routes_only_navigate_and_unauthorized_cannot_start(conso
             assert response.headers["location"] == f"/source-selection?document={sid}"
         assert console._envelope(sid).get("processing_attempts", []) == []
         assert console.snapshot_objects(sid) == []
-        page = client.get("/settings/technical/processing", params={"document": sid}).text
+        page = client.get("/inzicht/document", params={"document": sid}).text
         assert f'href="/source-selection?document={sid}"' in page
         stranger = console.create_account(username="stranger", password="fixture-only", roles=("reviewer",))
         login(client, stranger["username"])

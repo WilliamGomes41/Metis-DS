@@ -114,16 +114,16 @@ def test_settings_and_capture_do_not_expand_document_access(tmp_path, *, product
     outsider = console.create_account(username='outsider', password=PASSWORD, roles=('researcher',))
     assert capture(console, outsider)['documents'] == []
     client = TestClient(production_app(console))
-    assert client.get('/settings/quality').status_code == 401
+    assert client.get('/inzicht?tab=kwaliteit&view=table').status_code == 401
     response = client.post('/login', data={'username': users['researcher']['username'], 'password': PASSWORD})
     assert response.status_code == 200
-    response = client.get('/settings/quality')
+    response = client.get('/inzicht?tab=kwaliteit&view=table')
     assert 'href="/inzicht?tab=kwaliteit"' in response.text
     assert 'href="/settings/quality/compare"' not in response.text
     assert response.status_code == 200, response.text
     assert 'Kwaliteit &amp; werkproces' in response.text
     assert 'Niet volledig meetbaar' in response.text
-    assert client.get('/settings/quality?from=invalid').status_code == 400
+    assert client.get('/inzicht?tab=kwaliteit&view=table&from=invalid').status_code == 400
 
 
 def test_real_review_carries_evidence_atomically_and_reading_does_not_change_authority(tmp_path, *, production_console):

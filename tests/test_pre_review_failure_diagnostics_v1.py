@@ -105,10 +105,10 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         tree = client.get("/tree")
         assert 'data-tone="warn"><span class="visually-hidden">Status: </span>vastgelopen</span>' in tree.text
         assert "Technische diagnose bekijken" not in tree.text
-        management = client.get(f"/settings/technical/processing?document={sid}")
+        management = client.get(f"/inzicht/document?document={sid}")
         assert management.status_code == 200
         assert code in management.text
-        payload = client.get(f"/review/processing-diagnostics?document={sid}").json()
+        payload = client.get(f"/inzicht/document/diagnostiek?document={sid}").json()
         assert payload["diagnostics"]["blocked_candidate_count"] == 0
         assert payload["pre_review"]["blocked"] is True
         assert payload["pre_review"]["reason_code"] == code
@@ -129,7 +129,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert re.fullmatch(r"[a-f0-9]{32}", reference)
         assert "Verwerkingsreferentie:" not in response.text
         assert "Validatiereden:" not in response.text
-        management = client.get(f"/settings/technical/processing?document={sid}")
+        management = client.get(f"/inzicht/document?document={sid}")
         assert management.status_code == 200
         if reason:
             assert reason in management.text
@@ -156,9 +156,9 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
 
         client.post("/login", data={"username": "other", "password": "other-secret"})
         assert "Technische diagnose bekijken" not in client.get("/tree").text
-        assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 400
+        assert client.get(f"/inzicht/document/diagnostiek?document={sid}").status_code == 400
         client.post("/logout")
-        assert client.get(f"/review/processing-diagnostics?document={sid}").status_code == 401
+        assert client.get(f"/inzicht/document/diagnostiek?document={sid}").status_code == 401
 
         restarted = fixture_console(tmp_path, failure, workflow_postgres)
         assert restarted._envelope(sid)["processing_attempts"][-1]["processing_reference"] == reference
@@ -173,7 +173,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert _PROCESSING_REFERENCE.get() == "-"
         with TestClient(create_console_app(restarted), base_url="https://testserver") as recovered_client:
             recovered_client.post("/login", data={"username": "researcher", "password": "researcher-secret"})
-            diagnostic = recovered_client.get(f"/review/processing-diagnostics?document={sid}").json()["pre_review"]
+            diagnostic = recovered_client.get(f"/inzicht/document/diagnostiek?document={sid}").json()["pre_review"]
             assert diagnostic["blocked"] is False and diagnostic["reason_code"] is None
             assert diagnostic["object_count"] > 0
 

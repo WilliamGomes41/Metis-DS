@@ -42,7 +42,7 @@ def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tm
         monkeypatch.setattr(console, '_read_source_fragments', forbidden)
         monkeypatch.setattr(console, '_fragments_and_spec', forbidden)
         monkeypatch.setattr(console, 'snapshot_objects', forbidden)
-        exported = client.get('/source-selection/processing-trace', params={'document':sid})
+        exported = client.get('/inzicht/document/verwerkingsspoor', params={'document':sid})
         assert exported.status_code == 200
         assert exported.headers['cache-control'] == 'no-store'
         trace = exported.json()
@@ -186,17 +186,17 @@ def test_export_authorization_and_observer_failure_do_not_change_command(console
     bind(console, provider)
     app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
-        denied = client.get('/source-selection/processing-trace', params={'document':sid}, follow_redirects=False)
+        denied = client.get('/inzicht/document/verwerkingsspoor', params={'document':sid}, follow_redirects=False)
         assert denied.status_code in (303, 401)
         login(client, 'outsider')
-        denied = client.get('/source-selection/processing-trace', params={'document':sid})
+        denied = client.get('/inzicht/document/verwerkingsspoor', params={'document':sid})
         assert denied.status_code == 400  # existing ConsoleError mapping for unassigned reviewers
         assert 'processing-trace-v1' not in denied.text
         login(client)
         attempt, _ = console.reserve_source_selection(actor_id=actor, snapshot_id=sid,
             command_id='works-without-logs', expected_revision=console.objects_revision(sid))
         console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
-        assert client.get('/source-selection/processing-trace', params={'document':sid}).json()['attempts'][-1]['stored_state'] == 'succeeded'
+        assert client.get('/inzicht/document/verwerkingsspoor', params={'document':sid}).json()['attempts'][-1]['stored_state'] == 'succeeded'
 
 
 def _crash_worker(root, config, actor, sid, attempt, reached):

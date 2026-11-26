@@ -386,7 +386,7 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, pro
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     client = _client(console, "researcher.anne", production_app=production_app)
-    index = client.get(f"/review?document={snapshot_id}&task=headings")
+    index = client.get(f"/review?document={snapshot_id}&task=structure")
     assert index.status_code == 200
     revision = _hidden(index.text, "snapshot_revision")
     assert revision, "batch-confirm form MUST carry snapshot_revision"

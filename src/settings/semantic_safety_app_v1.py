@@ -3,7 +3,7 @@
 Runs the frozen suite (``audit_semantic_safety_v1``) on demand and shows the
 result directly. Nothing is persisted: no audit record, no review, publication
 or semantic-mode state. A run leaves one content-free telemetry event with
-counts only. Old Audit addresses redirect here or to Controles.
+counts only.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 
 from src.settings.audit_semantic_safety_v1 import load_frozen_safety_suite, run_frozen_semantic_safety_suite
 from src.vorming.llm_provider_v1 import load_llm_provider_config
@@ -23,9 +23,6 @@ CONTROLS_PATH = "/inzicht?tab=controles"
 DEPLOY_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 DEFAULT_DEPLOY_COMMIT_MARKER = Path(__file__).resolve().parents[2] / "config" / "deployed_commit.txt"
 SUITE_PATH = Path(__file__).resolve().parents[2] / "data" / "audit" / "semantic_passage_safety_v1.json"
-# Retired Audit addresses; review-signals has its own Inzicht compatibility redirect.
-RETIRED_AUDIT_PATHS = {"/audit": CONTROLS_PATH, "/audit/new": CONTROLS_PATH,
-                       "/audit/archive": CONTROLS_PATH, "/audit/semantic-safety": SAFETY_PATH}
 
 
 def _esc(value: Any) -> str:
@@ -154,13 +151,3 @@ def install_semantic_safety_routes(
                      case_count=report.get("case_count"), pass_count=report.get("candidate_pass_count"),
                      machine_safety_pass=bool(report.get("machine_safety_pass")))
         return page(account, result=_result_html(report))
-
-    def redirect_to(target: str):
-        def retired(request: Request) -> RedirectResponse:
-            console.session_account(request.cookies.get("console_session"))
-            return RedirectResponse(target, status_code=303)
-        return retired
-
-    for old, new in RETIRED_AUDIT_PATHS.items():
-        app.add_api_route(old, redirect_to(new), methods=["GET"], include_in_schema=False,
-                          name=f"retired_{old.strip('/').replace('/', '_')}")

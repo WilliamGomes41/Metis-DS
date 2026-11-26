@@ -23,7 +23,7 @@ from src.review.four_eyes_v1 import is_forbidden_reviewer
 from src.documents.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
     COOKIE,
-    normalize_review_task,
+    requested_review_task,
     _esc,
     _nav,
     _page,
@@ -736,6 +736,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         receipt_interaction: str = "",
         receipt_object: str = "",
     ) -> str:
+        chosen_task = requested_review_task(task)
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
@@ -743,13 +744,8 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             from src.review.ko_receipt_ui_v1 import read_saved_review, render_receipt_page
             receipt = read_saved_review(console, account, document, receipt_object, receipt_interaction)
             continuation = '/review?' + urlencode({'document': document, 'after': receipt_object,
-                'task': normalize_review_task(task)})
+                'task': chosen_task})
             return render_receipt_page(account, receipt, document, continuation)
-        if task.strip() in {"history", "decisions"}:
-            # Retired page bookmarks navigate before any document/source/audit capture.
-            params = {"document": document} if document else {}
-            return RedirectResponse('/review' + ('?' + urlencode(params) if params else ''),
-                                    status_code=303)
         if work not in {"mine", "all"}:
             raise ConsoleError("invalid_review_filter")
         if not document and (work == "all" or "reviewer" not in account["roles"]):
@@ -766,7 +762,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                 params['review_revision'] = review_revision
             return RedirectResponse('/source-selection?' + urlencode(params) + '#passage-context',
                                     status_code=303)
-        chosen_task = normalize_review_task(task)
         if document and after:
             # Select candidates from current verified card inputs, then open
             # the actual passage with its own authorized raw/source capture.
@@ -833,7 +828,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                 params.update(q=q, page=page)
             return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         chosen = document.strip()
-        chosen_task = normalize_review_task(task)
         if after_batch and chosen_task == 'batch' and read_inputs is not None:
             from src.review.proportionate_review_v1 import normal_risk_batch_queue
             remaining = normal_risk_batch_queue(read_inputs.objects,

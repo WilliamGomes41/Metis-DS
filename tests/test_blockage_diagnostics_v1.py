@@ -164,9 +164,9 @@ def test_independent_http_report_survives_broken_worklist_without_processing(con
     client = TestClient(production_app(state), base_url='https://testserver')
     try:
         login(client)
-        page = client.get('/source-selection/blockage', params={'document':sid})
+        page = client.get('/inzicht/document/blokkade', params={'document':sid})
         assert page.status_code == 200 and 'Blokkade en bewijs' in page.text
-        response = client.get('/source-selection/blockage', params={'document':sid,'download':1})
+        response = client.get('/inzicht/document/blokkade', params={'document':sid,'download':1})
         assert response.status_code == 200
         assert response.headers['cache-control'] == 'no-store'
         report = response.json()
@@ -230,10 +230,10 @@ def test_http_access_denial_never_discloses_report(console, *, production_app, p
     before = deepcopy(state._envelope(sid))
     with TestClient(production_app(state), base_url='https://testserver') as client:
         for params in ({'document':sid},{'document':sid,'download':1,'checks':1}):
-            response = client.get('/source-selection/blockage',params=params,follow_redirects=False)
+            response = client.get('/inzicht/document/blokkade',params=params,follow_redirects=False)
             assert response.status_code in (303,401)
         login(client,'outsider')
-        response = client.get('/source-selection/blockage',params={'document':sid,'download':1,'checks':1})
+        response = client.get('/inzicht/document/blokkade',params={'document':sid,'download':1,'checks':1})
         assert response.status_code == 400
         assert 'blockage-report-v1' not in response.text
     assert make()._envelope(sid) == before

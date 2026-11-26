@@ -661,10 +661,10 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
     client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     review = client.get(
-        f"/review?document={receipt['snapshot_id']}&task=individual"
+        f"/review?document={receipt['snapshot_id']}&task=contextual"
     ).text
     control = client.get(
-        f"/review?document={receipt['snapshot_id']}&task=control"
+        f"/review?document={receipt['snapshot_id']}&task=repair"
     ).text
     slow = review.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
     assert DJG not in slow

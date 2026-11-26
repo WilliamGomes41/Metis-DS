@@ -154,7 +154,7 @@ def console_v3_story(tmp_path, make_console, *, production_app):
     import csv, io
     from zipfile import ZipFile
     client = TestClient(production_app(restarted))
-    url = '/review/processing-evidence-export'
+    url = '/inzicht/document/verwerkingsbewijs'
     assert client.get(url, params={'document': sid}, follow_redirects=False).status_code in {302, 303, 307, 401, 403}
     session = restarted.authenticate('reviewer', 'strong-test-password')
     client.cookies.set(COOKIE, session['token'])

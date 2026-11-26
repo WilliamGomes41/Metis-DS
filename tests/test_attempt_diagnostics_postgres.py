@@ -54,7 +54,7 @@ def test_failed_initial_ingest_evidence_restart_http_replay_and_success_activati
     assert restarted.snapshot_objects(sid) == []
     assert replay_diagnostic(attempt)["reason_code"] == "semantic_span_bounds_invalid"
     client = _client(restarted)
-    response = client.get("/review/processing-diagnostic-replay", params={"document": sid, "attempt_id": attempt["attempt_id"]})
+    response = client.get("/inzicht/document/poging", params={"document": sid, "attempt_id": attempt["attempt_id"]})
     assert response.status_code == 200 and response.json()["status"] == "rejected"
     assert response.headers["cache-control"] == "no-store"
     assert restarted._envelope(sid) == persisted

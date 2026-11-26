@@ -135,15 +135,9 @@ def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, 
     )
 
 
-def test_legacy_task_names_only_normalize_to_canonical_tasks() -> None:
-    assert normalize_review_task("headings") == "structure"
-    assert normalize_review_task("individual") == "contextual"
-    assert normalize_review_task("together") == "batch"
-    assert normalize_review_task("control") == "repair"
-    assert normalize_review_task("decisions") == ""
-    assert normalize_review_task("history") == ""
-    assert normalize_review_task("closure") == "disposition"
-    assert normalize_review_task("second_review") == "second_review"
+def test_review_task_normalization_accepts_canonical_tasks() -> None:
+    for retired in ("headings", "individual", "together", "control", "decisions", "history", "closure"):
+        assert normalize_review_task(retired) == ""
     for canonical in (
         "structure",
         "contextual",
@@ -317,7 +311,7 @@ def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_pat
     assert (after['object_version'], compute_canonical_object_hash(after)) == before_identity
 
 
-def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path, *, production_app, production_console) -> None:
+def test_canonical_contextual_surface(tmp_path: Path, *, production_app, production_console) -> None:
     console, accounts, snapshot_id, _object_id = _console(tmp_path, production_console=production_console)
     app = production_app(console)
     client = TestClient(app)
@@ -326,7 +320,7 @@ def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path,
         data={"username": accounts["reviewer_b"]["username"], "password": PASSWORD},
     )
 
-    response = client.get(f"/review?document={snapshot_id}&task=individual")
+    response = client.get(f"/review?document={snapshot_id}&task=contextual")
     assert response.status_code == 200
     assert "Kennisvoorstellen beoordelen" in response.text
     assert "task=individual" not in response.text
