@@ -732,12 +732,12 @@ def _progress_script():
 
 
 def _manual_card(envelope):
-    from src.vorming.human_annotation_source_v1 import received_prose
+    from src.vorming.human_annotation_source_v1 import has_automatic_attempt, received_prose
 
-    latest = next(reversed(envelope.get('processing_attempts') or []), {})
-    active_other_processing = latest.get('state') == 'running' and latest.get('kind') != 'human_annotation_source'
+    # A document whose latest attempt is automatic processing (running, failed or
+    # interrupted) keeps its processing card with status, estimate and recovery.
     return envelope['annotation_source_prepared'] or (
-        received_prose(envelope) and not envelope['annotation_has_formed_work'] and not active_other_processing
+        received_prose(envelope) and not envelope['annotation_has_formed_work'] and not has_automatic_attempt(envelope)
     )
 
 

@@ -17,6 +17,16 @@ def received_prose(envelope):
     return envelope.get('class') != 'beslisboom' and bool(envelope.get('received_source'))
 
 
+# Attempts that belong to receiving a source or to manual annotation. Any other
+# kind is automatic processing, whose card keeps status, estimate and recovery.
+NON_AUTOMATIC_KINDS = frozenset({None, 'ingest', KIND, 'human_annotation_build'})
+
+
+def has_automatic_attempt(envelope):
+    latest = next(reversed(envelope.get('processing_attempts') or []), {})
+    return latest.get('kind') not in NON_AUTOMATIC_KINDS
+
+
 def configuration(console, envelope):
     from src.vorming.docling_pdf_v1 import enabled
     return {'mode': MODE, 'docling': envelope['content_kind'] == 'pdf' and enabled(),
