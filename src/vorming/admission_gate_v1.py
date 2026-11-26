@@ -554,6 +554,22 @@ def _recommendation_semantics_codes(
     ):
         return []
 
+    from src.vorming.semantic_passage_v1 import (
+        STRENGTH_LABEL_EVIDENCE, STRENGTH_LABEL_SELECTION, validate_bound_recommendation_semantics,
+    )
+    metadata = (object_revision or {}).get("metadata") or {}
+    has_strength_label = (STRENGTH_LABEL_EVIDENCE in metadata
+                          or STRENGTH_LABEL_EVIDENCE in (object_revision or {})
+                          or STRENGTH_LABEL_SELECTION in (metadata.get("human_annotation") or {}))
+    if has_strength_label:
+        if source_fragments is None:
+            return ["recommendation_semantics_source_required"]
+        try:
+            validate_bound_recommendation_semantics(object_revision, fragments=source_fragments)
+        except (ValueError, KeyError, TypeError) as exc:
+            code = str(exc)
+            return [code if code.startswith("recommendation_") else "recommendation_strength_label_binding_mismatch"]
+
     semantics = row.get("proposed_recommendation_semantics")
     if (not isinstance(semantics, dict) or not semantics) and row.get("semantic_selection_origin") == "human_annotation":
         return ["recommendation_semantics_open"]
@@ -584,7 +600,7 @@ def _recommendation_semantics_codes(
         codes.append("recommendation_semantics_invalid")
         return codes
     from src.vorming.semantic_passage_v1 import (
-        RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION, validate_bound_recommendation_semantics,
+        RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION,
         SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS,
     )
     if evidence_meta.get("version") not in SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS:
@@ -594,7 +610,7 @@ def _recommendation_semantics_codes(
         or evidence_meta != (object_revision.get("metadata") or {}).get("recommendation_semantics_evidence")
     ):
         codes.append("recommendation_semantics_binding_mismatch")
-    if evidence_meta.get("version") == RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
+    if not has_strength_label and evidence_meta.get("version") == RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
         if object_revision is None or source_fragments is None:
             codes.append("recommendation_semantics_source_required")
         else:

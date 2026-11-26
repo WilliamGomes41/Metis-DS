@@ -11,6 +11,8 @@ from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_HUMAN, _reconstruct
 
 
 def build_objects(seal, entries, *, fragments):
+    from src.vorming.prepared_source_views_v1 import freeze_extraction
+    fragments = freeze_extraction(fragments)
     from src.vorming.source_accountability_v1 import VERSION, CONTAINERS_VERSION
     # Missing policy is the immutable HA-2 producer contract. Never reinterpret
     # existing seals while new seals opt into the existing T10 source policy.
@@ -42,11 +44,15 @@ def build_objects(seal, entries, *, fragments):
             continue
         core = [{key: anchor[key] for key in ('block_id', 'start', 'end')}
                 for anchor in payload['ranges'] if anchor['role'] == 'core']
+        label = inspection['strength_labels'].get(entry['annotation_id'])
+        if label:
+            context_spans.append({key: label['label'][key] for key in ('block_id', 'start', 'end')})
         decisions.append({'decision_kind': 'semantic_selection', 'selection_origin': SELECTION_ORIGIN_HUMAN,
             'spans': core, 'source_text': resolve_source_selection(core, fragments=fragments)['source_text'],
             'emit_proposed_type': True, 'proposed_object_type': payload['object_type'],
             'field_evidence': deepcopy(payload['field_evidence']),
             'annotation_ranges': deepcopy(payload['ranges']),
+            'recommendation_strength_label': deepcopy(payload.get('recommendation_strength_label')),
             'evidence_not_applicable': payload['evidence_not_applicable'],
             # #1067: only a proposal that binds to the source is built; otherwise the reviewer chooses.
             'recommendation_semantics': deepcopy(payload.get('recommendation_semantics'))

@@ -136,14 +136,45 @@ def bind_candidate(candidate, decision, *, fragments):
         'ranges':deepcopy(decision['annotation_ranges']),
         'evidence_not_applicable':decision['evidence_not_applicable']}}
     candidate['semantic_passage'].update(formation_mode=MODE,annotation_ref=deepcopy(reference))
-    if decision.get('recommendation_semantics') is not None:
-        from src.vorming.semantic_passage_v1 import _recommendation_semantics_from_proposal
-        selected_with_sections=[{**s,'section_path':blocks[s['block_id']][0]['section_path']} for s in selected]
-        semantics,binding=_recommendation_semantics_from_proposal(decision['recommendation_semantics'],
-            proposed_type=decision['proposed_object_type'],selected=selected_with_sections,
-            evidence_by_id=_read_source_blocks(fragments,include_headings=True))
-        candidate['proposed_recommendation_semantics']=semantics
-        candidate['recommendation_semantics_evidence']=binding
+    if decision['proposed_object_type'] == 'recommendation':
+        from src.vorming.semantic_passage_v1 import (
+            STRENGTH_LABEL_EVIDENCE, STRENGTH_LABEL_SELECTION,
+            _recommendation_semantics_from_proposal, bind_annotation_strength_label,
+        )
+        selected_with_sections = [{**s, 'section_path': blocks[s['block_id']][0]['section_path']} for s in selected]
+        source_blocks = _read_source_blocks(fragments, include_headings=True)
+        manual = decision.get(STRENGTH_LABEL_SELECTION)
+        label = bind_annotation_strength_label(selected_with_sections, source_blocks, manual, fragments=fragments)
+        if label:
+            candidate[STRENGTH_LABEL_EVIDENCE] = label
+        if manual:
+            candidate['metadata'][REFERENCE_KEY][STRENGTH_LABEL_SELECTION] = deepcopy(manual)
+        proposed_semantics = decision.get('recommendation_semantics')
+        derived = False
+        if proposed_semantics is None and manual and label:
+            from src.vorming.recommendation_semantics_v1 import source_label_direction, source_literal_strength
+            if direction := source_label_direction(label['text']):
+                proposed_semantics = {
+                    'direction': direction,
+                    'direction_evidence': {key: label['direction_anchor'][key] for key in ('block_id', 'start', 'end')},
+                    'strength_status': 'explicit', 'strength': source_literal_strength(label['text']),
+                    'strength_evidence': {key: label['label'][key] for key in ('block_id', 'start', 'end')},
+                }
+                derived = True
+        if proposed_semantics is not None:
+            from src.vorming.semantic_passage_v1 import SemanticPassageError
+            try:
+                semantics, binding = _recommendation_semantics_from_proposal(
+                    proposed_semantics, proposed_type=decision['proposed_object_type'],
+                    selected=selected_with_sections, evidence_by_id=source_blocks)
+            except SemanticPassageError:
+                # A proposal derived from the bound label is only a convenience. When
+                # wider source context rejects it, the label stays and review decides.
+                if not derived:
+                    raise
+            else:
+                candidate['proposed_recommendation_semantics'] = semantics
+                candidate['recommendation_semantics_evidence'] = binding
 
 
 def validate_object_fields(obj, fragments):

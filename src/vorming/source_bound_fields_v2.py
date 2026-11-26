@@ -285,6 +285,10 @@ def rebind_revision_evidence(previous: dict, revised: dict, *, fragments: list[d
             revised.pop(field, None)
         revised['confirmed_relations'] = []
         metadata.pop('recommendation_semantics_evidence', None)
+        metadata.pop('recommendation_strength_label_evidence', None)
+        if metadata.get('human_annotation'):
+            metadata['human_annotation'] = {key: value for key, value in metadata['human_annotation'].items()
+                                            if key != 'recommendation_strength_label'}
     elif metadata.get(LINKS_KEY) and literal_identity(previous) != literal_identity(revised):
         metadata.pop(LINKS_KEY, None)
     if mode not in {MODE, V3_MODE}:

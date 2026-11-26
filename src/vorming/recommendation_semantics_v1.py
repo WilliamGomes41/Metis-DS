@@ -276,7 +276,18 @@ def _review_direction_evidence(obj: dict[str, Any]) -> str:
     return str(content.get("clean_text") or content.get("raw_text") or "").strip()
 
 
+def annotation_strength_label_text(obj: dict[str, Any]) -> str:
+    metadata = obj.get("metadata") or {}
+    record = metadata.get("recommendation_strength_label_evidence")
+    if (metadata.get("human_annotation") and isinstance(record, dict)
+            and record.get("version") == "annotation-strength-label-v1"):
+        return str(record.get("text") or "")
+    return ""
+
+
 def _review_strength_candidates(obj: dict[str, Any]) -> list[str]:
+    if label := annotation_strength_label_text(obj):
+        return [label]
     proposed = proposed_recommendation_semantics_of(obj)
     candidates = [
         proposed.get("strength_evidence_span"),

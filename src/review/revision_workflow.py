@@ -373,7 +373,8 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
         if kind and kind != old.get('confirmed_object_type'):
             next_kinds[old['object_id']] = kind
     producer_metadata = ('semantic_passage', 'human_annotation', 'source_bound_fields',
-        'source_bound_context', 'source_accountability', 'recommendation_semantics_evidence')
+        'source_bound_context', 'source_accountability', 'recommendation_semantics_evidence',
+        'recommendation_strength_label_evidence')
     for raw in generated:
         ref = (raw.get('metadata') or {}).get('human_annotation')
         old = by_annotation.get(ref['annotation_id']) if ref else None

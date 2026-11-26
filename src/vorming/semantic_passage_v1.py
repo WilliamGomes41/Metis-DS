@@ -522,31 +522,117 @@ def _recommendation_semantics_from_proposal(
     return semantics, evidence
 
 
+STRENGTH_LABEL_EVIDENCE = "recommendation_strength_label_evidence"
+STRENGTH_LABEL_SELECTION = "recommendation_strength_label"
+
+
+def bind_annotation_strength_label(selected, blocks, manual=None, *, fragments):
+    """Bind an explicit strength cue using the existing applicability owner."""
+    if not selected:
+        return None
+    from src.vorming.docling_contract_v1 import CONTRACT as DOCLING_CONTRACT
+
+    def resolve(span, prefix):
+        return _resolve_evidence_ref(
+            {key: span[key] for key in _SPAN_KEYS}, evidence_by_id=blocks,
+            candidate_section_path=list(selected[0]["section_path"]), code_prefix=prefix)
+
+    cues = {}
+    docling_bindings = None
+    for row in _applicable_strength_ranges(selected, blocks):
+        # Only the statement itself or a label directly after it is evidence for
+        # this recommendation. A shared heading can cover several statements.
+        if row["reason"] not in {"selected_text", "adjacent_strength_label"}:
+            continue
+        matches = list(source_strength_cues(row["text"]))
+        if not matches:
+            continue
+        public, source = blocks[row["block_id"]]
+        if str(source.get("parser_version") or "").startswith(DOCLING_CONTRACT + "/"):
+            if docling_bindings is None:
+                record = getattr(fragments, "extraction_record", None) or {}
+                docling_bindings = {binding["fragment_id"]: binding for binding in record.get("bindings", [])}
+            if any(fragment_id not in docling_bindings
+                   or docling_bindings[fragment_id].get("table_cell") is not None
+                   for fragment_id in public["source_fragment_ids"]):
+                continue
+        for match in matches:
+            if row["reason"] == "selected_text":
+                if (row["text"][match.end():].strip(" \t.!?:;,")
+                        and (row["text"][:match.start()].strip()
+                             or not row["text"][match.end():].lstrip().startswith(":"))):
+                    continue
+            elif not is_source_strength_label(row["text"]):
+                continue
+            anchor = (row["block_id"], row["start"] + match.start(), row["start"] + match.end())
+            cues[anchor] = match.group()
+    strengths = {source_literal_strength(cue) for cue in cues.values()}
+    directions = {source_label_direction(cue) for cue in cues.values()} - {None}
+    if len(strengths) > 1 or len(directions) > 1:
+        if manual is not None:
+            _fail("recommendation_strength_evidence_conflict")
+        return None
+    if manual is not None:
+        text, proof = resolve(manual, "recommendation_strength_label")
+        matching = [cue for (block_id, start, end), cue in cues.items()
+                    if block_id == proof["block_id"] and proof["start"] <= start < end <= proof["end"]]
+        if not matching or not is_source_strength_label(text):
+            _fail("recommendation_strength_label_not_applicable")
+    elif cues:
+        block_id, start, end = next(iter(cues))
+        text, proof = resolve(dict(block_id=block_id, start=start, end=end), "recommendation_strength_label")
+    else:
+        return None
+    # The direction anchor stays inside the statement. The label proves strength
+    # and can constrain the direction when the source states it explicitly.
+    _, direction_anchor = resolve(selected[0], "recommendation_direction_evidence")
+    return {"version": "annotation-strength-label-v1", "selection": "manual" if manual is not None else "automatic",
+            "direction_anchor": direction_anchor, "label": proof, "text": text}
+
+
+def annotation_strength_label(payload, *, fragments):
+    """Reconstruct the annotation's exact statement and its separate label."""
+    if payload.get("object_type") != "recommendation":
+        return None
+    from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
+    blocks = _read_source_blocks(preserve_fragments(fragments), include_headings=True)
+    selected = []
+    for span in payload["ranges"]:
+        if span["role"] != "core":
+            continue
+        public, _ = blocks[span["block_id"]]
+        selected.append({**span, "text": public["text"][span["start"]:span["end"]],
+                         "section_path": public["section_path"]})
+    return bind_annotation_strength_label(selected, blocks, payload.get(STRENGTH_LABEL_SELECTION), fragments=fragments)
+
+
 @_finding_scope
 def validate_bound_recommendation_semantics(obj, *, fragments):
     """Recheck new evidence at materialisation/Admission; leave old records alone."""
     # Formation specs keep evidence at the top level even with ancillary metadata;
     # canonical revisions keep it inside metadata.
     canonical = isinstance(obj.get("content"), dict)
-    if canonical and "recommendation_semantics_evidence" in obj:
+    if canonical and ({"recommendation_semantics_evidence", STRENGTH_LABEL_EVIDENCE} & obj.keys()):
         _fail("recommendation_semantics_binding_mismatch")
     metadata = (obj.get("metadata") or {}) if canonical else obj
     evidence = metadata.get("recommendation_semantics_evidence") or {}
-    if obj.get("proposed_object_type") != "recommendation":
-        # Type corrections retain the existing field-contract rejection path.
-        return
-    if obj.get(PROPOSED_FIELD) is None:
-        # No new-format proposal: Admission owns its missing-semantics rejection.
-        return
-    if (not isinstance(evidence, dict)
-            or evidence.get("version") not in SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS):
-        _fail("recommendation_semantics_evidence_version_invalid")
-    if evidence["version"] != RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
-        return
-    semantics = obj.get(PROPOSED_FIELD)
-    if not isinstance(semantics, dict):
-        _fail("recommendation_semantics_invalid")
     from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
+    strength_label = metadata.get(STRENGTH_LABEL_EVIDENCE)
+    human = (metadata.get("human_annotation") if canonical else (obj.get("metadata") or {}).get("human_annotation")) or {}
+    proposal = obj.get(PROPOSED_FIELD)
+    if obj.get("proposed_object_type") != "recommendation":
+        if strength_label is not None:
+            _fail("recommendation_strength_label_binding_mismatch")
+        return
+    if strength_label is None and not human.get(STRENGTH_LABEL_SELECTION) and proposal is None:
+        return
+    if proposal is not None:
+        if (not isinstance(evidence, dict)
+                or evidence.get("version") not in SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS):
+            _fail("recommendation_semantics_evidence_version_invalid")
+        if evidence["version"] != RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION and strength_label is None:
+            return
+    semantics = obj.get(PROPOSED_FIELD)
     blocks = _read_source_blocks(preserve_fragments(fragments), include_headings=True)
     spans = (metadata.get("semantic_passage") or {}).get("spans") or []
     selected = []
@@ -555,6 +641,16 @@ def validate_bound_recommendation_semantics(obj, *, fragments):
         selected.append({**span, "text": public["text"][span["start"]:span["end"]],
                          "section_path": public["section_path"]})
     if not selected:
+        _fail("recommendation_semantics_invalid")
+    if strength_label is not None or human.get(STRENGTH_LABEL_SELECTION):
+        if not human:
+            _fail("recommendation_strength_label_binding_mismatch")
+        verified = bind_annotation_strength_label(selected, blocks, human.get(STRENGTH_LABEL_SELECTION), fragments=fragments)
+        if verified != strength_label or verified is None:
+            _fail("recommendation_strength_label_binding_mismatch")
+    if proposal is None or evidence["version"] != RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION:
+        return
+    if not isinstance(semantics, dict):
         _fail("recommendation_semantics_invalid")
     def wire(ref):
         return {key: ref[key] for key in _SPAN_KEYS} if isinstance(ref, dict) else None

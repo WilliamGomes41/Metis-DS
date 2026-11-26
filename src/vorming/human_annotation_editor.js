@@ -29,6 +29,7 @@ import {bindRange} from '/annotations/binding.mjs';
     ['exception', 'Uitzondering'],
     ['context', 'Aanvullende context'],
     ['evidence', 'Onderbouwing'],
+    ['strength_label', 'Sterktelabel'],
   ];
   const ROLE_LABELS = Object.fromEntries([
     ['core', 'Uitspraak'], ...APPLICATION_ROLES, ...EXTRA_ROLES,
@@ -41,6 +42,7 @@ import {bindRange} from '/annotations/binding.mjs';
     condition: ['Wijs aan wat het geval moet zijn voordat de uitspraak geldt.'],
     exception: ['Wijs aan in welk geval iets anders geldt en wat de bron voor dat geval zegt, als ze dat vermeldt.'],
     context: ['Wijs aan wat nodig is om de uitspraak te begrijpen of uit te voeren, bijvoorbeeld een lijst, definitie of tabelkop.'],
+    strength_label: ['Wijs alleen de sterkteaanduiding aan die direct bij deze aanbeveling staat.'],
     evidence: ['Wijs de redenen of het bewijs voor de uitspraak aan. Een onderzoeksvraag of oproep tot vervolgonderzoek geeft op zichzelf geen onderbouwing.'],
   };
   const helpOpen=new Set();
@@ -117,7 +119,10 @@ import {bindRange} from '/annotations/binding.mjs';
     entry.field_evidence.type_evidence_spans={core:true};
     const core=fieldContract.type_core_fields[entry.object_type];
     if(core) entry.field_evidence[core]={core:true};
-    if(entry.object_type!=='recommendation') entry.recommendation_semantics=null;
+    if(entry.object_type!=='recommendation') {
+      entry.recommendation_semantics=null;
+      delete entry.recommendation_strength_label;
+    }
   }
   // A meaning reference that lay only inside a removed range no longer has a source.
   function clearDependentFields(removed) {
@@ -146,6 +151,12 @@ import {bindRange} from '/annotations/binding.mjs';
   async function useAs(kind) {
     if(!selected || finalizing || deriving) return;
     if(kind==='core') {bindAs('core');if(selected) return;await derive();return;}
+    if(kind==='strength_label') {
+      entry.recommendation_strength_label={...selected};
+      selected=null;entry.pending_range=null;
+      window.getSelection().removeAllRanges();
+      change();render();await runCheck();return;
+    }
     if(kind==='evidence') entry.evidence_not_applicable=false;
     bindAs(kind);await runCheck();
   }
@@ -215,10 +226,13 @@ import {bindRange} from '/annotations/binding.mjs';
     const statement=entry.annotation_id+'|'+JSON.stringify(entry.ranges.filter(a=>a.role==='core').map(a=>[a.block_id,a.start,a.end]));
     const memory=kindMemory[statement] ||= {};
     if(entry.object_type) memory[entry.object_type]={field_evidence:clone(entry.field_evidence || null),
-      recommendation_semantics:clone(entry.recommendation_semantics || null)};
+      recommendation_semantics:clone(entry.recommendation_semantics || null),
+      recommendation_strength_label:clone(entry.recommendation_strength_label || null)};
     delete entry.disposition;entry.object_type=value;
     if(memory[value]) {
       entry.field_evidence=clone(memory[value].field_evidence);entry.recommendation_semantics=clone(memory[value].recommendation_semantics);
+      if(memory[value].recommendation_strength_label) entry.recommendation_strength_label=clone(memory[value].recommendation_strength_label);
+      else delete entry.recommendation_strength_label;
     } else resetFields();
     change();renderCard();runCheck();
   }
@@ -253,6 +267,8 @@ import {bindRange} from '/annotations/binding.mjs';
       // Ordinary draft save remains the only writer; no approval/status shortcut.
       entry.object_type=data.object_type;entry.field_evidence=data.field_evidence;
       entry.recommendation_semantics=data.recommendation_semantics;
+      // A strength label belongs to a recommendation only; another inferred kind drops it.
+      if(entry.object_type!=='recommendation') delete entry.recommendation_strength_label;
       change();
       el('controls').scrollTop=0;
       if(window.matchMedia('(max-width:800px)').matches) el('controls').scrollIntoView({block:'start'});
@@ -448,7 +464,8 @@ import {bindRange} from '/annotations/binding.mjs';
     const choosingApplication=core && !applicationChoices.hidden;
     menuButtons.core.hidden=choosingApplication;
     applicationButton.hidden=!core;
-    for(const [role] of EXTRA_ROLES) menuButtons[role].hidden=!core || choosingApplication;
+    for(const [role] of EXTRA_ROLES)
+      menuButtons[role].hidden=!core || choosingApplication || (role==='strength_label' && entry.object_type!=='recommendation');
     menu.hidden=false;
     // Below the selection: a phone shows its own menu above it.
     const rects=[...range.getClientRects()].filter(r=>r.width || r.height),last=rects.at(-1) || range.getBoundingClientRect();
@@ -476,7 +493,9 @@ import {bindRange} from '/annotations/binding.mjs';
       button.setAttribute('aria-label','Uitleg bij '+label);button.setAttribute('aria-controls','annotation-help-'+key);
       button.setAttribute('aria-expanded',String(helpOpen.has(key)));
       box.id='annotation-help-'+key;box.className='annotation-help';box.hidden=!helpOpen.has(key);
-      for(const part of HELP[key]) {
+      const parts=key==='core' && entry.object_type==='recommendation'
+        ? [...HELP.core, 'Een los sterktelabel kun je apart aanwijzen.'] : HELP[key];
+      for(const part of parts) {
         const p=document.createElement('p');p.textContent=part;box.append(p);
       }
       button.addEventListener('click',()=>{
@@ -549,6 +568,13 @@ import {bindRange} from '/annotations/binding.mjs';
         }
         if(asked && proposals.length) hint(dd,'Beantwoord eerst het voorstel: + voegt de tekst toe, − wijst het af.');
         if(!context.length && !proposals.length && signals.some(item=>leaning.has(item.code))) hint(dd,'De uitspraak leunt mogelijk op andere tekst. Hoort er een zin bij?');
+      });
+      if(entry.object_type==='recommendation' && core.length) row('strength_label','Sterktelabel',dd=>{
+        const label=entry.recommendation_strength_label;
+        if(label) line(dd,label.quote,'Sterktelabel weghalen',()=>{
+          delete entry.recommendation_strength_label;
+          change();render();runCheck();
+        });
       });
       row('evidence','Onderbouwing',dd=>{
         for(const a of evidence) line(dd,a.quote,'Weghalen: '+a.quote,()=>removeRange(a));
@@ -885,6 +911,13 @@ import {bindRange} from '/annotations/binding.mjs';
       expected_revision:entry.revision,expected_generation:state.generation,extraction_hash:state.extraction_hash,normalization:state.normalization,
       expected_objects_revision:state.objects_revision,
       selection:{status:entry.status,object_type:entry.object_type,ranges,pending_range:entry.pending_range ? reference(entry.pending_range) : null,evidence_not_applicable:entry.evidence_not_applicable,
+        ...(entry.recommendation_strength_label && !entry.disposition && entry.object_type==='recommendation' ? {
+          recommendation_strength_label:{
+            block_id:entry.recommendation_strength_label.block_id,
+            start:entry.recommendation_strength_label.start,
+            end:entry.recommendation_strength_label.end,
+            quote:entry.recommendation_strength_label.quote,
+          }} : {}),
         ...(entry.declined_context?.length && !entry.disposition ? {declined_context:entry.declined_context.map(row=>({block_id:row.block_id,start:row.start,end:row.end,quote:row.quote ?? literal(row)}))} : {}),
         ...(entry.disposition ? {disposition:clone(entry.disposition)} : {
         field_evidence:Object.fromEntries(Object.entries(entry.field_evidence).map(([f,e]) =>

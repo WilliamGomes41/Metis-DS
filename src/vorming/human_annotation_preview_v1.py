@@ -16,6 +16,9 @@ from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from src.vorming.source_accountability_v1 import ROLES, uncovered_ranges, validate_assessments
 from src.vorming.source_bound_fields_v3 import TYPE_FIELDS, VIA_RELATION
 
+# Characters is_source_strength_label accepts around a standalone label.
+_LABEL_PUNCTUATION = frozenset(' \t\r\n.!?:;,')
+
 
 def _span(anchor):
     return {key: anchor[key] for key in ('block_id', 'start', 'end')}
@@ -140,10 +143,9 @@ def inspect_annotation(entry, *, fragments, require_ready=True, blocks=None, sig
                 row = {**bound['values'], 'candidate_text': literal, 'source_text_exact': literal,
                        'proposed_type': payload['object_type'], 'source_bound_context_entries': context}
                 if payload['object_type'] == 'recommendation':
-                    from src.vorming.semantic_passage_v1 import _recommendation_semantics_from_proposal
-                    from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
-                    from src.vorming.recommendation_semantics_v1 import validate_recommendation_semantics
-                    from src.vorming.recommendation_semantics_v1 import complete_annotation_semantics
+                    if payload.get('recommendation_strength_label'):
+                        from src.vorming.semantic_passage_v1 import annotation_strength_label
+                        annotation_strength_label(payload, fragments=fragments)
                     semantics = usable_annotation_semantics(payload, fragments=fragments)
                     if semantics is None:
                         codes.append('recommendation_semantics_open')  # the reviewer decides (#1067)
@@ -191,6 +193,10 @@ def inspect_for_overview(entries, *, fragments, confirmed_headings=(), allow_uns
     return result
 
 
+from src.vorming.source_reconstruction_v1 import with_reconstruction_cache
+
+
+@with_reconstruction_cache
 def inspect_document(entries, *, fragments, confirmed_headings=(), allow_unselected=False):
     """Accept stored {annotation_id,revision,payload,payload_hash} entries.
 
@@ -198,8 +204,11 @@ def inspect_document(entries, *, fragments, confirmed_headings=(), allow_unselec
     equal words at different source locations do not collide. This inspection
     alone never authorizes object activation.
     """
+    from src.vorming.prepared_source_views_v1 import freeze_extraction
+    fragments = freeze_extraction(fragments)
     blocks = semantic_source_blocks(fragments)
     findings, checked, selected, assessments, covered = [], [], [], [], {}
+    strength_labels = {}
     if not blocks:
         findings.append({'annotation_id': None, 'code': 'annotation_source_empty'})
     seen = set()
@@ -241,6 +250,20 @@ def inspect_document(entries, *, fragments, confirmed_headings=(), allow_unselec
             selected.append({'spans': core})
             for anchor in payload['ranges']:
                 covered.setdefault(anchor['block_id'], []).append((anchor['start'], anchor['end']))
+            if payload.get('object_type') == 'recommendation':
+                from src.vorming.semantic_passage_v1 import annotation_strength_label
+                label = annotation_strength_label(payload, fragments=fragments)
+                if label:
+                    strength_labels[annotation_id] = label
+                    anchor = label['label']
+                    # The proof stays the exact cue; its accepted punctuation is accounted for too.
+                    text = next(block['text'] for block in blocks if block['block_id'] == anchor['block_id'])
+                    start, end = anchor['start'], anchor['end']
+                    while start and text[start - 1] in _LABEL_PUNCTUATION:
+                        start -= 1
+                    while end < len(text) and text[end] in _LABEL_PUNCTUATION:
+                        end += 1
+                    covered.setdefault(anchor['block_id'], []).append((start, end))
     try:
         validate_assessments(assessments, blocks, selected)
     except ValueError as error:
@@ -260,4 +283,4 @@ def inspect_document(entries, *, fragments, confirmed_headings=(), allow_unselec
     if gaps:
         findings.append({'annotation_id': None, 'code': 'annotation_source_unaccounted'})
     return {'entries': checked, 'findings': findings, 'unaccounted_ranges': gaps,
-            'source_assessments': deepcopy(assessments)}
+            'source_assessments': deepcopy(assessments), 'strength_labels': strength_labels}

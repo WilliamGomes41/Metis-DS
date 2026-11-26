@@ -2827,6 +2827,16 @@ class OperationsConsole:
             raise ConsoleError("source_lineage_incomplete")
         if not source_lineage_resolves(target, fragments=fragments):
             raise ConsoleError("source_lineage_incomplete")
+        from src.vorming.semantic_passage_v1 import (
+            STRENGTH_LABEL_EVIDENCE, STRENGTH_LABEL_SELECTION, validate_bound_recommendation_semantics,
+        )
+        metadata = target.get("metadata") or {}
+        if (STRENGTH_LABEL_EVIDENCE in metadata or STRENGTH_LABEL_EVIDENCE in target
+                or STRENGTH_LABEL_SELECTION in (metadata.get("human_annotation") or {})):
+            try:
+                validate_bound_recommendation_semantics(target, fragments=fragments)
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ConsoleError("recommendation_strength_label_binding_mismatch") from exc
         return fragments
 
     def _legacy_review_source_envelope(self, envelope):

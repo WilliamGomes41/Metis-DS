@@ -246,9 +246,10 @@ def test_rebuilt_recommendation_retains_only_confirmation_still_bound_to_its_sou
     changed['selection']['recommendation_semantics'] = None
     core = changed['selection']['ranges'][0]
     original_end = core['end']
-    core.update(end=label_start - 1, quote=STATEMENT[:label_start - 1])
-    changed['selection']['ranges'].append({**core, 'role': 'context', 'start': label_start,
-        'end': original_end, 'quote': STATEMENT[label_start:]})
+    replacement_end = len('Gebruik geen talkpoeder')
+    core.update(end=replacement_end, quote=STATEMENT[:replacement_end])
+    changed['selection']['ranges'].append({**core, 'role': 'context', 'start': replacement_end,
+        'end': original_end, 'quote': STATEMENT[replacement_end:]})
     annotation.save(console, actor_id=actor, **changed)
     execute_build(console, actor, sid)
     new_object = candidate(console, sid)
