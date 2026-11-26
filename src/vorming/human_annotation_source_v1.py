@@ -17,14 +17,15 @@ def received_prose(envelope):
     return envelope.get('class') != 'beslisboom' and bool(envelope.get('received_source'))
 
 
-# Attempts that belong to receiving a source or to manual annotation. Any other
-# kind is automatic processing, whose card keeps status, estimate and recovery.
-NON_AUTOMATIC_KINDS = frozenset({None, 'ingest', KIND, 'human_annotation_build'})
+# Attempts that belong to manual annotation. Any other attempt, including
+# automatic 'ingest' runs and legacy attempts without a kind, is automatic
+# processing whose card keeps status, estimate and recovery.
+NON_AUTOMATIC_KINDS = frozenset({KIND, 'human_annotation_build'})
 
 
 def has_automatic_attempt(envelope):
-    latest = next(reversed(envelope.get('processing_attempts') or []), {})
-    return latest.get('kind') not in NON_AUTOMATIC_KINDS
+    attempts = envelope.get('processing_attempts') or []
+    return bool(attempts) and attempts[-1].get('kind') not in NON_AUTOMATIC_KINDS
 
 
 def configuration(console, envelope):

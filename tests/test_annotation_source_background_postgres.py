@@ -520,7 +520,8 @@ def test_decision_tree_retains_its_card_and_cannot_start_annotation(production_c
 
 
 
-def test_stopped_automatic_attempt_hands_back_the_same_card_without_polling(production_console, tmp_path):
+def test_stopped_automatic_attempt_keeps_its_processing_card(production_console, tmp_path):
+    """Besluit projectlead (26-11-2026, #1172): automatic processing keeps status and recovery."""
     from src.operations_console_v1 import ConsoleError
     from src.vorming.source_processing_dispatch_v1 import claim
 
@@ -535,9 +536,8 @@ def test_stopped_automatic_attempt_hands_back_the_same_card_without_polling(prod
                                        claim_token=active['dispatch'].get('token'))
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username':'source-worker','password':'fixture-only'})
-        row, = client.get('/source-selection/progress', params={'snapshot': sid}).json()['rows']
-        assert row['snapshot'] == sid
-        assert '>Annoteren</button>' in row['manual_detail']
-        assert 'data-source-attempt' not in row['manual_detail']
+        rows = client.get('/source-selection/progress', params={'snapshot': sid}).json()['rows']
+        assert all('manual_detail' not in row for row in rows)
         card = client.get('/source-selection', params={'selected_document': sid})
-        assert 'Bekijk status bouwopdrachten' in card.text and 'data-source-poll' not in card.text
+        assert 'Bekijk status bouwopdrachten' not in card.text
+        assert f'data-source-document="{sid}"' in card.text

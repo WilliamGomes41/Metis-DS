@@ -64,10 +64,12 @@ def test_annotation_entry_and_legacy_navigation_do_not_start_work(tmp_path, prod
     page = client.get('/source-selection', params={'document': sid})
     forms = StartForm(page.text).forms
     assert page.status_code == 200 and '<h1>Vorming</h1>' in page.text
-    assert 'Nog geen verwerkingsresultaat' in page.text
+    # #1168: the fresh source shows the manual card; Annoteren prepares the source by POST.
+    assert 'Bekijk status bouwopdrachten' in page.text
     assert not forms
-    assert f'href="/annotations?document={sid}">Bron openen voor annotatie</a>' in page.text
-    assert reads == [sid], 'Combined details must not repeat the status/deep check'
+    assert '<form method="post" action="/annotations/source">' in page.text and '>Annoteren</button>' in page.text
+    # The manual card needs no processing status; any other card reads it once.
+    assert reads in ([], [sid]), 'Combined details must not repeat the status/deep check'
     assert durable(console, sid) == before and not calls
 
 
