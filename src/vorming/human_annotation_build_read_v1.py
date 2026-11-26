@@ -70,7 +70,7 @@ def status_overview(console, actor, snapshot_id, attempt_id, *, history):
                    a.payload->>'state' AS state, a.payload->>'error_code' AS error_code,
                    a.payload->'dispatch'->>'state' AS dispatch_state,
                    a.payload->'dispatch'->>'claimed_at' AS claimed_at,
-                   s.seal_id, s.generation,
+                   s.seal_id, s.generation, s.payload ? 'document_check' AS document_check,
                    heads.generation = s.generation
                        AND heads.working_revision_id = s.payload->>'working_revision_id' AS current_generation
               FROM workflow.annotation_build_commands c

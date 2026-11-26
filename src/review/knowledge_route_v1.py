@@ -73,15 +73,17 @@ def annotation_route(*, overview: bool, second_review: bool, finalized: str = ''
 
 
 def review_route(state: str | None, *, stage_second: bool, required_second: bool, rebuilding: str = '',
-                 second_pending: bool = False) -> str:
+                 second_pending: bool = False, document_check_flow: bool = False) -> str:
     """The review card of a knowledge object from annotation."""
     second = required_second or stage_second or state == TWEEDE_REVIEW
     if rebuilding == 'building':
         return route_html('build', 'Hierna: de nieuwe versie komt terug in de review. Deze pagina ververst vanzelf.',
                           second_review=second)
     if rebuilding:
-        return route_html('build', 'Hierna: bouw het kennisobject opnieuw in de kaart. '
-                          'Tot dan kan deze versie niet worden goedgekeurd.', second_review=second)
+        next_step = ('Rond Documentcontrole af met ‘Afronden en bouwen’.' if document_check_flow
+                     else 'Hierna: bouw het kennisobject opnieuw in de kaart.')
+        return route_html('build', next_step + ' Tot de bouw slaagt is goedkeuren geblokkeerd.',
+                          second_review=second)
     if state == GEPUBLICEERD:
         return route_html('publish', 'Dit kennisobject is gepubliceerd.', second_review=second)
     if state == AFGEWEZEN:
