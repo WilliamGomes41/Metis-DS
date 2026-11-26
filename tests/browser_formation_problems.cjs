@@ -17,7 +17,8 @@ const fs = require('node:fs');
     }
     await login('author');
     await page.goto(base+'/source-selection?document='+sid);
-    await page.getByRole('link',{name:'Bron openen voor annotatie',exact:true}).waitFor();
+    // #1168: a fresh source shows the manual card; Annoteren prepares it by POST.
+    await page.getByRole('button',{name:'Annoteren',exact:true}).waitFor();
     // This scenario checks navigation during an explicitly requested legacy task.
     // Starting it through the retained HTTP command does not restore an AI UI action.
     await page.evaluate(async ({sid,revision}) => {
