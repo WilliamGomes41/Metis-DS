@@ -15,6 +15,20 @@ import {bindRange} from '/annotations/binding.mjs';
     if(!heading) return;
     heading.focus({preventScroll:true});
     heading.scrollIntoView({block:'center',behavior:'instant'});
+    // A late offer or refresh can still change the layout above the heading.
+    // Keep the focused heading in view until the person acts, at most briefly.
+    const keep=()=>{
+      const current=el('document-check-title');
+      if(!current || document.activeElement!==current) return;
+      const box=current.getBoundingClientRect();
+      if(box.top<0 || box.bottom>innerHeight) current.scrollIntoView({block:'center',behavior:'instant'});
+    };
+    const observer=new ResizeObserver(keep);
+    observer.observe(document.body);
+    const events=['pointerdown','keydown','wheel','touchstart'];
+    const stop=()=>{observer.disconnect();events.forEach(type=>removeEventListener(type,stop,true));};
+    events.forEach(type=>addEventListener(type,stop,true));
+    setTimeout(stop,2000);
   }
   const gapId = gap => `bronrest-${gap.block_id}-${gap.start}-${gap.end}`;
   let sourceWork = state.source_work;
