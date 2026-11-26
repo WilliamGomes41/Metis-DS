@@ -24,14 +24,23 @@ def _legacy_keys(console):
     return [row['snapshot_id'] for row in console.list_envelopes()]
 
 
-def _legacy_documents(console, document=''):
+def _legacy_documents(console, document='', snapshot_ids=None):
     # Full-payload reference, deliberately more expensive than the production
     # summary projection. Both feed the same conservative overview contract.
     if document:
         console._envelope(document)
     rows = [console.workflow_document_store.processing_history_input(row['snapshot_id'])
-            for row in console.workflow_document_store.list_envelopes()]
+            for row in console.workflow_document_store.list_envelopes()
+            if snapshot_ids is None or row['snapshot_id'] in snapshot_ids]
+    from src.vorming.human_annotation_v1 import owns_source
+    store = console.workflow_document_store
     for row in rows:
+        # Manual-card inputs, derived from the full payload instead of the summary query.
+        sid = row['snapshot_id']
+        row['annotation_source_prepared'] = owns_source(console, sid)
+        row['annotation_has_formed_work'] = bool(store.current_document_objects(sid)) or bool(row.get('semantic_replay'))
+        row['annotation_source_started'] = any(attempt.get('kind') == 'human_annotation_source'
+                                               for attempt in row.get('processing_attempts') or [])
         runs = row.get('quality_processing_runs') or []
         row['source_fragment_count'] = len(runs[-1].get('source_fragments', [])) if runs else None
         row['pending_rejection_count'] = len(((row.get('semantic_replay') or {}).get('provider_evidence') or {}).get('pending_rejections') or [])
@@ -67,7 +76,7 @@ def test_source_selection_html_identical_to_legacy_list(tmp_path, monkeypatch, u
     _freeze(monkeypatch)
     new = [_norm(p) for p in _pages(client, sid)]
     _freeze(monkeypatch)
-    monkeypatch.setattr(console, 'source_selection_documents', lambda *, actor_id, document='': _legacy_documents(console, document))
+    monkeypatch.setattr(console, 'source_selection_documents', lambda *, actor_id, document='', snapshot_ids=None: _legacy_documents(console, document, snapshot_ids))
     old = [_norm(p) for p in _pages(client, sid)]
     assert new == old
     assert sid in new[0] and sid in new[1]
