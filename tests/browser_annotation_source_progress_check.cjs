@@ -51,6 +51,7 @@ const assert = require('node:assert/strict');
       await page.screenshot({path:`${output}/annotation-source-progress-${width}.png`,fullPage:true});
     }
     await context.request.post(base+'/browser-release');
+    await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click({timeout:15000});
     await page.locator('[data-source-block]').first().waitFor({timeout:15000});
     assert.equal(await page.getByRole('heading',{name:'Bron wordt voorbereid',exact:true}).count(),0);
     assert.equal(await page.locator('meta[http-equiv=refresh]').count(),0);

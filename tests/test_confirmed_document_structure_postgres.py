@@ -22,12 +22,11 @@ from src.vorming import human_annotation_build_v1 as build
 from src.vorming import human_annotation_v1 as annotations
 from src.vorming.worker_handover_v1 import native_attempt
 from tests.production_support import restart_production
-from tests.test_human_annotation_build_postgres import closing, saved_source
+from tests.test_human_annotation_build_postgres import closing, saved_source, open_document_check
 
 
 def test_confirm_outline_then_build_and_review_same_document(tmp_path, monkeypatch, production_console, production_app):
-    monkeypatch.setenv('METIS_ANNOTATION_CONFIRMED_STRUCTURE', '1')
-    console, actor, sid, _ = saved_source(production_console, tmp_path,
+    console, actor, sid, _ = saved_source(production_console, tmp_path, for_build=False,
                                           heading='<h1>Diagnostiek</h1><h2>Kenmerken</h2>')
     view = annotations.overview(console, actor_id=actor, snapshot_id=sid)
     before = build.overview(console, actor_id=actor, snapshot_id=sid)
@@ -58,6 +57,7 @@ def test_confirm_outline_then_build_and_review_same_document(tmp_path, monkeypat
     assert '>Kenmerken</span>' in reopened.text
 
     resumed = restart_production(console)
+    open_document_check(resumed, actor, sid)
     with pytest.raises(ConsoleError, match='annotation_overview_stale'):
         build.finalize(resumed, actor_id=actor, **closing(before))
     receipt = build.finalize(resumed, actor_id=actor, **closing(build.overview(resumed, actor_id=actor, snapshot_id=sid)))
@@ -116,7 +116,7 @@ def test_concurrent_confirmation_is_one_decision_and_survives_backup(tmp_path, p
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
     from tests.postgres_support import database, install_schema
 
-    console, actor, sid, _ = saved_source(production_console, tmp_path, heading='<h1>Diagnostiek</h1>')
+    console, actor, sid, _ = saved_source(production_console, tmp_path, for_build=False, heading='<h1>Diagnostiek</h1>')
     view = annotations.overview(console, actor_id=actor, snapshot_id=sid)
     entries = structure.proposed(view['blocks'])
     wrong = deepcopy(entries)

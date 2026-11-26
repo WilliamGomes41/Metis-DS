@@ -80,11 +80,21 @@ def test_source_open_returns_progress_before_extractor_finishes(production_conso
         deadline = monotonic()+5
         while monotonic() < deadline:
             opened = client.get('/annotations', params={'document':sid})
-            if 'data-source-block=' in opened.text:
+            if 'Inhoudsopgave bevestigen' in opened.text:
                 break
             sleep(.05)
         from src.vorming.human_annotation_source_v1 import progress as preparation_progress
-        assert 'data-source-block=' in opened.text, preparation_progress(console, actor_id=actor['account_id'], snapshot_id=sid)
+        assert 'Inhoudsopgave bevestigen' in opened.text, preparation_progress(
+            console, actor_id=actor['account_id'], snapshot_id=sid)
+        from src.vorming import confirmed_document_structure_v1 as structure
+        saved_view = client.get('/annotations/api', params={'document': sid}).json()
+        outline = structure.proposed(saved_view['blocks'])
+        confirmed = client.post('/annotations/structure', data={
+            'document': sid, 'basis': saved_view['extraction_hash'],
+            'anchor': [row['block_id'] for row in outline], 'title': [row['title'] for row in outline],
+            'level': [row['level'] for row in outline],
+        })
+        assert confirmed.status_code == 200 and 'data-source-block=' in confirmed.text
         assert console.snapshot_objects(sid) == []
         ready_card = client.get('/source-selection', params={'selected_document': sid}, follow_redirects=False)
         assert ready_card.status_code == 200

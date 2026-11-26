@@ -23,16 +23,16 @@ from src.vorming import human_annotation_v1 as annotations
 from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
 from tests.postgres_support import database, install_schema
 from tests.production_support import restart_production
-from tests.test_human_annotation_build_postgres import saved_source
+from tests.test_human_annotation_build_postgres import saved_source, open_document_check
 
 
 def test_scope_and_exact_sections_survive_edits_and_recovery(tmp_path, monkeypatch, production_console, production_app):
-    monkeypatch.setenv('METIS_ANNOTATION_CONFIRMED_STRUCTURE', '1')
-    console, actor, sid, request = saved_source(production_console, tmp_path,
+    console, actor, sid, request = saved_source(production_console, tmp_path, for_build=False,
         heading='<p>Voorwerk.</p><h1>Diagnostiek</h1><p>Eerste sectietekst.</p><h1>Diagnostiek</h1>')
     state = annotations.overview(console, actor_id=actor, snapshot_id=sid)
     structure.confirm(console, actor_id=actor, snapshot_id=sid,
                       extraction_hash=state['extraction_hash'], entries=structure.proposed(state['blocks']))
+    open_document_check(console, actor, sid)
     build_hash = build.overview(console, actor_id=actor, snapshot_id=sid)['overview_hash']
 
     def view(kernel=console):
@@ -71,7 +71,7 @@ def test_scope_and_exact_sections_survive_edits_and_recovery(tmp_path, monkeypat
     with ThreadPoolExecutor(2) as pool:
         list(pool.map(lambda pair: mark(*pair), [(second, console), (third, reopened)]))
     assert [row['status'] for row in view(reopened)['sections']] == ['open', 'checked', 'checked']
-    assert build.overview(reopened, actor_id=actor, snapshot_id=sid)['overview_hash'] == build_hash
+    assert build.overview(reopened, actor_id=actor, snapshot_id=sid)['overview_hash'] != build_hash
 
     # Exact retries leave the saved actor, time and decision intact.
     with console.workflow_document_store._connect() as con:

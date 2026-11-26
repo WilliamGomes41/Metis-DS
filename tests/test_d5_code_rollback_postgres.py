@@ -27,6 +27,63 @@ from tests.test_workflow_chain_recovery_v1 import _install_schema
 from src.review.review_ledger import unregister_backend
 
 ROLLBACK = '629d63c5f2ba8781f7b2c1307e8011c6476b63e2'
+ANNOTATION_ROLLBACK = '3da47aa158d453d103e25097676e4dcbe63f609a'
+
+
+def run_previous_annotation(console, tmp_path, code, *args, document_check=False):
+    checkout = tmp_path / 'previous-documentcontrole'
+    checkout.mkdir()
+    archive = subprocess.check_output(['git', 'archive', ANNOTATION_ROLLBACK], cwd=ROOT)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as bundle:
+        bundle.extractall(checkout, filter='data')
+    bootstrap = """
+import os
+import sys
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from tests.production_support import production_application
+
+root, actor, sid, *extra = sys.argv[1:]
+config = PostgresCanonicalConfig(dsn=os.environ['METIS_ROLLBACK_TEST_DSN'])
+console = production_application(root, config).state.operations_kernel
+scope = {'actor_id': actor, 'snapshot_id': sid}
+"""
+    flag = '1' if document_check else '0'
+    environment = {**os.environ, 'PYTHONPATH': str(checkout),
+                   'METIS_ROLLBACK_TEST_DSN': console.workflow_document_store.config.dsn,
+                   'METIS_ANNOTATION_CONFIRMED_STRUCTURE': flag, 'METIS_ANNOTATION_DOCUMENT_CHECK': flag}
+    execution = subprocess.run([sys.executable, '-c', bootstrap + code, str(console.root), *args],
+                               cwd=checkout, env=environment, capture_output=True, text=True, timeout=45)
+    assert execution.returncode == 0, execution.stderr[-3500:]
+
+
+def test_previous_documentcontrole_reader_finishes_the_reserved_build(production_console, tmp_path, monkeypatch):
+    from src.vorming import human_annotation_build_v1 as build
+    from src.vorming.worker_handover_v1 import native_attempt
+    from tests.production_support import restart_production
+    from tests.test_human_annotation_build_postgres import closing, saved_source
+
+    for setting in ('METIS_ANNOTATION_CONFIRMED_STRUCTURE', 'METIS_ANNOTATION_DOCUMENT_CHECK'):
+        monkeypatch.delenv(setting, raising=False)
+    console, actor, sid, _ = saved_source(production_console, tmp_path / 'runtime')
+    scope = {'actor_id': actor, 'snapshot_id': sid}
+    receipt = build.finalize(console, actor_id=actor, **closing(build.overview(console, **scope)))
+    run_previous_annotation(console, tmp_path, """
+from src.vorming import human_annotation_build_v1 as build
+from src.vorming.worker_handover_v1 import native_attempt
+
+attempt_id, seal_id = extra
+view = build.overview(console, **scope)
+assert view['document_round']['phase'] == 'checking'
+assert view['current_build']['attempt_id'] == attempt_id
+attempt = native_attempt(console, sid, attempt_id)
+assert attempt['annotation_seal_id'] == seal_id
+console.execute_source_selection(**scope, attempt=attempt)
+""", actor, sid, receipt['attempt_id'], receipt['seal_id'], document_check=True)
+    resumed = restart_production(console)
+    attempt = native_attempt(resumed, sid, receipt['attempt_id'])
+    assert attempt['state'] == 'succeeded' and attempt['annotation_seal_id'] == receipt['seal_id']
+    assert build.overview(resumed, **scope)['already_built']
+    assert not resumed.snapshot_is_published(sid)
 
 
 @pytest.mark.parametrize('kind', CONSOLES)

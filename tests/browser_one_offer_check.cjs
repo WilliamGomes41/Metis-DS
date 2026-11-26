@@ -25,6 +25,7 @@ const tasks=require('./browser_annotation_tasks.cjs');
     await Promise.all([page.waitForURL(url=>url.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
     const sid=new URL(page.url()).searchParams.get('document');
     await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  await page.getByRole('button',{name:'Bevestig en ga annoteren',exact:true}).click();
     await page.locator('#annotation-editor-inputs:enabled').waitFor();
     const read=()=>page.evaluate(async sid=>(await fetch('/annotations/api?document='+sid)).json(),sid);
     const take=page.getByRole('button',{name:'Overnemen',exact:true});

@@ -107,6 +107,9 @@ def test_upgrade_reopens_mixed_overview_and_protects_saved_head(tmp_path, produc
         annotations.save(console, actor_id=actor, **request)
     install_migration('042_retire_essential_relationships.sql')
     console = restart_production(console)
+    from src.vorming import confirmed_document_structure_v1 as structure
+    structure.confirm(console, actor_id=actor, snapshot_id=sid, extraction_hash=view['extraction_hash'],
+                      entries=structure.proposed(view['blocks']))
     current = {**command(view), 'expected_generation': 1}
     annotations.save(console, actor_id=actor, **current)
     with TestClient(production_app(console), base_url='https://testserver') as client:

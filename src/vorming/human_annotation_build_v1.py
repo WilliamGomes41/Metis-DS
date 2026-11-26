@@ -121,31 +121,28 @@ def overview(console, *, actor_id, snapshot_id):
     fragments = prepare(fragments).fragments
     from src.vorming import confirmed_document_structure_v1 as structure
     check_input = basis.get(document_check.KEY)
-    new_flow = check_input is not None or (document_check.enabled() and active is None)
     inspection = inspect_for_overview(entries, fragments=fragments,
                                       confirmed_headings=structure.anchors(basis.get(structure.KEY)),
-                                      allow_unselected=new_flow)
-    if new_flow and not any(row['payload']['status'] == 'ready' and row['payload'].get('disposition') is None
-                            for row in entries):
+                                      allow_unselected=True)
+    if not any(row['payload']['status'] == 'ready' and row['payload'].get('disposition') is None
+               for row in entries):
         inspection['findings'].append({'annotation_id': None, 'code': 'annotation_knowledge_required'})
-    if new_flow:
-        if check_input is None:
-            inspection['findings'].append({'annotation_id': None, 'code': 'annotation_document_round_required'})
-        else:
-            inspection['findings'].extend(document_check.findings(check_input, basis.get(structure.KEY), entries, fragments))
+    if check_input is None:
+        inspection['findings'].append({'annotation_id': None, 'code': 'annotation_document_round_required'})
+    else:
+        inspection['findings'].extend(document_check.findings(check_input, basis.get(structure.KEY), entries, fragments))
     # Display is the existing source reader. A concurrent save requires a new
     # overview; its entries may never be presented under this seal's hash.
     view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
     if view['generation'] != basis['generation'] or view.get(structure.KEY) != basis.get(structure.KEY):
         annotations.fail('annotation_overview_stale')
-    if (structure.enabled() and not active and structure.KEY not in basis
-            and (new_flow or structure.proposed(view['blocks']))):
+    if structure.KEY not in basis:
         inspection['findings'].append({'annotation_id': None, 'code': 'annotation_structure_confirmation_required'})
     from src.review.knowledge_route_v1 import build_is_current
-    already_built = (new_flow and active and active['state'] == 'succeeded'
+    already_built = (active and active['state'] == 'succeeded'
                      and build_is_current(view['entries'], view['object_bindings']))
     return {**view, 'title': basis['context']['title'], 'overview_hash': basis['overview_hash'],
-            'document_check_flow': new_flow, 'document_round': check_input['round'] if check_input else None,
+            'document_round': check_input['round'] if check_input else None,
             'already_built': bool(already_built), 'materialization_context': basis['context'],
             'inspection': inspection, 'current_build': dict(active) if active else None,
             'can_finalize': not already_built and not inspection['findings'] and view['objects_revision'] == row['objects_revision']
@@ -170,28 +167,6 @@ def correction_state(console, snapshot_id, object_id):
             "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
             "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
     return 'building' if active and active['state'] == 'running' else 'saved'
-
-
-def rebuild(console, *, actor_id, snapshot_id, annotation_id, command_id, expected_generation):
-    """Start the existing build for a corrected, already built object.
-
-    The worker's card is the precondition: the overview this reads must be at
-    the generation the card saved. Everything else is the existing finalize.
-    """
-    view = overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
-    if view['document_check_flow']:
-        annotations.fail('annotation_document_round_required')
-    binding = view['object_bindings'].get(annotation_id)
-    if binding is None or type(expected_generation) is not int:
-        annotations.fail('annotation_command_invalid')
-    if view['generation'] != expected_generation:
-        annotations.fail('annotation_overview_stale')
-    if view['current_build'] and view['current_build']['state'] == 'running':
-        return {'object_id': binding['object_id'], 'attempt_id': view['current_build']['attempt_id'], 'started': False}
-    receipt = finalize(console, actor_id=actor_id, snapshot_id=snapshot_id, command_id=command_id,
-                       overview_hash=view['overview_hash'], expected_generation=view['generation'],
-                       expected_revision=view['objects_revision'])
-    return {'object_id': binding['object_id'], 'attempt_id': receipt['attempt_id'], 'started': True}
 
 
 def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
@@ -236,6 +211,9 @@ def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
         receipt = issued_receipt(con)
         if receipt:
             return receipt
+        if (basis.get(document_check.KEY, {}).get('round', {}).get('phase') != 'checking'
+                or 'confirmed_document_structure' not in basis):
+            annotations.fail('annotation_document_incomplete')
         if (basis['overview_hash'] != overview_hash or view['overview_hash'] != overview_hash
                 or row['generation'] != expected_generation
                 or row['objects_revision'] != expected_revision
