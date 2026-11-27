@@ -2654,6 +2654,8 @@ def _review_inventory(
             hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
         if task == "inventory" and category == "waiting" and is_knowledge_object(obj, review_path):
             target_task = "inventory"
+        if target_task == "structure" and review_path != "boom":
+            target_task = "inventory"
         workplace = ("/review/bronpassage" if category == "handled" and not is_knowledge_object(obj, review_path) else
                      "/source-selection" if target_task == "repair" else "/review")
         items.append(
@@ -3032,14 +3034,7 @@ def _render_review_index(
     copy = _review_lane_copy(review_path, koppen)
     if task == "structure":
         if review_path != "boom":
-            return f'''
-              {_review_task_header(snapshot_id, "Koppen controleren", "Bevestig koppen op Vorming")}
-              <section class="review-section review-lane-fast">
-                <p>Koppen controleren en bevestigen gebeurt op Vorming.</p>
-                <p><a class="btn-primary" href="/source-selection?document={_esc(snapshot_id)}&amp;task=structure">Koppen controleren op Vorming</a></p>
-                <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, task="structure") for obj in koppen)}</ol>
-              </section>
-            '''
+            return ""
         return f'''
           {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
           <section class="review-lane-fast">
@@ -3131,11 +3126,8 @@ def _render_review_card(
     approval_disabled = disabled or (" disabled" if current_duty is None else "")
     from src.review.knowledge_path_v1 import is_structural_projection
     structural_heading = review_path != "boom" and is_structural_projection(obj)
-    heading_owner = (
-        f'<p data-heading-owner>Koppen bevestig je op <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=structure">Vorming</a>. '
-        'Correcties voer je uit op Vorming; afwijzen blijft hieronder beschikbaar.</p>'
-        if structural_heading else ""
-    )
+    heading_owner = ('<p data-heading-owner>De koppen van een richtlijn worden in de inhoudsopgave bevestigd.</p>'
+                     if structural_heading else '')
     owner = '/source-selection?' + urlencode(dict(document=snapshot_id, object=obj['object_id'], task='repair'))
     repair_guidance = ('<aside class="banner warn" data-repair-owner>'
         '<a href="' + _esc(owner) + '">Passage herstellen in Vorming</a>. '
@@ -5860,6 +5852,8 @@ def create_console_app(
         interaction_id: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
+            raise HTTPException(status_code=404)
         raw = [object_ids] if isinstance(object_ids, str) else list(object_ids or [])
         try:
             documents = getattr(state, 'workflow_document_store', None)
@@ -5892,9 +5886,6 @@ def create_console_app(
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
                 raise
-            if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
-                from src.vorming.source_selection_ui_v1 import render_structure
-                return HTMLResponse(render_structure(state, account, snapshot_id, conflict=True), status_code=409)
             return HTMLResponse(
                 _render_review_room(
                     state,
@@ -5905,11 +5896,6 @@ def create_console_app(
                 ),
                 status_code=409,
             )
-        if getattr(state, '_metis_workflow_review_authority', False):
-            return RedirectResponse('/source-selection?' + urlencode({
-                'document':snapshot_id, 'task':'structure'}), status_code=303)
-        if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
-            return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'structure'}), status_code=303)
         return RedirectResponse(_review_location(state, snapshot_id, task="structure"), status_code=303)
 
     @app.post("/review/relations")

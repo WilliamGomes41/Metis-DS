@@ -54,8 +54,7 @@ def test_each_task_view_only_contains_its_own_work():
     assert "Passage r1." in individual
     assert "Passage d1." not in individual
     assert "Passage h1." not in individual
-    assert "Passage h1." in headings
-    assert "Passage r1." not in headings
+    assert headings == ""
     assert "← Terug naar werkvoorraad" in individual
 
 

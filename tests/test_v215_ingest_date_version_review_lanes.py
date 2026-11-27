@@ -434,7 +434,7 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *,
     client = _client(console, production_app=production_app)
     pages = [
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("structure", "contextual", "repair")
+        for task in ("inventory", "contextual", "repair")
     ]
     html = "".join(pages)
     titles = _index_link_titles(html)
@@ -445,7 +445,12 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *,
         assert title != "Nog niet geclassificeerd"
     for obj in objects:
         snippet = _text_of(obj)
-        assert any(snippet[:40] in title or title[:40] in snippet for title in titles)
+        if obj["object_type"] == "heading":
+            detail = client.get("/review", params={"document": receipt["snapshot_id"], "object": obj["object_id"]})
+            assert detail.status_code == 200 and snippet[:40] in detail.text
+            assert 'task=structure' not in detail.text
+        else:
+            assert any(snippet[:40] in title or title[:40] in snippet for title in titles)
     unclassified = [obj for obj in objects if obj["object_type"] == "unclassified"]
     assert unclassified
     unclassified_titles = [
@@ -501,16 +506,16 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path, *, producti
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
-    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=structure").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     lower = (dashboard + headings + individual).lower()
     assert 'data-workboard-document=' in dashboard
     assert "review-task-dashboard" not in dashboard
-    assert "review-lane-fast" in headings
+    assert "review-passage-inventory" in headings
     assert "data-content-review-workplace" in individual
     assert 'class="review-normal-risk"' in individual  # Batch is a presentation within this same task.
-    assert "/review/headings/batch-confirm" in headings
-    assert "bevestig geselecteerde koppen als structuur" in headings.lower()
+    assert "/review/headings/batch-confirm" not in headings
+    assert "task=structure" not in headings
     for forbidden in (
         "zwaar/licht",
         "snel/langzaam",

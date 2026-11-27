@@ -461,11 +461,7 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(tmp_path: Pat
     html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=structure"
     ).text
-    fast = _section(html, "review-section review-lane-fast")
-    assert "/review/headings/batch-confirm" in fast
-    assert "Bevestig geselecteerde koppen als structuur" in fast
-    assert "veranderen de inhoud niet" not in fast.casefold()
-    assert 'href="/help/review"' in html
+    assert "/review/headings/batch-confirm" not in html
     confirmed = console.batch_confirm_headings(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

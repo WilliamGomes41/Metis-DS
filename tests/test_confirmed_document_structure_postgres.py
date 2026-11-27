@@ -75,6 +75,8 @@ def test_confirm_outline_then_build_and_review_same_document(tmp_path, monkeypat
     assert item['content']['clean_text'] == 'De kwetsbare huid verklaart de pijn.'
     response = reviewer.get('/review', params={'document': sid, 'object': item['object_id']})
     assert response.status_code == 200 and 'Klinische kenmerken' in response.text
+    assert 'task=structure' not in response.text
+    assert '/review/headings/batch-confirm' not in response.text
     assert latest._envelope(sid)['working_revision_id'] == before_review['working_revision_id']
     with latest.workflow_document_store._connect() as con:
         seal = con.execute('SELECT payload FROM workflow.annotation_seals WHERE seal_id=%s', (receipt['seal_id'],)).fetchone()

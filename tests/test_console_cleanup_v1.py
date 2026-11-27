@@ -90,8 +90,9 @@ def test_review_action_is_visible_and_only_own_human_decisions_start_review(tmp_
         "snapshot_id": snapshot, "snapshot_revision": revision,
         "object_ids": [heading["object_id"]],
     }, follow_redirects=False)
-    assert response.status_code == 303
-    # A heading confirmation in Vorming does not prove a personal content decision.
+    assert response.status_code == 404
+    assert console.objects_revision(snapshot) == revision
+    # A retired heading command cannot start a personal review.
     assert ">Beginnen</a>" in client.get("/review").text
 
 
@@ -141,7 +142,7 @@ def test_task_back_link_keeps_selected_document_and_search(tmp_path, *, producti
     client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
     response = client.get("/review", params={"document": first["snapshot_id"],
-                          "task": "structure", "q": "Document A", "page": 2})
+                          "task": "contextual", "q": "Document A", "page": 2})
     assert response.status_code == 200
     back = [attrs["href"] for tag, attrs in Tags(response.text).tags
             if tag == "a" and "q=Document+A" in attrs.get("href", "")]

@@ -94,7 +94,6 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     import src.vorming.semantic_passage_v1 as semantic
     import src.operations_console_app as ui
     import src.review.review_workboard_v1 as workboard
-    import src.vorming.source_selection_ui_v1 as selection
 
     console, client, sid = review_client
     before = deepcopy(console.snapshot_objects(sid))
@@ -106,7 +105,11 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     # Only generated form identifiers differ between identical read requests.
     monkeypatch.setattr(ui, "new_review_interaction_id", lambda: "fixture-interaction")
     monkeypatch.setattr(ui.uuid, "uuid4", lambda: UUID(int=1))
-    owner, name = (selection, 'render_structure') if task == 'structure' else (workboard, '_render_review_room')
+    if task == 'structure':
+        assert client.get('/review', params=params, follow_redirects=False).status_code == 404
+        assert console.snapshot_objects(sid) == before
+        return
+    owner, name = workboard, '_render_review_room'
     renderer = getattr(owner, name)
     with monkeypatch.context() as baseline:
         baseline.setattr(owner, name, getattr(renderer, "__wrapped__", renderer))
@@ -127,10 +130,8 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
     # Structural navigation needs no current source
     # reconstruction. Content tasks retain their exact per-request reuse bound.
-    if task == 'structure':
-        assert 'action="/review/headings/batch-confirm"' in expected.text
     prepared = request.node.callspec.params['review_client'] is None
-    for expected_calls in ((0, 0) if prepared or task == 'structure' else (1, 2)):
+    for expected_calls in ((0, 0) if prepared else (1, 2)):
         response = client.get("/review", params=params)
         assert response.status_code == 200
         assert response.text == expected.text

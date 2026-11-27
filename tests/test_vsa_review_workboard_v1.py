@@ -130,8 +130,8 @@ def test_work_item_reuses_existing_queue_order_and_deep_links() -> None:
 
     item = review_work_item(console, account=_account(), envelope=_envelope())
     assert item is not None
-    assert item["next_task"] == "structure"
-    assert item["next_href"].endswith("task=structure")
+    assert item["next_task"] == "contextual"
+    assert item["next_href"].endswith("task=contextual")
 
     heading["governance"]["validation_status"] = "approved"
     console._test_objects = [heading, individual, batch, blocked]
@@ -305,7 +305,7 @@ def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path, *, pr
     assert "Document A" in page.text
 
 
-def test_heading_batch_success_returns_to_formation_structure(tmp_path: Path, *, production_app, production_console) -> None:
+def test_retired_heading_batch_preserves_guideline_objects(tmp_path: Path, *, production_app, production_console) -> None:
     console, _accounts, first, _second = _system(tmp_path, production_console=production_console)
     snapshot_id = str(first["snapshot_id"])
     objects = console.snapshot_objects(snapshot_id)
@@ -330,14 +330,9 @@ def test_heading_batch_success_returns_to_formation_structure(tmp_path: Path, *,
         follow_redirects=False,
     )
 
-    assert response.status_code == 303
-    assert response.headers["location"] == f"/source-selection?document={snapshot_id}&task=structure"
+    assert response.status_code == 404
+    assert console.snapshot_objects(snapshot_id) == objects
 
-    page = client.get(response.headers["location"])
-    assert page.status_code == 200
-    assert 'data-formation-structure' in page.text
-    assert '/review/headings/batch-confirm' not in page.text
-    assert 'Er zijn geen open koppen' in page.text
 
 
 def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Path, *, production_app, production_console) -> None:

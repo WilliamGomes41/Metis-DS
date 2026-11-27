@@ -8,7 +8,7 @@ from html import escape
 import uuid
 from urllib.parse import urlencode
 
-from fastapi import Request, Query
+from fastapi import HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
@@ -443,65 +443,6 @@ def render_source_accountability(console, account, document):
         '<a href="' + ui._esc(review) + '">Kennisvoorstellen beoordelen in Review</a></p>' + panel + '</section>')
 
 
-@source_reconstruction_scope(reuse_existing=True)
-def render_structure(console, account, document, *, conflict=False, q='', page=1):
-    """One presentation owner for the existing prose heading confirmation."""
-    from src import operations_console_app as ui
-    from src.review.beslisboom_path_v1 import review_path_for_klasse
-    console._require_role(account['account_id'], 'reviewer')
-    envelope = console._envelope(document)
-    if account['account_id'] not in envelope.get('named_reviewers', []):
-        raise ConsoleError('reviewer_not_named_on_snapshot')
-    review_path = review_path_for_klasse(envelope['class'])
-    if review_path == 'boom':
-        return RedirectResponse('/review?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
-    if getattr(console, 'workflow_document_store', None) is not None:
-        from src.review.review_passage_read_v1 import read_review_document
-        inputs = read_review_document(console, account, document, current_only=True,
-                                      prepare_source_views=False)
-        envelope, objects, revision, bindings = inputs.envelope, inputs.objects, inputs.revision, inputs.bindings
-        review_path = review_path_for_klasse(envelope['class'])
-        if review_path == 'boom':
-            return RedirectResponse('/review?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
-        fragments = inputs.fragments
-    else:
-        objects, revision = console.snapshot_objects_and_revision(document)
-        bindings = ui._review_bindings(console, document, objects=objects)
-        fragments = console.review_source_fragments(document)
-    headings = ui._review_route_objects(objects, review_path=review_path,
-        bindings=bindings, reviewer_id=account['account_id'], canonical_task='structure',
-        fragments=fragments)
-    copy = ui._review_lane_copy(review_path, headings)
-    editable = not console.snapshot_is_published(document)
-    rows = ''.join(ui._review_index_item(obj, document, checkbox=editable, task='structure') for obj in headings)
-    panel = '<p class="review-task-empty">Er zijn geen open koppen om te bevestigen.</p>'
-    if headings:
-        panel = '<ol class="object-index review-heading-list">' + rows + '</ol>'
-        if editable:
-            panel = ('<form method="post" action="/review/headings/batch-confirm">'
-                '<input type="hidden" name="snapshot_id" value="' + ui._esc(document) + '">'
-                '<input type="hidden" name="interaction_id" value="' + ui._esc(ui.new_review_interaction_id()) + '">'
-                + ui._snapshot_revision_input(revision) +
-                '<div class="review-batch-tools"><span>Selecteer alleen koppen die je hebt gecontroleerd.</span>'
-                '<button class="btn-secondary" type="button" data-select-review-batch>Selecteer alles</button>'
-                '<button class="btn-secondary" type="button" data-clear-review-batch>Selectie wissen</button></div>'
-                + panel + '<button class="btn-primary" type="submit">' + ui._esc(copy['fast_button']) + '</button></form>')
-    if not editable:
-        panel = '<p class="banner warn">Deze gepubliceerde werkversie is alleen te lezen.</p>' + panel
-    overview = '/source-selection?' + urlencode({'document': document})
-    review_params = {'document': document}
-    if q or page != 1:
-        review_params.update(q=q, page=page)
-    review = '/review?' + urlencode(review_params)
-    return ui._page(ui._nav(account, 'selection') +
-        '<section class="room review-room" data-formation-structure><h1>Vorming</h1>'
-        + ui._task_links('review') +
-        '<h2>' + ui._esc(copy['fast_title']) + '</h2><p>Controleer de koppen tegen de oorspronkelijke bron en bevestig je selectie als structuur.</p>'
-        '<p><a href="' + ui._esc(overview) + '">Voortgang en vormingsproblemen</a> · '
-        '<a href="' + ui._esc(review) + '">Kennisvoorstellen beoordelen in Review</a></p>'
-        + ui._review_conflict_html(conflict) + '<section class="review-section review-lane-fast">' + panel + '</section></section>')
-
-
 ACTIVE_PROGRESS = {"bezig", "wacht op uitvoering"}
 
 
@@ -806,9 +747,6 @@ def install(app, console, require, page, nav, esc):
                 and actor['account_id'] in envelope.get('named_reviewers', [])):
             diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "disposition"}))}">'
                                'Brongebruik verantwoorden</a>')
-            if review_path_for_klasse(envelope['class']) != 'boom':
-                diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "structure"}))}">'
-                                   'Koppen controleren</a>')
         review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
         extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
         fragment_count = envelope.get('source_fragment_count')
@@ -846,11 +784,13 @@ def install(app, console, require, page, nav, esc):
     def selection_get(request: Request, document: str = '', selected_document: str = '', offset: int = Query(0, ge=0),
                       object: str = '', context_target: str = '', context_mode: str = '',
                       context_page: int = 0, context_q: str = '', context_saved: str = '',
-                      task: str = '', q: str = '', review_page: int = Query(1, alias='page'),
+                      task: str = '',
                       return_task: str = '', continuation_saved: str = '',
                       repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = '', review_revision: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
+        if task == 'structure':
+            raise HTTPException(status_code=404)
         if document and not selected_document:
             from src.vorming.human_annotation_v1 import owns_source
             if owns_source(console, document):
@@ -861,8 +801,6 @@ def install(app, console, require, page, nav, esc):
                     if ref:
                         params['annotation'] = ref['annotation_id']
                 return RedirectResponse('/annotations?' + urlencode(params), status_code=303)
-        if task == 'structure' and document:
-            return render_structure(console, actor, document, q=q, page=review_page)
         if task == 'graph' and document:
             from src.review.decision_review_ui_v1 import render_graph
             body = render_graph(console, actor, document, editing=True)

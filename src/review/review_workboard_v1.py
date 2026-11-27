@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, HTTPException, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 import src.operations_console_app as console_ui
@@ -138,7 +138,8 @@ def _work_item_from_counts(
         else actionable_review_duties
     )
     task_counts = (
-        ("structure", structure_review_duties if actionable_structure_duties is None else actionable_structure_duties),
+        ("structure", (structure_review_duties if actionable_structure_duties is None else actionable_structure_duties)
+         if _review_path_of(envelope) == "boom" else 0),
         ("contextual", contextual_review_duties if actionable_contextual_duties is None else actionable_contextual_duties),
         ("batch", batch_review_duties if actionable_batch_duties is None else actionable_batch_duties),
         ("second_review", actionable_second_review_duties),
@@ -170,7 +171,7 @@ def _work_item_from_counts(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    workplace = '/source-selection' if next_task == 'repair' or (next_task == 'structure' and _review_path_of(envelope) != 'boom') else '/review'
+    workplace = '/source-selection' if next_task == 'repair' else '/review'
     next_href = (
         f"{workplace}?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
         if next_task
@@ -740,6 +741,8 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
+        if chosen_task == 'structure' and (not document or _review_path_of(console._envelope(document)) != 'boom'):
+            raise HTTPException(status_code=404)
         if document and receipt_interaction and receipt_object:
             from src.review.ko_receipt_ui_v1 import read_saved_review, render_receipt_page
             receipt = read_saved_review(console, account, document, receipt_object, receipt_interaction)
@@ -821,12 +824,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             raise ConsoleError("unknown_snapshot")
         if selected and account["account_id"] not in selected["named_reviewers"]:
             return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
-        if (selected and not object.strip() and chosen_task == 'structure'
-                and review_path_for_klasse(selected['class']) != 'boom'):
-            params = {'document': document, 'task': 'structure'}
-            if q or page != 1:
-                params.update(q=q, page=page)
-            return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         chosen = document.strip()
         if after_batch and chosen_task == 'batch' and read_inputs is not None:
             from src.review.proportionate_review_v1 import normal_risk_batch_queue
@@ -884,8 +881,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             interaction_id=interaction_id,
         )
         if isinstance(response, RedirectResponse) and response.status_code == 303:
-            if response.headers['location'].startswith('/source-selection?'):
-                return response
             envelope = console._envelope(snapshot_id)
             item = review_work_item(
                 console,

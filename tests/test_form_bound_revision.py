@@ -380,19 +380,16 @@ def test_stale_form_keeps_draft_and_links_to_current_form(tmp_path: Path, *, pro
     assert console.objects_revision(snapshot_id) == revision
 
 
-def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, production_app, production_console) -> None:
+def test_retired_batch_cannot_overwrite_concurrent_guideline_changes(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     client = _client(console, "researcher.anne", production_app=production_app)
     index = client.get(f"/review?document={snapshot_id}&task=structure")
-    assert index.status_code == 200
-    revision = _hidden(index.text, "snapshot_revision")
-    assert revision, "batch-confirm form MUST carry snapshot_revision"
-    heading_ids = re.findall(r'name="object_ids"[^>]*value="([^"]+)"', index.text)
-    if not heading_ids:
-        heading_ids = re.findall(r'value="([^"]+)"[^>]*name="object_ids"', index.text)
+    assert index.status_code == 404
+    revision = console.objects_revision(snapshot_id)
+    heading_ids = [row["object_id"] for row in console.snapshot_objects(snapshot_id) if row["object_type"] == "heading"]
     assert heading_ids
     other = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
@@ -407,9 +404,7 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, pro
         data={"snapshot_id": snapshot_id, "snapshot_revision": revision, "object_ids": heading_ids[:1]},
         follow_redirects=False,
     )
-    assert posted.status_code != 303
-    body = posted.text
-    assert SNAPSHOT_WRITE_CONFLICT in body or "data-stale-write-conflict" in body
+    assert posted.status_code == 404
     stored = {row["object_id"]: row for row in console._load_objects(snapshot_id)}
     assert any(row.get("reliability_marker") == "batch-concurrent-winner" for row in stored.values())
 
