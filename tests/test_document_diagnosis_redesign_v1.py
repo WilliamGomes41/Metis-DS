@@ -126,7 +126,7 @@ def test_reviewer_sees_verdict_first_then_steps_actions_findings_and_evidence(sy
     links = [parse_qs(urlsplit(url).query) for url in Links(actions).hrefs]
     expected = {row['object_id'] for row in processing_diagnostic_rows(console.snapshot_objects(sid))}
     assert {link['object'][0] for link in links} == expected
-    assert all(link['document'] == [sid] and link['task'] == ['repair'] for link in links)
+    assert all(link['document'] == [sid] and link['task'] == ['inventory'] for link in links)
     assert 'geen aantallen handmatige taken' in actions
     assert "Wie" not in actions and "Redacteur" not in actions
     assert "De passage is niet los te lezen" in html  # plain-language family text
