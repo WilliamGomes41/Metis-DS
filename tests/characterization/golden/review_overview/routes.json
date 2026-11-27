@@ -265,12 +265,6 @@
       ]
     ],
     [
-      "/inzicht/document/poging",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/inzicht/document/publicatiebewijs",
       [
         "GET"
@@ -298,66 +292,6 @@
       "/inzicht/reviewsignalen",
       [
         "GET"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking/{comparison_id}",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking/{comparison_id}/analyze",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking/{comparison_id}/assess/{label}",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking/{comparison_id}/cancel",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking/{comparison_id}/close",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/inzicht/routevergelijking/{comparison_id}/run/{route}",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/inzicht/veiligheidstests",
-      [
-        "GET"
-      ]
-    ],
-    [
-      "/inzicht/veiligheidstests/run",
-      [
-        "POST"
       ]
     ],
     [

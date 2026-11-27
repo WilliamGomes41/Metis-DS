@@ -40,7 +40,7 @@ def ingest(console):
     return receipt["snapshot_id"], researcher["account_id"], reviewer["account_id"]
 
 
-def test_failed_initial_ingest_evidence_restart_http_replay_and_success_activation(workflow_postgres, tmp_path):
+def test_failed_initial_ingest_evidence_restart_replay_and_success_activation(workflow_postgres, tmp_path):
     console = _console(tmp_path, workflow_postgres)
     bound(console)
     sid, actor, reviewer = ingest(console)
@@ -55,8 +55,8 @@ def test_failed_initial_ingest_evidence_restart_http_replay_and_success_activati
     assert replay_diagnostic(attempt)["reason_code"] == "semantic_span_bounds_invalid"
     client = _client(restarted)
     response = client.get("/inzicht/document/poging", params={"document": sid, "attempt_id": attempt["attempt_id"]})
-    assert response.status_code == 200 and response.json()["status"] == "rejected"
-    assert response.headers["cache-control"] == "no-store"
+    assert response.status_code == 404
+    assert replay_diagnostic(attempt)["status"] == "rejected"
     assert restarted._envelope(sid) == persisted
     bound(restarted, reject=False)
     restarted.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="success")

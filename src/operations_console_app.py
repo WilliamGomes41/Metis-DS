@@ -3644,7 +3644,7 @@ def create_console_app(
             <a class="doc-card" href="/inzicht?tab=systeem" style="text-decoration:none;"><p class="doc-title">Systeem</p><p>Verzoeken, fouten, fasen en deploys, tot op de milliseconde.</p></a>
             <a class="doc-card" href="/inzicht?tab=kwaliteit" style="text-decoration:none;"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bruikbaarheid van voorstellen, herstelwerk en open werk.</p></a>
             <a class="doc-card" href="/inzicht?tab=documenten" style="text-decoration:none;"><p class="doc-title">Documenten</p><p>Verwerking, blokkades en systeemfouten per document.</p></a>
-            <a class="doc-card" href="/inzicht?tab=controles" style="text-decoration:none;"><p class="doc-title">Controles</p><p>Veiligheidstests, routevergelijking en reviewsignalen.</p></a>
+            <a class="doc-card" href="/inzicht?tab=controles" style="text-decoration:none;"><p class="doc-title">Controles</p><p>Bekijk signalen uit de review.</p></a>
           </div>
           <div style="height:18px" aria-hidden="true"></div>
           <h2>Beheer</h2>
@@ -4860,26 +4860,6 @@ def create_console_app(
             raise
         return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id}) + '#paginas', status_code=303)
 
-    @app.get("/inzicht/document/poging", response_class=JSONResponse)
-    def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):
-        account = _require(request)
-        if "reviewer" not in set(account.get("roles") or []):
-            raise ConsoleError("reviewer_role_required")
-        envelope = state._envelope(document)
-        if account["account_id"] not in (envelope.get("named_reviewers") or []):
-            raise ConsoleError("reviewer_not_named_on_snapshot")
-        envelope=state._processing_history_envelope(document)
-        attempt = next((a for a in envelope.get("processing_attempts", []) if a["attempt_id"] == attempt_id), None)
-        if attempt is None:
-            raise ConsoleError("processing_attempt_not_active")
-        from src.vorming.attempt_diagnostics_v1 import replay_diagnostic
-        if envelope.get("processing_storage") == "task-v1":
-            from src.workflows.formation_task_store_v1 import FormationTaskStore
-            store = FormationTaskStore(state.workflow_document_store)
-            attempt = {**attempt, "diagnostic":store.diagnostic(attempt)}
-            return JSONResponse(replay_diagnostic(attempt,input_resolver=lambda ref:store.resolve_input(ref,expected_snapshot_id=document)),headers={"Cache-Control":"no-store"})
-        return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
-
     @app.post("/tree/move")
     def tree_move(
         request: Request,
@@ -5872,8 +5852,6 @@ def create_console_app(
     from src.settings.quality_metrics_app_v1 import install_quality_routes
     from src.settings.insight_v1 import insight_tabs
     install_quality_routes(app, state, _require, _page, tabs=insight_tabs)
-    from src.settings.route_comparison_app_v1 import install_route_comparison_routes
-    install_route_comparison_routes(app, state, _require, _page)
     from src.review.decision_review_ui_v1 import install_decision_review_routes
     install_decision_review_routes(app, state, _require, _page)
     from src.review.review_participation_ui_v1 import install_routes as install_participation_routes
