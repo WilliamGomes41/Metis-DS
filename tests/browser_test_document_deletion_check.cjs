@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
   await page.goto(base+'/login');
   await page.locator('[name=username]').fill(m.username);
   await page.locator('[name=password]').fill(m.password);
-  await Promise.all([page.waitForURL(u=>u.pathname==='/'),page.locator('button[type=submit]').click()]);
+  await Promise.all([page.waitForURL(u=>u.pathname==='/publish'),page.locator('button[type=submit]').click()]);
   assert.equal(await api(m.old_object),200);
   await page.goto(base+'/tree');
   const row=page.locator('details.document-row').filter({has:page.locator(`a[href="/documents/test-delete?document=${m.document}"]`)});

@@ -49,9 +49,9 @@ def test_authenticated_home_does_not_load_document_inventory(tmp_path, monkeypat
         pytest.fail("home requested the complete document inventory")
 
     monkeypatch.setattr(console, "list_envelopes", forbidden)
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "Mijn werk" in response.text
+    response = client.get("/", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/source-selection"
     assert "Geen open taken" not in response.text
     assert "0 documenten" not in response.text
 
@@ -92,7 +92,7 @@ def test_identity_outage_is_503_and_keeps_cookie(tmp_path, monkeypatch, path, *,
     assert "Je sessie is verlopen" not in _visible_text(response.text)
     assert client.cookies.get("console_session") == cookie
     assert client.get("/").status_code == 200
-    assert "Mijn werk" in client.get("/").text
+    assert client.get("/").url.path == "/source-selection"
 
 
 def test_navigation_renewal_outage_preserves_cookie_and_denies_access(tmp_path, monkeypatch, *, production_app, production_console):

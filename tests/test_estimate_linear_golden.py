@@ -107,7 +107,8 @@ def test_source_selection_list_reads_attempts_once_per_request(tmp_path, monkeyp
     import src.vorming.source_selection_ui_v1 as ui
     monkeypatch.setattr(ui, 'comparable_observations', selection.comparable_observations, raising=False)
     client = TestClient(app)
-    client.post('/login', data={'username': 'author', 'password': 'strong-test-password'})
+    login = client.post('/login', data={'username': 'author', 'password': 'strong-test-password'}, follow_redirects=False)
+    assert login.status_code == 303
     page = client.get('/source-selection')
     assert page.status_code == 200
     assert len(calls) == 1, calls

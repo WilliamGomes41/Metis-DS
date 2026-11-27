@@ -6,7 +6,18 @@ geen aparte workflow- of afsluitautoriteit.
 
 ```mermaid
 flowchart TD
-    UI[Review / Vorming / publicatie] --> D[Documentstore: actuele header]
+    START[Start na aanmelden] -->|researcher| V[Vorming]
+    START -->|reviewer| R[Review]
+    START -->|alleen publisher| PUB[Publicatie]
+    V -->|richtlijn| A[Inhoudsopgave en annotaties]
+    A --> B[Documentcontrole en bouwen]
+    B --> R
+    V -->|beslisboom| G[Beslisstructuur vastleggen]
+    G -->|beslisroutes beoordelen| R
+    V --> UI
+    R --> UI
+    PUB --> UI
+    UI[Documentgegevens per werkplek] --> D[Documentstore: actuele header]
     D --> ROW[workflow.documents: scalars, pins, revision, lock]
     D --> INPUTS[document_inputs: overige metadata, vaste refs, extractieheader]
     UI --> P[Passieve voortgang voor actieve kaarten in Vorming]
@@ -16,7 +27,7 @@ flowchart TD
     UI --> Q[Gerichte kwaliteitsinput]
     UI --> S[Expliciete bronlezing]
     UI --> T[Expliciet beslisboombewijs]
-    UI --> H[Geautoriseerde diagnose / export]
+    INS[Inzicht: Documentdiagnose] --> H[Geautoriseerde diagnose / export]
     F --> OWNER[FormationTaskStore: immutable archive en verzegelde leden]
     Q --> OWNER
     T --> OWNER

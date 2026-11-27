@@ -69,8 +69,8 @@ def test_settings_hub_channels_inzicht_beheer_and_uitleg(tmp_path, *, production
     for key in ('systeem', 'kwaliteit', 'documenten', 'controles'):
         assert f'href="/inzicht?tab={key}"' in settings
     assert 'href="/settings/quality"' not in settings and 'href="/telemetry"' not in settings
-    technical = client.get('/settings/technical').text
-    assert 'href="/settings/llm"' in technical
+    technical = client.get('/settings/llm').text
+    assert 'href="/settings/llm"' in settings
     for removed in ('href="/inzicht', 'href="/inzicht?tab=kwaliteit&view=table', 'href="/inzicht/document', 'Verwerkingsproblemen herstellen'):
         assert removed not in technical
 

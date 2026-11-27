@@ -73,13 +73,13 @@ def test_task_help_and_management_are_separate_readonly_destinations(tmp_path, *
     help_page = client.get('/help/review')
     assert help_page.status_code == 200
     assert 'Een definitie legt een begrip uit' in help_page.text
-    management = client.get('/settings/technical')
+    management = client.get('/settings/llm')
     assert management.status_code == 200
     assert 'Actieve verwerkingsmodus' in management.text
     assert '/settings/technical/processing?document=' not in management.text
     documents = client.get('/inzicht/api/documents').json()['documents']
     assert sid in [row['snapshot_id'] for row in documents]
-    diagnostics = client.get('/settings/technical', params={'document': sid})
+    diagnostics = client.get('/inzicht/document', params={'document': sid})
     assert diagnostics.status_code == 200
     assert diagnostics.url.path == '/inzicht/document'
     assert 'Passages en brondekking' in diagnostics.text
@@ -88,7 +88,7 @@ def test_task_help_and_management_are_separate_readonly_destinations(tmp_path, *
     stranger = console.create_account(username='stranger', password=TEST_PASSWORD, roles=('reviewer',))
     login(client, stranger['username'])
     assert client.get('/inzicht/document', params={'document': sid}).status_code == 400
-    assert client.get('/settings/technical', params={'document': sid}).status_code == 400
+    assert client.get('/settings/technical', params={'document': sid}, follow_redirects=False).status_code == 404
 
 
 def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_path, *, production_app, production_console):
@@ -160,20 +160,17 @@ def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, m
 
 
 @pytest.mark.parametrize('username', ['researcher.anne', 'reviewer.bert'])
-def test_mijn_werk_keeps_shared_layout_with_neutral_navigation(tmp_path, username, *, production_app, production_console):
+def test_start_opens_role_workspace_and_preserves_shared_styles(tmp_path, username, *, production_app, production_console):
     console, _, _, _ = _console_with_document(tmp_path, production_console=production_console)
     client = client_for(console, production_app=production_app)
     login(client, username)
     response = client.get('/')
     assert response.status_code == 200
-    # #546 intentionally removes live badges; the five workflow destinations remain.
-    html = response.text
-    assert 'Review openen' in html
-    assert 'Geen open taken' not in html
-    assert sum(tag == 'a' and 'home-tile' in attrs.get('class', '').split() for tag, attrs in Surface(html).tags) == 5
+    assert response.url.path == ('/source-selection' if username == 'researcher.anne' else '/review')
+    assert 'home-tile' not in response.text
     css = (Path(__file__).parents[1] / 'assets/brand/console.css').read_text()
-    # #970 removes retired history selectors; shared home rules remain unchanged.
     original = css.split('\n/* Task-only execution/evidence layout;')[0]
-    assert hashlib.sha256(original.replace("repeat(5, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))").encode()).hexdigest() == '2408d8d7f25940df974aa737758bd02415bfd4a8ea7ac1b028800477739ebf1e'
-    # Added selectors must not touch the shared home layout.
+    # The shared controls retain their baseline after retiring the tile styles.
+    assert hashlib.sha256(original.encode()).hexdigest() == "f6f0092b8bf97f8cd7fbac91590aab3090bd921b6b6b42f517d1b8bc2a87b4af"
+    # Later task styles must not reintroduce the tile layout.
     assert '.home-tiles' not in css[len(original):]

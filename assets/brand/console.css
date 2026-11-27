@@ -195,130 +195,6 @@ a { color: var(--paars); }
   gap: 6px;
 }
 
-.home-room {
-  max-width: none;
-}
-
-.home-room h1 {
-  font-size: clamp(2rem, 3.3vw, 3.1rem);
-  margin-bottom: 0.25rem;
-}
-
-.home-room .lead {
-  font-size: 1.1rem;
-  margin-bottom: 2.4rem;
-}
-
-.home-tiles {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 18px;
-  width: 100%;
-}
-
-.home-tile {
-  display: flex;
-  min-height: 25rem;
-  flex-direction: column;
-  align-items: center;
-  padding: 2.3rem 1.2rem 1.8rem;
-  border: 2px solid #d4edf2;
-  border-radius: 18px;
-  background: var(--wit);
-  color: var(--text);
-  text-align: center;
-  text-decoration: none;
-  box-shadow: 0 8px 22px rgba(20, 42, 66, 0.04);
-  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
-}
-
-.home-tile:hover {
-  border-color: var(--water);
-  box-shadow: 0 12px 26px rgba(20, 42, 66, 0.10);
-  transform: translateY(-2px);
-}
-
-.home-tile:focus-visible {
-  outline: 3px solid var(--rood);
-  outline-offset: 3px;
-}
-
-.home-tile-priority {
-  border-color: var(--water);
-  box-shadow: 0 10px 26px rgba(69, 170, 199, 0.14);
-}
-
-.home-tile-icon {
-  display: grid;
-  width: 7rem;
-  height: 7rem;
-  place-items: center;
-  margin-bottom: 1.45rem;
-  border: 0.7rem solid var(--water);
-  border-radius: 50%;
-  color: var(--paars);
-  font-size: 4rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.home-tile:first-child .home-tile-icon,
-.home-tile:nth-child(3) .home-tile-icon {
-  border-radius: 18px;
-}
-
-.home-tile:nth-child(4) .home-tile-icon {
-  border-color: var(--paars);
-  border-radius: 16px;
-  color: var(--paars);
-}
-
-.home-tile-title {
-  color: var(--brand-ink);
-  font-family: var(--font-heading);
-  font-size: 1.45rem;
-  font-weight: 700;
-}
-
-.home-tile-description {
-  margin-top: 0.8rem;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1.45;
-}
-
-.home-tile-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 1.5rem;
-}
-
-.home-tile-badge,
-.home-tile-now {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.15rem;
-  padding: 0.35rem 0.85rem;
-  border-radius: 999px;
-  background: #f0f2f5;
-  color: #374151;
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-.home-tile-priority .home-tile-badge {
-  background: var(--paars);
-  color: var(--wit);
-}
-
-.home-tile-now {
-  background: #dff5fa;
-  color: #11728d;
-}
-
 .rooms a,
 .rooms button {
   display: inline-flex;
@@ -1177,7 +1053,6 @@ mark.broncontext-marked {
 
   .rooms { order: 2; }
 
-  .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .canvas {
     padding: 18px 20px 36px;
@@ -1226,9 +1101,7 @@ mark.broncontext-marked {
     white-space: nowrap;
   }
 
-  .home-tiles { grid-template-columns: 1fr; }
 
-  .home-tile { min-height: 18rem; }
 
   .login-card {
     margin-top: 0.75rem;
@@ -1418,8 +1291,6 @@ mark.broncontext-marked {
 
 
 /* Secondary surfaces previously used fixed light colors. */
-html[data-theme="dark"] .home-tile-badge { background: var(--surface-soft); color: var(--text); }
-html[data-theme="dark"] .home-tile-now { background: var(--water-light); color: var(--text); }
 html[data-theme="dark"] .review-control-card-alert { background: var(--alert-bg); }
 html[data-theme="dark"] .info-tip-text { background: #0d1520; }
 html[data-theme="dark"] .metis-mark-frame { background: #fff; }

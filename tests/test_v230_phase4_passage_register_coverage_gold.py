@@ -569,7 +569,7 @@ def test_researcher_ops_surface_may_show_coverage_without_touching_the_card(tmp_
     adviseert = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), ADVISEERT)
     client = _client(console, production_app=production_app)
     index = client.get(
-        f"/settings/technical?document={receipt['snapshot_id']}"
+        f"/inzicht/document?document={receipt['snapshot_id']}"
     ).text
     card_html = client.get(
         f"/review?document={receipt['snapshot_id']}&object={adviseert['object_id']}"

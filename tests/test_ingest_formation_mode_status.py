@@ -43,7 +43,7 @@ def _management_page(console: OperationsConsole, *, production_app) -> str:
     )
     assert login.status_code == 303
     assert "Actieve verwerkingsmodus" not in client.get("/ingest").text
-    page = client.get("/settings/technical")
+    page = client.get("/settings/llm")
     assert page.status_code == 200
     return page.text
 
@@ -56,8 +56,8 @@ def test_management_shows_default_source_bound_v2_runtime_mode_read_only(tmp_pat
 
     assert "Actieve verwerkingsmodus: Semantisch met bronbewijs" in html
     assert (
-        "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
-        "semantisch gevormd. Review blijft verplicht."
+        "Deze modus geldt voor de modelverwerking van bronpassages. "
+        "Richtlijnen worden handmatig geannoteerd. Review blijft verplicht."
     ) in html
     from src.vorming.source_bound_fields_v2 import MODE
     assert console._passage_formation_mode_reader() == MODE
@@ -74,8 +74,8 @@ def test_management_shows_same_injected_semantic_mode_used_by_processing_router(
 
     assert "Actieve verwerkingsmodus: Semantisch" in html
     assert (
-        "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
-        "semantisch gevormd. Review blijft verplicht."
+        "Deze modus geldt voor de modelverwerking van bronpassages. "
+        "Richtlijnen worden handmatig geannoteerd. Review blijft verplicht."
     ) in html
     assert console._passage_formation_mode_reader() == SEMANTIC_MODE
     assert 'name="passage_formation_mode"' not in html

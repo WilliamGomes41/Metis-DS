@@ -103,10 +103,9 @@ def test_callback_lands_on_home_without_review_or_inventory_reads(recovery_postg
 
     monkeypatch.setattr(state, 'waiting_task_counts', forbidden)
     monkeypatch.setattr(state, 'list_envelopes', forbidden)
-    home = client.get(response.headers['location'])
-    assert home.status_code == 200
-    assert 'Mijn werk' in home.text
-    assert 'Review openen' in home.text
+    home = client.get(response.headers['location'], follow_redirects=False)
+    assert home.status_code == 303
+    assert home.headers['location'] == '/review'
     assert client.get('/session/status').status_code == 200
 
 

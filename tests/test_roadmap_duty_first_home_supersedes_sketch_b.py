@@ -145,8 +145,6 @@ def test_duty_first_does_not_rewrite_protocol_and_is_in_console() -> None:
     assert not (ROOT / "docs" / "PROTOCOL_V2_33_DUTY_FIRST_HOME_DELTA.md").exists()
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_DUTY_FIRST_HOME_DELTA.md").exists()
     src = _read(ROOT / "src" / "operations_console_app.py")
-    assert "Mijn werk" in src
-    assert "Kies de volgende stap in het proces." in src
-    assert "home-tile" in src
-    assert 'href="/publish"' in src
+    assert "home-tile" not in src
+    assert "Kies de volgende stap in het proces." not in src
     assert not (ROOT / "HANDOFF.md").exists()

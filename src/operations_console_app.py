@@ -172,8 +172,8 @@ def _passage_formation_status_html(state: OperationsConsole) -> str:
     if mode in {SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE}:
         label = "Semantisch met bronbewijs" if mode in {SEMANTIC_V2_MODE, SEMANTIC_V3_MODE} else "Semantisch"
         detail = (
-            "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
-            "semantisch gevormd. Review blijft verplicht."
+            "Deze modus geldt voor de modelverwerking van bronpassages. "
+            "Richtlijnen worden handmatig geannoteerd. Review blijft verplicht."
         )
     else:
         label = "Configuratiefout"
@@ -233,7 +233,7 @@ BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
     "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
-    "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
+    "pre_review_processing_incomplete": "De verwerking is nog niet afgerond. Open de documentkaart in Vorming om de status en de volgende stap te bekijken.",
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel. Ontbreekt die, wijs dan bij Reviewdeelname een tweede verplichte beoordelaar toe.",
     "review_four_eyes_choice_required": "Kies bij twee personen of het vierogenprincipe verplicht is.",
     "review_configuration_four_eyes_needs_two_reviewers": "Het vierogenprincipe kan alleen bij twee aangewezen personen.",
@@ -285,10 +285,10 @@ ERROR_COPY = {
     "pre_review_retry_requires_postgres": "Veilige herverwerking vereist de duurzame workflowopslag. Laat de beheerder de configuratie controleren.",
     "pre_review_retry_existing_work": "Dit document bevat al passages of beoordelingen. Deze herstelactie vervangt die niet.",
     "processing_attempt_in_progress": "Er loopt al een verwerkingspoging voor dit document. Bekijk de technische diagnose voor de voortgang.",
-    "processing_attempt_expired": "De vorige verwerkingspoging is onderbroken of verlopen. Start een nieuwe poging vanuit Documenten.",
+    "processing_attempt_expired": "De vorige verwerkingspoging is onderbroken of verlopen. Open de documentkaart in Vorming voor de beschikbare vervolgstap.",
     "processing_attempt_not_active": "Deze verwerkingspoging is niet meer actief. Het resultaat is niet toegepast.",
-    "processing_command_id_invalid": "De verwerkingsopdracht is ongeldig. Open Documenten opnieuw en probeer het nogmaals.",
-    "processing_command_conflict": "Deze opdracht hoort bij een andere verwerkingspoging. Open Documenten opnieuw.",
+    "processing_command_id_invalid": "De verwerkingsopdracht is ongeldig. Open het document opnieuw in Vorming en probeer het nogmaals.",
+    "processing_command_conflict": "Deze opdracht hoort bij een andere verwerkingspoging. Open het document opnieuw in Vorming.",
     "processing_dependency_failed": "De verwerking kon niet worden afgerond door een technische fout. Het bestaande werk is behouden.",
     "pre_review_llm_connection_timeout": "De verbinding met de modeldienst kwam niet binnen de ingestelde tijd tot stand. Het document is bewaard.",
     "pre_review_llm_connection_failed": "De verbinding met de modeldienst is mislukt. Het document is bewaard.",
@@ -300,7 +300,7 @@ ERROR_COPY = {
     "processing_retry_cooldown": "Een nieuwe poging is nog niet mogelijk vóór de vermelde herprobeertijd. Externe annulering van het eerdere verzoek is onbekend.",
     "processing_attempt_limit_reached": "Het ingestelde maximumaantal pogingen is bereikt. Laat de beheerder de oorzaak onderzoeken.",
     "processing_structural_limit": "Deze opdracht overschrijdt een invoer- of uitvoergrens. Herhalen zonder de oorzaak te wijzigen is geen herstel.",
-    "processing_prose_transition_required": "Deze AI-verwerking is expliciet gestopt. Bronwerk en bewijs zijn bewaard. Menselijke bronselectie vereist een afzonderlijke handeling; deze taak hervat niet automatisch.",
+    "processing_prose_transition_required": "Deze AI-verwerking is expliciet gestopt. Bronwerk en bewijs zijn bewaard. Open de richtlijn in Vorming om de bron te annoteren.",
     "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
     "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
     "source_formation_incomplete": "Geldige voorstellen zijn bewaard. Er staat nog onopgelost vormingswerk open; publicatie is geblokkeerd.",
@@ -365,11 +365,11 @@ ERROR_COPY = {
     "knowledge_relation_choice_not_available": "De gekozen koppeling is niet meer beschikbaar. Open de beoordeling opnieuw en controleer de huidige koppelingen.",
     "knowledge_relation_source_version_stale": "Het bronobject is gewijzigd. Open de review opnieuw.",
     "knowledge_relation_endpoint_type_invalid": "De koppeling past niet bij de typen van de twee passages. Controleer de passagetypen en kies daarna een passende relatie.",
-    "second_review_not_required": "Voor deze passage is geen tweede beoordeling nodig. Ga terug naar Mijn werk voor je open beoordelingen.",
-    "second_review_not_available": "Deze tweede beoordeling is niet meer actueel. Open Mijn werk opnieuw voor de huidige taken.",
+    "second_review_not_required": "Voor deze passage is geen tweede beoordeling nodig. Bekijk je open beoordelingen op het Review-werkbord.",
+    "second_review_not_available": "Deze tweede beoordeling is niet meer actueel. Open het Review-werkbord voor je huidige taken.",
     "first_review_required": "De eerste beoordeling is nog niet afgerond. Laat die afronden voordat je de tweede beoordeling uitvoert.",
     "independent_second_reviewer_required": "De tweede beoordeling moet door iemand anders dan de eerste beoordelaar worden uitgevoerd. Vraag een andere beoordelaar deze taak op te pakken.",
-    "second_review_command_required": "Open deze passage via de taak voor tweede beoordeling in Mijn werk.",
+    "second_review_command_required": "Open deze passage via de taak voor tweede beoordeling op het Review-werkbord.",
     "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
     "source_locator_missing": "De verwijzing naar de oorspronkelijke passage ontbreekt. Laat de beoordeling open en vraag de beheerder om de bronverwijzing te controleren.",
     "freeze_bytes_missing": "Het oorspronkelijke bronbestand is niet beschikbaar. Laat de beoordeling open en meld dit bij de beheerder.",
@@ -877,7 +877,6 @@ def _nav(account: dict[str, Any] | None, current: str = "", *, include_care: boo
         else "niet aangemeld"
     )
     rooms = [
-        ("home", "/", "Mijn werk"),
         ("ingest", "/ingest", "Inleveren"),
         ("selection", "/source-selection", "Vorming"),
         ("review", "/review", "Review"),
@@ -1030,27 +1029,6 @@ def _review_validation_script() -> str:
       });
     });
     </script>"""
-
-
-def _home_tile(
-    *,
-    href: str,
-    icon: str,
-    title: str,
-    description: str,
-    badge: str,
-    priority: bool = False,
-) -> str:
-    priority_class = " home-tile-priority" if priority else ""
-    priority_label = '<span class="home-tile-now">Nu doen</span>' if priority else ""
-    return f"""
-    <a class="home-tile{priority_class}" href="{href}">
-      <span class="home-tile-icon" aria-hidden="true">{icon}</span>
-      <span class="home-tile-title">{title}</span>
-      <span class="home-tile-description">{description}</span>
-      <span class="home-tile-footer"><span class="home-tile-badge">{badge}</span>{priority_label}</span>
-    </a>
-    """
 
 
 def _class_options(selected: str = "richtlijn") -> str:
@@ -3495,7 +3473,7 @@ def create_console_app(
         back = (
             '<p><a href="/ingest">Terug naar Inleveren</a></p>'
             if _request.url.path == "/ingest" and account
-            else '<p><a href="/">Naar Mijn werk</a></p>' if account
+            else '<p><a href="/">Naar mijn startpagina</a></p>' if account
             else '<p><a href="/login">Naar aanmelden</a></p>'
         )
         if account and _request.url.path == "/review/participants":
@@ -3524,59 +3502,18 @@ def create_console_app(
         return HTMLResponse(body, status_code=status)
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    def home(request: Request) -> str:
+    def home(request: Request):
         account = _current(request)
         if not account:
             return login_form()
-        tiles = "".join(
-            (
-                _home_tile(
-                    href="/ingest",
-                    icon="⇧",
-                    title="Inleveren",
-                    description="Nieuwe bron toevoegen",
-                    badge="Bron inleveren",
-                ),
-                _home_tile(
-                    href="/source-selection",
-                    icon="▤",
-                    title="Vorming",
-                    description="Start of hervat verwerking per document",
-                    badge="Vorming openen",
-                ),
-                _home_tile(
-                    href="/review",
-                    icon="✓",
-                    title="Review",
-                    description="Beoordeel aangeleverde bronnen",
-                    badge="Review openen",
-                ),
-                _home_tile(
-                    href="/publish",
-                    icon="⇧",
-                    title="Publicatie",
-                    description="Goedgekeurde stukken publiceren",
-                    badge="Publicatieoverzicht openen",
-                ),
-                _home_tile(
-                    href="/tree",
-                    icon="▰",
-                    title="Documenten",
-                    description="Zoeken, openen of beheren",
-                    badge="Documenten openen",
-                ),
-            )
-        )
-        return _page(
-            f"""
-            {_nav(account, "home")}
-            <section class="room home-room">
-              <h1>Mijn werk</h1>
-              <p class="lead">Kies de volgende stap in het proces.</p>
-              <div class="home-tiles">{tiles}</div>
-            </section>
-            """
-        )
+        roles = account["roles"]
+        if "researcher" in roles:
+            destination = "/source-selection"
+        elif "reviewer" in roles:
+            destination = "/review"
+        else:
+            destination = "/publish"
+        return RedirectResponse(destination, status_code=303, headers={"Cache-Control": "no-store"})
 
     @app.get("/help/{topic}", response_class=HTMLResponse)
     def task_instructions(request: Request, topic: str) -> str:
@@ -3589,14 +3526,14 @@ def create_console_app(
               <h2>Beoordelaars</h2><p>De verantwoordelijke beoordelaar kan de uploader zijn als die bevoegd is.
               De gekozen reviewvorm bepaalt de aanvullende deelname; bestaande onafhankelijke
               controles blijven gelden. Bij bestaande reviewregels mag de uploader niet de enige reviewer zijn.</p>
-              <h2>Verwerking</h2><p>Metis maakt voorstellen; een voorstel is geen inhoudelijk besluit.
-              De verwerking kan worden geblokkeerd. Diagnose staat in Inzicht; starten en hervatten doe je in Vorming.</p>"""),
+              <h2>Verwerking</h2><p>Bij een richtlijn bevestig je de inhoudsopgave en annoteer je de bron. Rond Documentcontrole af en kies ‘Afronden en bouwen’.
+              Bij een beslisboom start of hervat je de verwerking op de documentkaart in Vorming. De diagnose staat in Inzicht.</p>"""),
             "review": ("Beoordelen", "/review", """
               <h2>Bron en betekenis</h2><p>Controleer de passage met de oorspronkelijke bron en de relevante context.
               Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.
               Een zelfstandige passage is begrijpelijk zonder de rest van het document.
               Een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets;
-              een advies zegt wat iemand zou moeten doen. Kop en type zijn voorstellen totdat ze zijn bevestigd.</p>
+              een advies zegt wat iemand zou moeten doen. De kop van een richtlijn is al bevestigd in de inhoudsopgave. Controleer het type van het kennisobject.</p>
               <h2>Richting en sterkte</h2><p>Neem de sterkte over uit de oorspronkelijke richtlijn.
               Kies Sterk of Zwak alleen als de bron dit expliciet vermeldt.
               ‘De werkgroep adviseert’ is geen sterkteaanduiding. Een klinische voorwaarde maakt een advies
@@ -3611,7 +3548,7 @@ def create_console_app(
               <h2>Broncontrole</h2><p>Bronbinding bewijst niet dat alle noodzakelijke context is herkend. Controleer ook de oorspronkelijke bron.</p>
               <h2>Reviewdeelname</h2><p>Archiveren bewaart historie. Een verplichte plek blijft open tot vervanging. De vervanger beoordeelt zelf; geldig werk van anderen blijft behouden. Vervang de primaire reviewer in één handeling.</p>
               <h2>Correctie en bronrol</h2><p>Een correctie maakt een nieuw voorstel voor beoordeling.
-              Kies aaneengesloten bronzinnen; samengevoegde passages worden vervangen door het nieuwe voorstel.
+              Open voor een correctie ‘Aanpassen in de kaart’, wijzig de annotatie en bouw de gewijzigde versie via Documentcontrole.
               Alleen de geselecteerde passage wordt met het beoordelingsformulier beoordeeld. Metis doet relationele voorstellen; bevestig alleen relaties die volgens de bron bij deze passage horen. Een voorwaarde verandert de sterkte van een aanbeveling niet.
               Koppel een bronlabel of context alleen aan passages waarvoor het aantoonbaar geldt.
               Controleer daarbij ook tabellen en kolommen. Nabijheid alleen is onvoldoende.</p>"""),
@@ -3624,7 +3561,7 @@ def create_console_app(
             "documents": ("Documenten", "/tree", """
               <h2>Documentbeheer</h2><p>Zoek een document en open de beschikbare taak.
               Gepubliceerde versies blijven ongewijzigd. Een wijziging van documenttype kan een nieuwe
-              beoordeling of verwerking vereisen. Documentdiagnostiek staat in Inzicht; starten en hervatten doe je in Vorming.</p>"""),
+              beoordeling of verwerking vereisen. Open de annotatiewerkplek voor een richtlijn. Een beslisboom start of hervat je in Vorming. Documentdiagnose staat in Inzicht.</p>"""),
         }
         if topic not in topics:
             raise ConsoleError("unknown_document")
@@ -3653,10 +3590,8 @@ def create_console_app(
               <p class="doc-title">Accounts</p>
               <p>Beheer interne gebruikers en rollen.</p>
             </a>
-            <a class="doc-card" href="/settings/technical" style="text-decoration:none;">
-              <p class="doc-title">Technisch beheer</p>
-              <p>Modelconfiguratie en API-toegang.</p>
-            </a>
+            <a class="doc-card" href="/settings/llm" style="text-decoration:none;"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
+            <a class="doc-card" href="/settings/api-access" style="text-decoration:none;"><p class="doc-title">API-toegang</p><p>Beheer koppelingen en toegangsgegevens.</p></a>
             <a class="doc-card" href="/settings/chatgpt" style="text-decoration:none;"><p class="doc-title">ChatGPT-koppeling</p><p>Verbindingsstatus en toegang tot alleen-lezen onderzoek vanuit ChatGPT.</p></a>
           </div>
           <div style="height:18px" aria-hidden="true"></div>
@@ -3680,19 +3615,6 @@ def create_console_app(
             title="Instellingen — Metis",
         )
 
-    @app.get("/settings/technical", response_class=HTMLResponse)
-    def technical_management(request: Request, document: str = "", q: str = "", page: int = 1):
-        account = _require(request)
-        if document:
-            return RedirectResponse("/inzicht/document?" + request.url.query, status_code=303, headers={"Cache-Control": "no-store"})
-        return _page(f'''{_nav(account, "settings")}<section class="room">
-          <h1>Technisch beheer</h1>{_passage_formation_status_html(state)}
-          <p class="lead">Configuratie en toegangsbeheer.</p>
-          <div class="doc-list">
-            <a class="doc-card" href="/settings/llm"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
-            <a class="doc-card" href="/settings/api-access"><p class="doc-title">API-toegang</p><p>Beheer koppelingen en toegangsgegevens.</p></a>
-          </div></section>''', title="Technisch beheer — Metis")
-
     @app.get("/settings/api-access", response_class=HTMLResponse)
     def settings_api_access(request: Request) -> str:
         account = _require(request)
@@ -3702,7 +3624,7 @@ def create_console_app(
                 f"""
                 {_nav(account, "settings")}
                 <section class="room">
-                  <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+                  <p><a href="/settings">← Terug naar Instellingen</a></p>
                   <p class="eyebrow">Instellingen · API Access</p>
                   <h1>API Access</h1>
                   <div class="banner warn">{_esc(reason)}</div>
@@ -3719,7 +3641,7 @@ def create_console_app(
                     f"""
                     {_nav(account, "settings")}
                     <section class="room">
-                      <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+                      <p><a href="/settings">← Terug naar Instellingen</a></p>
                       <h1>API Access</h1>
                       <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
                     </section>
@@ -3906,7 +3828,7 @@ def create_console_app(
             f"""
             {_nav(account, "settings")}
             <section class="room">
-              <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+              <p><a href="/settings">← Terug naar Instellingen</a></p>
               <p class="eyebrow">Instellingen · API Access</p>
               <h1>API Access</h1>
               <p class="lead">Een credential identificeert een consumer-applicatie; tenant- en applicatiebeleid bepalen de effectieve toegang.</p>
@@ -4280,9 +4202,10 @@ def create_console_app(
             f"""
             {_nav(account, "llm-settings")}
             <section class="room">
-              <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+              <p><a href="/settings">← Terug naar Instellingen</a></p>
               <p class="eyebrow">Instellingen · LLM</p>
               <h1>LLM-instellingen</h1>
+              {_passage_formation_status_html(state)}
               <p class="lead">Metis gebruikt één gedeelde deploymentconfiguratie voor alle toegestane LLM-capabilities.</p>
               <div class="doc-list">
                 <article class="doc-card">

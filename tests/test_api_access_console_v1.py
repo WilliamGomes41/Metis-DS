@@ -60,15 +60,13 @@ def _grant_path(item):
     return f'/settings/api-access/tenants/{item.tenant_id}/applications/{item.application_id}/grant'
 
 
-def test_settings_exposes_api_access_through_technical_management(access):
+def test_settings_exposes_api_access_directly(access):
     client = access.client()
     response = client.get('/settings')
     assert response.status_code==200
-    assert 'href="/settings/technical"' in response.text
-    assert 'href="/settings/api-access"' not in response.text
-    technical = client.get('/settings/technical')
-    assert technical.status_code==200
-    assert 'href="/settings/api-access"' in technical.text and 'API-toegang' in technical.text
+    assert 'href="/settings/api-access"' in response.text
+    assert 'href="/settings/technical"' not in response.text
+    assert client.get('/settings/technical', follow_redirects=False).status_code == 404
 
 
 def test_publisher_can_provision_consumer_and_secret_is_only_in_issue_response(access):

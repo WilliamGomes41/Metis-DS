@@ -125,7 +125,7 @@ def test_public_sign_in_notes_and_authenticated_home_share_version(
     assert protected.headers["location"].startswith("/auth/microsoft?")
     assert login(client, store).status_code == 303
     home = client.get("/")
-    assert "Mijn werk" in home.text and "Versie 1.32.7" in home.text
+    assert home.url.path == "/review" and "Versie 1.32.7" in home.text
     assert 'data-version="1.32.7"' in home.text
 
 

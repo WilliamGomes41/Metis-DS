@@ -587,12 +587,6 @@
       ]
     ],
     [
-      "/settings/technical",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/source-selection",
       [
         "GET"

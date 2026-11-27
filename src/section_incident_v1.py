@@ -155,9 +155,14 @@ def build_incident(probe, application_events, platform_events=()):
         contradictions.append('application_terminal_events_disagree')
     if browser['status'] and app['status'] and browser['status'] != app['status']:
         contradictions.append('browser_and_application_status_differ')
+    diagnosis = browser.get('diagnosis') or {}
+    role_landing = (browser['route'] == '/' and browser['status'] == 303
+                    and browser['assertion'] == 'task-ready-v2' and diagnosis.get('observed') == 'ready'
+                    and diagnosis.get('expected') in {
+                        'document_choice_and_status', 'review_inventory_or_empty', 'publication_inventory_or_empty'})
     if browser['usability'] == 'passed' and (browser['navigation'] != 'loaded'
             or browser['final_location'] != 'target' or browser['assertion'] is None
-            or browser['status'] != 200 or not browser['response_complete']):
+            or (browser['status'] != 200 and not role_landing) or not browser['response_complete']):
         contradictions.append('browser_usability_evidence_inconsistent')
     platform, omitted_platform = [], 0
     for raw in platform_events:

@@ -1,18 +1,4 @@
-"""Duty-first logged-in home SUPERSEDES #127 sketch B.
-
-Logged-in `/` MUST use the horizontal Metis workboard: nav Mijn werk
-first and current on `/`, then Inleveren, Review, Publiceren and
-Documenten; four large clickable tiles in that same order. Review is
-a neutral destination; live counts are loaded only in task rooms (#546). Post-auth still lands
-on `/`, not `/ingest`. `/tree` Documenten stays unchanged (v2.32).
-
-PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish()
-stays G2-BLOCKED. Item A Recent activity, Item B SHA-256 duplicate
-guard, and Item C OIDC/release-identity are out of scope.
-
-Markers in this file are CI metadata pointing at these checks
-(scripts/release_control_preflight.py and this suite). They are not
-live-release evidence.
+"""Role-specific console landing and shared navigation.
 
 # release-control-evidence: toegang
 # release-control-evidence: scope/belofte
@@ -26,7 +12,6 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 from secrets import token_urlsafe
-from urllib.parse import urlparse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -49,11 +34,6 @@ FORBIDDEN_LIVE_LABELS = (
     "Documentenhiërarchie",
     "Documentenhierarchie",
     "Familieboom",
-)
-SKETCH_B_PRIMARY_MARKERS = (
-    'class="home-chooser"',
-    'class="room home-chooser"',
-    'class="home-secondary"',
 )
 TEST_PASSWORD = token_urlsafe(24)
 
@@ -80,36 +60,6 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
         display_name="Bert Reviewer",
     )
     return {"researcher": researcher, "reviewer": reviewer}
-
-
-def _tiny_html(title: str) -> bytes:
-    return (
-        "<!doctype html><html lang='nl'><head><title>"
-        f"{title}</title></head><body>"
-        f"<h1>{title}</h1>"
-        f"<p>Dit is een aanbeveling voor {title} in de praktijk.</p>"
-        "</body></html>"
-    ).encode("utf-8")
-
-
-def _ingest(console: OperationsConsole, accounts: dict, *, title: str = "Test richtlijn") -> dict:
-    return console.ingest(
-        actor_id=accounts["researcher"]["account_id"],
-        filename="richtlijn.html",
-        data=_tiny_html(title),
-        content_type="text/html",
-        ingest_kind="new",
-        title=title,
-        version="1.0",
-        date="2025-04-01",
-        live_url="https://example.test/richtlijn",
-        class_="richtlijn",
-        family="continentie",
-        named_reviewers=[
-            accounts["researcher"]["account_id"],
-            accounts["reviewer"]["account_id"],
-        ],
-    )
 
 
 def _fresh_client(console: OperationsConsole, *, production_app) -> TestClient:
@@ -186,12 +136,6 @@ def _nav_entry(html: str, href: str) -> tuple[str, str]:
     raise AssertionError(f"nav must include {href}")
 
 
-def _location_path(response) -> str:
-    location = response.headers.get("location") or ""
-    parsed = urlparse(location)
-    return parsed.path or location
-
-
 def _media_560(css: str) -> str:
     match = re.search(r"@media\s*\(max-width:\s*560px\)\s*\{", css)
     assert match, "console.css must keep a 560px mobile breakpoint"
@@ -213,96 +157,29 @@ def _rule(css: str, selector: str) -> str:
     return match.group(1)
 
 
-def test_home_uses_brand_and_tiles_as_workflow_doors(tmp_path: Path, *, production_app, production_console) -> None:
+@pytest.mark.parametrize(("roles", "destination"), [
+    (("researcher",), "/source-selection"),
+    (("reviewer",), "/review"),
+    (("publisher",), "/publish"),
+    (("researcher", "reviewer"), "/source-selection"),
+    (("publisher", "researcher"), "/source-selection"),
+    (("publisher", "reviewer"), "/review"),
+    (("reviewer", "publisher", "researcher"), "/source-selection"),
+])
+def test_authenticated_start_opens_the_workspace_for_the_account(tmp_path, roles, destination, production_app, production_console):
     console = _console(tmp_path, production_console=production_console)
-    _accounts(console)
-    html = _client(console, production_app=production_app).get("/").text
-    hrefs = _nav_hrefs(html)
-    assert '/settings' in hrefs
-    assert not set(['/', '/ingest', '/source-selection', '/review', '/publish', '/tree']) & set(hrefs)
-    assert re.search(r'<a class="brand metis-brand" href="/"', html)
-    ingest_html = _client(console, production_app=production_app).get("/ingest").text
-    assert _nav_hrefs(ingest_html)[0] == '/ingest'
-    assert '/' not in _nav_hrefs(ingest_html)
-    assert _nav_entry(ingest_html, '/ingest')[1] == 'page'
-
-
-def test_home_does_not_mark_ingest_tile_as_current_navigation(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
-    _accounts(console)
-    html = _client(console, production_app=production_app).get("/").text
-    assert '/ingest' not in _nav_hrefs(html)
-    tile = re.search(r'<a class="home-tile[^>]* href="/ingest"[^>]*>', html)
-    assert tile and 'aria-current' not in tile.group(0)
-    assert 'Inleveren' in _visible_text(html)
-
-
-def test_home_heading_and_lead(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
-    _accounts(console)
-    html = _client(console, production_app=production_app).get("/").text
-    headings = _h1s(html)
-    assert headings, "logged-in home must render an h1"
-    assert headings[0] == "Mijn werk"
-    assert "Kies de volgende stap in het proces." in html
-    visible = _visible_text(html)
-    assert "Mijn werk" in visible
-    assert "Kies de volgende stap in het proces." in visible
-
-
-def test_home_has_five_horizontal_process_tiles_with_links(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
-    _accounts(console)
-    html = _client(console, production_app=production_app).get("/").text
-    visible = _visible_text(html)
-    assert "Inleveren" in visible
-    assert "Nieuwe bron toevoegen" in visible
-    assert "Review" in visible
-    assert "Beoordeel aangeleverde bronnen" in visible
-    assert "Publicatie" in visible
-    assert "Goedgekeurde stukken publiceren" in visible
-    assert "Documenten" in visible
-    assert "Zoeken, openen of beheren" in visible
-    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 5
-    assert [match.group(1) for match in re.finditer(r'<a class="home-tile[^>]* href="([^"]+)"', html)] == [
-        "/ingest", "/source-selection", "/review", "/publish", "/tree"
-    ]
-    assert 'enctype="multipart/form-data"' not in html
-
-
-def test_home_tiles_stay_neutral_when_review_work_exists(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
-    accounts = _accounts(console)
-    _ingest(console, accounts, title="Wachtende richtlijn")
-    waiting = console.waiting_task_counts(accounts["researcher"]["account_id"])["review"]
-    assert waiting >= 1
-    home = _client(console, production_app=production_app).get("/").text
-    visible = _visible_text(home)
-    assert "Review openen" in visible
-    assert "Publicatieoverzicht openen" in visible
-    assert "Documenten openen" in visible
-    assert "Geen open taken" not in visible
-    assert "wachten op jou" not in visible
-    assert "home-tile-priority" not in home
-    assert console.waiting_task_counts(accounts["researcher"]["account_id"])["review"] == waiting
-
-
-def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
-    _accounts(console)
+    console.create_account(username="start.user", password=TEST_PASSWORD, roles=roles)
     client = _fresh_client(console, production_app=production_app)
-    login = client.post(
-        "/login",
-        data={"username": "researcher.anne", "password": TEST_PASSWORD},
-        follow_redirects=False,
-    )
-    assert login.status_code in {302, 303}
-    assert _location_path(login) == "/"
-    assert _location_path(login) != "/ingest"
-    home = client.get("/", follow_redirects=False)
-    assert home.status_code == 200
-    assert _location_path(home) != "/ingest"
-    assert _h1s(home.text)[0] == "Mijn werk"
+    login = client.post("/login", data={"username": "start.user", "password": TEST_PASSWORD})
+    assert login.status_code == 200
+    assert login.url.path == destination
+    start = client.get("/", follow_redirects=False)
+    assert start.status_code == 303
+    assert start.headers["location"] == destination
+    assert start.headers["cache-control"] == "no-store"
+    assert _nav_entry(login.text, destination)[1] == "page"
+    assert "/" not in _nav_hrefs(login.text)
+    assert 'class="brand metis-brand" href="/"' in login.text
 
 
 def test_tree_documenten_unchanged_v232(tmp_path: Path, *, production_app, production_console) -> None:
@@ -348,26 +225,3 @@ def test_mobile_nav_does_not_clip_publiceren_to_pub(tmp_path: Path, *, productio
     assert "overflow: hidden" not in rooms_a
     assert "text-overflow" not in rooms_a
     assert "ellipsis" not in rooms_a
-
-
-def test_home_uses_tiles_instead_of_the_previous_small_duty_cards(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
-    _accounts(console)
-    html = _client(console, production_app=production_app).get("/").text
-    for marker in SKETCH_B_PRIMARY_MARKERS:
-        assert marker not in html
-    assert "duty-card" not in html
-    assert "duty-grid" not in html
-    assert len(re.findall(r'<a class="home-tile(?: |")', html)) == 5
-    assert "home-secondary" not in html
-    assert "home-chooser" not in html
-    visible = _visible_text(html)
-    assert "Inleveren" in visible
-    assert "Review" in visible
-    assert "Publicatie" in visible
-    assert "Documenten" in visible
-    quiet_secondaries = re.findall(
-        r'<a[^>]*class="[^"]*quiet[^"]*"[^>]*href="/(tree|review|publish|accounts)"',
-        html.split("</nav>", 1)[-1] if "</nav>" in html else html,
-    )
-    assert quiet_secondaries == []
