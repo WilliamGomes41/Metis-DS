@@ -742,16 +742,13 @@ def install(app, console, require, page, nav, esc):
             actor = require(request)
         if task in {'structure', 'continuation'}:
             raise HTTPException(status_code=404)
-        if document and not selected_document:
+        old_editor = bool(object or task == 'repair' or context_target or context_mode == 'source')
+        if (document and not selected_document) or old_editor:
             from src.vorming.human_annotation_v1 import owns_source
-            if owns_source(console, document):
-                params = {'document': document}
-                if object:
-                    obj = console._current_object(document, object)
-                    ref = (obj.get('metadata') or {}).get('human_annotation')
-                    if ref:
-                        params['annotation'] = ref['annotation_id']
-                return RedirectResponse('/annotations?' + urlencode(params), status_code=303)
+            if owns_source(console, document or selected_document):
+                if old_editor:
+                    raise HTTPException(status_code=404)
+                return RedirectResponse('/annotations?' + urlencode({'document': document}), status_code=303)
         if task == 'graph' and document:
             from src.review.decision_review_ui_v1 import render_graph
             body = render_graph(console, actor, document, editing=True)

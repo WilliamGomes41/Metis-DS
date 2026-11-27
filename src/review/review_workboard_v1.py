@@ -741,6 +741,10 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
+        if document and (chosen_task == 'repair' or context_target or context_mode == 'source'):
+            from src.vorming.human_annotation_v1 import owns_source
+            if owns_source(console, document):
+                raise HTTPException(status_code=404)
         if chosen_task == 'structure' and (not document or _review_path_of(console._envelope(document)) != 'boom'):
             raise HTTPException(status_code=404)
         if document and receipt_interaction and receipt_object:

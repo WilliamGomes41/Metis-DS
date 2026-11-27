@@ -153,8 +153,6 @@ def _context_evidence(obj, objects, snapshot_id, revision, shown):
     owner = '/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'],
                                               'review_revision': revision}) + '#passage-context'
     annotation = (obj.get('metadata') or {}).get('human_annotation')
-    if annotation:
-        owner = '/annotations?' + urlencode({'document': snapshot_id, 'annotation': annotation['annotation_id']})
     rows = []
     if context['issues']:
         rows.append('<p class="ko-notice" role="alert">Een koppeling verwijst naar gewijzigde of ontbrekende tekst. '
@@ -169,13 +167,13 @@ def _context_evidence(obj, objects, snapshot_id, revision, shown):
             if text not in shown:
                 rows.append('<p class="context-literal">' + escape(text) + '</p>')
             rows.append('<p>' + escape(str(link.get('reason') or '')) + '</p>')
-            if link.get('source_object_id') in by_id:
+            if link.get('source_object_id') not in by_id:
+                rows.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
+            elif not annotation:
                 adjust = '/source-selection?' + urlencode({'document': snapshot_id,
                     'object': link['source_object_id'], 'context_target': obj['object_id'],
                     'context_mode': 'source', 'review_revision': revision}) + '#passage-context'
                 rows.append('<p><a href="' + escape(adjust, quote=True) + '">Koppeling aanpassen of verwijderen</a></p>')
-            else:
-                rows.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
         rows.append('</section>')
     if not annotation:  # #1064: an annotation object has one entry, 'Aanpassen in de kaart'
         rows.append('<p><a href="' + escape(owner, quote=True) + '">Broncontext vastleggen of aanpassen in Vorming</a></p>')
