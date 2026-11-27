@@ -124,8 +124,16 @@ def test_publication_source_blocker_opens_its_blocked_candidates(tmp_path, *, pr
                        console.object_review_bindings(sid), read_events(console._ledger_path)))
     owner = reviewer.get(href)
     assert owner.status_code == 200
-    owner_links = [parse_qs(urlsplit(url).query) for url in Links(owner.text).hrefs]
-    assert blocked <= {q['object'][0] for q in owner_links if q.get('document') == [sid] and q.get('object')}
+    passages = {}
+    for link in Links(owner.text).hrefs:
+        url = urlsplit(link)
+        params = parse_qs(url.query)
+        if url.path == '/review' and params.get('document') == [sid] and params.get('task') == ['inventory'] and params.get('object'):
+            passages[params['object'][0]] = link
+    assert blocked <= passages.keys()
+    for oid in blocked:
+        passage = reviewer.get(passages[oid], follow_redirects=False)
+        assert passage.status_code == 200 and oid in passage.text
     assert (console.snapshot_objects(sid), console.objects_revision(sid),
             console.object_review_bindings(sid), read_events(console._ledger_path)) == before
 

@@ -119,7 +119,10 @@ def collect(console, *, actor_id, snapshot_id):
         if obj and is_source_record(obj):
             actions.append({'label': 'Brongebruik verantwoorden',
                             'url': _url('/source-selection', snapshot_id, task='disposition')})
-        elif not obj:
+        elif obj:
+            actions.append({'label': 'Bekijk deze passage in Review',
+                            'url': _url('/review', snapshot_id, object=oid, task='inventory')})
+        else:
             # Source dispositions use the current materialised source register,
             # not a human-review task manufactured from a provider rejection.
             for source in objects:
