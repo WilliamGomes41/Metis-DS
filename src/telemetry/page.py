@@ -237,10 +237,7 @@ _BODY = r"""
   </div>
 
   <div class="tm-panel" data-panel="controles" role="tabpanel" hidden>
-    <p class="tm-sub">Controles die je bewust start. Hun uitkomst is geen inhoudelijke beoordeling van documenten.</p>
     <div class="doc-list">
-      <a class="doc-card" style="text-decoration:none;" href="/inzicht/veiligheidstests"><p class="doc-title">Semantische veiligheidstests</p><p>Vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen. De uitkomst zie je direct.</p></a>
-      <a class="doc-card" style="text-decoration:none;" href="/inzicht/routevergelijking"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
       <a class="doc-card" style="text-decoration:none;" href="/inzicht/reviewsignalen"><p class="doc-title">Reviewsignalen</p><p>Signalen uit review die op structurele problemen wijzen.</p></a>
     </div>
   </div>

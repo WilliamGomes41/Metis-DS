@@ -47,7 +47,6 @@ def test_active_llm_runtime_has_no_capability_specific_provider_keys_or_models()
         (ROOT / path).read_text(encoding="utf-8")
         for path in (
             "src/vorming/llm_provider_v1.py",
-            "src/settings/semantic_safety_app_v1.py",
             "src/settings/audit_semantic_safety_v1.py",
             "src/vorming/pre_review_semantic_v1.py",
             "src/console_asgi.py",

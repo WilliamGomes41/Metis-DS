@@ -109,6 +109,8 @@ def test_removed_insight_addresses_return_404(installed):
     client, _, _, _, _, _, command = installed
     sid = command["snapshot_id"]
     for path in (
+        '/inzicht/veiligheidstests',
+        '/audit', '/audit/new', '/audit/archive', '/audit/semantic-safety', '/audit/audit-0123456789abcdef',
         '/settings/technical/processing',
         '/settings/technical/exports',
         '/source-selection/processing-trace',
@@ -125,6 +127,25 @@ def test_removed_insight_addresses_return_404(installed):
     ):
         response = client.get(path, params={'document': sid, 'format': 'csv'}, follow_redirects=False)
         assert response.status_code == 404, path
+
+
+def test_document_diagnosis_links_to_the_hand_annotated_build_attempt(tmp_path, production_console, production_app):
+    from tests.test_human_annotation_build_postgres import saved_source
+    from tests.test_human_annotation_review_postgres import execute_build
+
+    state, actor, sid, _ = saved_source(production_console, tmp_path, for_build=False)
+    attempt = execute_build(state, actor, sid)['attempt_id']
+    with TestClient(production_app(state), base_url='https://testserver') as reviewer:
+        login_response = reviewer.post('/login', data={'username': 'reviewer', 'password': 'human-build-secret'},
+                                       follow_redirects=False)
+        assert login_response.status_code == 303
+        page = reviewer.get('/inzicht/document', params={'document': sid, 'attempt': attempt})
+        assert page.status_code == 200
+        links = {urlsplit(url).path: url for url in Links(page.text).hrefs}
+        trace = reviewer.get(links['/inzicht/document/verwerkingsspoor']).json()
+        assert trace['selection'] == {'status': 'selected', 'attempt_id': attempt}
+        report = reviewer.get(links['/inzicht/document/blokkade'] + '&download=1&attempt=' + attempt).json()
+        assert report['selected_attempt_id'] == attempt
 
 
 def test_quality_table_history_and_graphs_stay_in_one_tab_and_same_report(tmp_path, *, production_app, production_console):
@@ -149,7 +170,8 @@ def test_configuration_has_no_diagnostics_and_controls_use_insight_addresses(tmp
     assert '/settings/llm' in config and '/settings/api-access' in config
     assert not any(item in config for item in ('Routevergelijking', 'Semantische veiligheidstests', 'Alle exports', 'Verwerkingsproblemen herstellen', 'href="/inzicht'))
     insight = client.get('/inzicht?tab=controles').text
-    assert '/inzicht/routevergelijking' in insight and '/inzicht/reviewsignalen' in insight
+    assert '/inzicht/reviewsignalen' in Links(insight).hrefs
+    assert '/inzicht/routevergelijking' not in insight and '/inzicht/veiligheidstests' not in insight
     assert '/settings/quality/compare' not in insight and '/settings/technical/exports' not in insight
 
 
