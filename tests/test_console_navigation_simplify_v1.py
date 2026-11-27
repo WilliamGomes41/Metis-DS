@@ -10,34 +10,8 @@ from __future__ import annotations
 from src.console_navigation_simplify_v1 import simplify_console_html
 
 
-def test_home_keeps_audit_but_removes_duplicate_workflow_nav() -> None:
-    html = '''
-    <nav class="rooms">
-      <a href="/">Mijn werk</a>
-      <a href="/ingest">Inleveren</a>
-      <a href="/review">Review</a>
-      <a href="/publish">Publiceren</a>
-      <a href="/tree">Documenten</a>
-      <a href="/audit">Audit</a>
-      <a href="/accounts">Accounts</a>
-    </nav>
-    <a class="home-tile" href="/ingest">Inleveren</a>
-    <a class="review-control-card" href="/audit">Audit</a>
-    '''
-    result = simplify_console_html("/", html)
-    assert '>Mijn werk<' not in result
-    assert '<a href="/ingest">Inleveren</a>' not in result
-    assert '<a href="/review">Review</a>' not in result
-    assert '<a href="/publish">Publiceren</a>' not in result
-    assert '<a href="/tree">Documenten</a>' not in result
-    assert '<a href="/audit">Audit</a>' in result
-    assert 'class="home-tile" href="/ingest"' in result
-    assert 'class="review-control-card" href="/audit"' in result
-
-
 def test_review_keeps_primary_next_step_and_removes_batch_source_shortcut() -> None:
     html = '''
-    <a href="/">Mijn werk</a>
     <section class="review-next-step" aria-labelledby="review-next-title">
       <a class="btn-primary" href="/review?document=s1&amp;task=contextual">Ga verder</a>
     </section>
@@ -74,17 +48,3 @@ def test_ingest_success_keeps_next_step_and_removes_documents_shortcut() -> None
     result = simplify_console_html("/ingest", html)
     assert "Naar review" in result
     assert "Naar Documenten" not in result
-
-
-def test_audit_page_is_not_simplified_beyond_global_home_duplicate() -> None:
-    html = '''
-    <a href="/">Mijn werk</a>
-    <a href="/audit">Audit</a>
-    <a class="btn-primary" href="/audit/new">Nieuwe audit</a>
-    <a class="btn-primary" href="/audit/new?type=experiment">Kies dit type</a>
-    '''
-    result = simplify_console_html("/audit", html)
-    assert '>Mijn werk<' not in result
-    assert '<a href="/audit">Audit</a>' in result
-    assert 'href="/audit/new"' in result
-    assert 'href="/audit/new?type=experiment"' in result

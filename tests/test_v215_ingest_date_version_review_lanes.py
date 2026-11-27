@@ -489,7 +489,7 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path, *
     assert passage_titles == []
     visible = re.sub(r"\s+", " ", html)
     # The heading stays in the same not-yet-assessed coverage count as the 12 passages.
-    management = _client(console, production_app=production_app).get(f"/settings/technical?document={receipt['snapshot_id']}").text
+    management = _client(console, production_app=production_app).get(f"/inzicht/document?document={receipt['snapshot_id']}").text
     assert "Nog niet beoordeeld" in management
     assert "13" in management
     assert "unclassified" not in visible.casefold()

@@ -6,7 +6,6 @@
     const visible = selector => [...document.querySelectorAll(selector)].some(node =>
       !node.closest('[hidden]') && node.getClientRects().length > 0);
     const requirements = {
-      '/': ['navigation_available', '.home-tiles a[href="/ingest"]'],
       '/ingest': ['upload_form_available', 'form[action="/ingest"] input[type="file"]'],
       '/source-selection': ['document_choice_and_status', '#source-document'],
       '/review': ['review_inventory_or_empty', '.review-passage-inventory, [data-content-review-workplace], [data-review-form], .second-review-card, [data-personal-group], [data-personal-empty], .review-empty, .doc-list .doc-card'],

@@ -8,18 +8,17 @@ const { performance } = require('node:perf_hooks');
 const sections = {
   '/login': '.login-card a[href="/auth/microsoft"], .login-card button[type="submit"]',
   '/ingest': '#ingest-submit',
-  '/': '.home-tiles',
   '/settings': '.room a[href="/accounts"]',
   '/inzicht': '#d-table[data-readiness="ready"]',
   '/tree': 'h1:text-is("Documenten")',
-  '/source-selection': '#source-selection h1:text-is("Bronselectie")',
+  '/source-selection': '#source-selection h1:text-is("Vorming")',
   '/review': 'h1:text-is("Review")',
   '/publish': 'h1:text-is("Publiceren")',
 };
 
 async function probe(browser, {url, storageState, timeout = 30000}) {
   const target = new URL(url);
-  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || !sections[target.pathname]) {
+  if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || (target.pathname !== '/' && !Object.hasOwn(sections, target.pathname))) {
     throw new Error('invalid_target');
   }
   if (!Number.isInteger(timeout) || timeout < 100 || timeout > 300000) throw new Error('invalid_timeout');
@@ -37,7 +36,7 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
     // Stop websocket mutations as well as form/fetch writes. All cross-origin
     // traffic is blocked: this probe observes an existing session, not login.
     await context.routeWebSocket('**/*', socket => socket.close());
-    let firstNavigation;
+    let firstNavigation, landingResponse;
     await context.route('**/*', async route => {
       const request = route.request();
       const u = new URL(request.url());
@@ -68,13 +67,18 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
     });
     try {
       result.navigation_started = true;
-      await page.goto(target.pathname === '/inzicht' ? target.origin + '/inzicht?tab=documenten' : target.href, {waitUntil: 'load', timeout});
+      landingResponse = await page.goto(target.pathname === '/inzicht' ? target.origin + '/inzicht?tab=documenten' : target.href, {waitUntil: 'load', timeout});
       result.navigation = 'loaded';
     } catch (error) {
       result.navigation = error.name === 'TimeoutError' ? 'timeout' : 'network_error';
     }
     const current = new URL(page.url());
-    result.final_location = current.origin === target.origin && current.pathname === target.pathname ? 'target' :
+    // Root is a role-specific redirect. Correlate its original response, and
+    // check actual task readiness only after the direct redirect succeeds.
+    const roleLanding = target.pathname === '/' && result.status === 303 &&
+      current.origin === target.origin && ['/source-selection', '/review', '/publish'].includes(current.pathname) &&
+      landingResponse?.status() === 200 && landingResponse.request().redirectedFrom() === firstNavigation;
+    result.final_location = current.origin === target.origin && (current.pathname === target.pathname || roleLanding) ? 'target' :
       current.origin === target.origin && current.pathname === '/login' ? 'login' : 'other';
     if (result.final_location === 'login') result.usability = 'not_checked_access';
     if (result.status === 403) {
@@ -85,18 +89,19 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
       });
       result.usability = missingRole ? 'not_checked_access' : 'failed';
     }
-    if (result.navigation === 'loaded' && result.final_location === 'target' && result.status === 200) {
+    if (result.navigation === 'loaded' && result.final_location === 'target' && (result.status === 200 || roleLanding)) {
+      const readinessPath = roleLanding ? current.pathname : target.pathname;
       // Same task-specific readiness evidence as Raad; no heading/shell pass.
       try {
         if (target.pathname === '/login') {
           await page.locator(sections[target.pathname]).first().waitFor({state:'visible', timeout});
         } else {
-          await page.waitForFunction('() => (' + readPageReadiness.toString() + ')("' + target.pathname + '").verdict === "pass"',
+          await page.waitForFunction('() => (' + readPageReadiness.toString() + ')("' + readinessPath + '").verdict === "pass"',
             null, {timeout: Math.max(1, timeout - (performance.now() - started))});
         }
         result.usability = result.response_complete && !result.page_errors ? 'passed' : 'failed';
       } catch (_) { result.usability = 'not_established'; }
-      if (target.pathname !== '/login') result.diagnosis = await page.evaluate(readPageReadiness, target.pathname);
+      if (target.pathname !== '/login') result.diagnosis = await page.evaluate(readPageReadiness, readinessPath);
       if (result.diagnosis?.request?.state === '401') result.usability = 'not_checked_access';
 
     }

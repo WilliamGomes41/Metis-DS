@@ -16,7 +16,7 @@ const fs=require('node:fs');
       await page.goto(base+'/login');
       await page.locator('[name=username]').fill(username);
       await page.locator('[name=password]').fill(password);
-      await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
+      await Promise.all([page.waitForURL(base+'/review'),page.locator('button[type=submit]').click()]);
       await page.goto(base+'/inzicht/document?'+new URLSearchParams({document}));
       await Promise.all([page.waitForURL('**/*view_check=**'),page.getByRole('button',{name:'Controleer weergave',exact:true}).click()]);
       const id=new URL(page.url()).searchParams.get('view_check');

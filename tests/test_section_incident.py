@@ -130,6 +130,18 @@ def test_inconsistent_browser_evidence_is_not_accepted_as_success():
     assert 'browser_usability_evidence_inconsistent' in result['contradictions']
 
 
+def test_redirect_requires_current_readiness_evidence_for_a_role_landing():
+    probe = browser()
+    probe.update(status=303, route='/', assertion='task-ready-v2',
+                 diagnosis={'expected': 'review_inventory_or_empty', 'observed': 'ready'})
+    assert 'browser_usability_evidence_inconsistent' not in build_incident(probe, [])['contradictions']
+    for override in ({'route': '/review'}, {'assertion': 'section-visible-v1'},
+                     {'diagnosis': {'expected': 'settings_navigation_available', 'observed': 'ready'}},
+                     {'diagnosis': {'expected': 'review_inventory_or_empty', 'observed': 'pending'}}):
+        result = build_incident({**probe, **override}, [])
+        assert 'browser_usability_evidence_inconsistent' in result['contradictions']
+
+
 def test_cli_exports_only_sanitized_evidence_and_refuses_overwrite(tmp_path):
     import subprocess
     import sys
@@ -178,18 +190,22 @@ def test_real_authenticated_browser_route_exports_correlated_evidence(review_cli
         while not server.started and thread.is_alive() and time.monotonic() < deadline:
             time.sleep(.01)
         assert server.started
-        out = tmp_path / 'probe.json'
-        env = dict(os.environ, METIS_PROBE_URL=f'http://127.0.0.1:{port}/source-selection?document={sid}',
-                   METIS_PROBE_STORAGE_STATE=str(state), METIS_PROBE_TIMEOUT_MS='10000')
-        result = subprocess.run(['node', 'scripts/probe_section.cjs', str(out)],
-                                env=env, capture_output=True, text=True, timeout=20)
-        assert result.returncode == 0, result.stderr
-        incident = build_incident(json.loads(out.read_text()), rows)
-        assert incident['assessment']['code'] == 'section_visible'
-        assert incident['correlation'] == 'response_request_id'
-        assert incident['application']['started'] is True
-        assert incident['application']['response_completed'] is True
-        assert sid not in json.dumps(incident)
+        for name, path, expected_status in (
+            ('source', f'/source-selection?document={sid}', 200), ('start', '/', 303)
+        ):
+            out = tmp_path / f'{name}.json'
+            env = dict(os.environ, METIS_PROBE_URL=f'http://127.0.0.1:{port}{path}',
+                       METIS_PROBE_STORAGE_STATE=str(state), METIS_PROBE_TIMEOUT_MS='10000')
+            result = subprocess.run(['node', 'scripts/probe_section.cjs', str(out)],
+                                    env=env, capture_output=True, text=True, timeout=20)
+            assert result.returncode == 0, result.stderr
+            incident = build_incident(json.loads(out.read_text()), rows)
+            assert incident['browser']['status'] == expected_status
+            assert incident['assessment']['code'] == 'section_visible'
+            assert incident['correlation'] == 'response_request_id'
+            assert incident['application']['started'] is True
+            assert incident['application']['response_completed'] is True
+            assert sid not in json.dumps(incident)
         assert before == json.dumps(console.snapshot_objects(sid), sort_keys=True)
     finally:
         server.should_exit = True; thread.join(5); sock.close()

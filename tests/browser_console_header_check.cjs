@@ -6,7 +6,7 @@ const {withBrowserEvidence}=require('./browser_evidence.cjs');
 
 async function checkConsoleHeader(page, base, directory, isReviewer) {
   const routes = isReviewer ? [['/publish', 403, 'Actie niet uitgevoerd']] : [
-    ['/', 200, 'Mijn werk'], ['/ingest', 200, 'Document inleveren'],
+    ['/', 200, 'Vorming'], ['/ingest', 200, 'Document inleveren'],
     ['/source-selection', 200, 'Vorming'], ['/review', 200, 'Review'],
     ['/publish', 200, 'Publiceren'], ['/tree', 200, 'Documenten'],
     ['/settings', 200, 'Instellingen'], ['/over-console', 200, 'Metis uitgelegd'],
@@ -95,7 +95,7 @@ async function checkConsoleHeader(page, base, directory, isReviewer) {
       await page.goto(base+'/login');
       await page.locator('[name=username]').fill(username);
       await page.locator('[name=password]').fill(manifest.password);
-      await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
+      await Promise.all([page.waitForURL(base+(username===manifest.reviewer?'/review':'/source-selection')),page.locator('button[type=submit]').click()]);
       await checkConsoleHeader(page, base, directory, username===manifest.reviewer);
       if (username===manifest.author) {
         const fallback = await newContext({javaScriptEnabled:false, viewport:{width:390,height:844},

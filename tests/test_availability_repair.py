@@ -236,7 +236,7 @@ def test_layout_and_estimate_unknown(tmp_path, *, production_app, production_con
     console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console)
     with TestClient(production_app(console),base_url='https://testserver') as client:
         login(client)
-        home=client.get('/').text
+        home=client.get('/').text.split('<nav class="rooms">',1)[1].split('</nav>',1)[0]
         positions=[home.index(f'title="{name}"') if f'title="{name}"' in home else home.index(f'>{name}<') for name in ('Inleveren','Vorming','Review','Publicatie','Documenten')]
         assert positions==sorted(positions)
         upload(client,reviewer)
@@ -362,9 +362,7 @@ def test_installed_layout_receipt_opens_annotation_for_uploaded_source(tmp_path,
     console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console)
     with TestClient(installed_app(console),base_url='https://testserver') as client:
         login(client)
-        home=client.get('/').text
-        titles=re.findall(r'<span class="home-tile-title">(.*?)</span>',home)
-        assert titles[:5]==['Inleveren','Vorming','Review','Publicatie','Documenten'],titles
+        assert client.get('/').url.path == '/source-selection'
         receipt=upload(client,reviewer)
         selected=client.get(receipt.headers['location'])
         sid=console.list_envelopes()[0]['snapshot_id']

@@ -30,7 +30,7 @@ const {withBrowserEvidence}=require('./browser_evidence.cjs');
       await page.goto(base+'/login');
       await page.locator('[name=username]').fill(username);
       await page.locator('[name=password]').fill(manifest.password);
-      await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
+      await Promise.all([page.waitForURL(base+(username===manifest.reviewer?'/review':'/source-selection')),page.locator('button[type=submit]').click()]);
       await post('/browser-faults',{});
       let releaseNotices;
       let noticeRequests=0;
@@ -63,7 +63,7 @@ const {withBrowserEvidence}=require('./browser_evidence.cjs');
       await page.unroute('**/raad/meldingen');
       const healthy=await run(page);
       const paths=healthy.map(r=>r.path);
-      for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])
+      for(const expected of ['/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])
         if(!paths.includes(expected))throw Error(username+' missing page '+expected+': '+JSON.stringify(paths));
       results[username]={healthy};
       if(username===manifest.author){
@@ -140,7 +140,7 @@ const {withBrowserEvidence}=require('./browser_evidence.cjs');
         // An expired session stops the run at the first sign-in redirect.
         await post('/browser-faults',{'/ingest':'signin'});
         const signin=await run(page);
-        if(signin.length!==2||signin[1].path!=='/ingest'||!signin[1].text.includes('aanmelden'))
+        if(signin.length!==1||signin[0].path!=='/ingest'||!signin[0].text.includes('aanmelden'))
           throw Error('sign-in redirect not reported or run not stopped: '+JSON.stringify(signin));
         results[username].signin=signin;
         // A publisher refused with publisher_role_required is a fault, not a skip.
@@ -160,7 +160,7 @@ const {withBrowserEvidence}=require('./browser_evidence.cjs');
         if(await page.locator('[data-deploy-page]').count()!==healthy.length)throw Error('reopened panel missed the result');
                 await post('/browser-faults',{'/ingest':'unauth'});
         const unauth=await run(page);
-        if(unauth.length!==2||!unauth[1].text.includes('aanmelden'))
+        if(unauth.length!==1||!unauth[0].text.includes('aanmelden'))
           throw Error('local session expiry not reported or run not stopped: '+JSON.stringify(unauth));
         await post('/browser-faults',{});
         // A legacy shell-only success is not evidence of task readiness.
@@ -174,7 +174,7 @@ const {withBrowserEvidence}=require('./browser_evidence.cjs');
         await page.goto(base+'/login');
         await page.locator('[name=username]').fill(manifest.reviewer);
         await page.locator('[name=password]').fill(manifest.password);
-        await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
+        await Promise.all([page.waitForURL(base+'/review'),page.locator('button[type=submit]').click()]);
         if(await page.locator('[data-care-body]').isHidden())await page.getByRole('button',{name:/Open Raad/}).click();
         await page.getByRole('heading',{name:'Controle na deploy'}).waitFor();
         if(await page.locator('[data-deploy-page]').count())throw Error('previous account result shown');

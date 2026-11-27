@@ -249,7 +249,7 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     _login(client, "reviewer.d2a1")
 
     for path in (
-        "/settings/technical",
+        "/inzicht/document",
         "/inzicht/document/passages",
         "/inzicht/document/verwerkingsbewijs",
         "/inzicht/document/diagnostiek",
@@ -489,10 +489,9 @@ def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path
     client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
     settings = client.get("/settings")
-    assert 'href="/settings/technical"' in settings.text
+    assert 'href="/settings/technical"' not in settings.text
     assert 'href="/audit"' not in settings.text
-    assert 'href="/settings/llm"' not in settings.text
-    hub = client.get("/settings/technical")
+    hub = settings
     assert hub.status_code == 200
     for target in ["/settings/llm", "/settings/api-access"]:
         assert f'href="{target}"' in hub.text
@@ -508,4 +507,4 @@ def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path
     assert "Exporteer detaildiagnostiek" not in repair.text
     other = _client(console, production_app=production_app)
     _login(other, "reviewer.other")
-    assert snapshot_id not in other.get("/settings/technical").text
+    assert snapshot_id not in other.get("/settings").text

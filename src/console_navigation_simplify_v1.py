@@ -1,9 +1,4 @@
-"""Presentation-only removal of duplicate console navigation doors.
-
-Audit is intentionally excluded from simplification: its top-nav entry and
-home meta-tile remain both available. This module does not change routes,
-permissions, review state, publication logic, or persistence.
-"""
+"""Remove duplicate links on the Review and Inleveren pages."""
 from __future__ import annotations
 
 import re
@@ -12,10 +7,6 @@ from typing import Callable
 from fastapi import FastAPI, Request, Response
 
 
-_HOME_WORKFLOW_NAV = re.compile(
-    r'<a href="/(?:ingest|source-selection|review|publish|tree)"[^>]*>.*?</a>', re.S
-)
-_HOME_NAV = re.compile(r'<a href="/"[^>]*>Mijn werk</a>', re.S)
 _BATCH_SOURCE_LINK = re.compile(
     r'\s*<a href="/review/bronpassage\?document=[^"]+">Bronpassage</a>', re.S
 )
@@ -33,15 +24,6 @@ _PARENT_OBJECT_LINK = re.compile(
 def simplify_console_html(path: str, body: str) -> str:
     """Return the same page with redundant navigation doors removed."""
     html = body
-
-    # The Metis brand already returns to '/'; a second 'Mijn werk' link beside it
-    # is the same door everywhere.
-    html = _HOME_NAV.sub("", html)
-
-    if path == "/":
-        # Home workflow tiles are the primary workflow doors. Keep Audit in the
-        # top navigation by explicit product decision, plus Accounts/logout.
-        html = _HOME_WORKFLOW_NAV.sub("", html)
 
     if path == "/review":
         # In a batch row the object-review link already exposes source context

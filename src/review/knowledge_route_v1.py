@@ -92,7 +92,7 @@ def review_route(state: str | None, *, stage_second: bool, required_second: bool
         # Approved once, but the four-eyes review still needs its second approval before publication.
         return route_html('second_review', 'Hierna: een tweede reviewer beoordeelt deze versie.', second_review=True)
     if state == GOEDGEKEURD:
-        return route_html('publish', 'Hierna: het kennisobject wordt gepubliceerd met het document.',
+        return route_html('publish', 'Hierna: de uitgever controleert of het document gepubliceerd kan worden.',
                           second_review=second)
     if stage_second or state == TWEEDE_REVIEW:
         return route_html('second_review', 'Hierna: na goedkeuren is dit kennisobject klaar voor publicatie.',

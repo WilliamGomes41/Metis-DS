@@ -50,7 +50,7 @@ def test_annotation_pages_say_what_follows(kwargs, expected_current, expected_ne
     (TWEEDE_REVIEW, dict(stage_second=True, required_second=True), 'Tweede review', 'klaar voor publicatie'),
     (IN_REVIEW, dict(stage_second=False, required_second=False, rebuilding='saved'), 'Bouwen', 'Rond Documentcontrole af'),
     (IN_REVIEW, dict(stage_second=False, required_second=False, rebuilding='building'), 'Bouwen', 'komt terug in de review'),
-    (GOEDGEKEURD, dict(stage_second=False, required_second=False), 'Publicatie', 'gepubliceerd met het document'),
+    (GOEDGEKEURD, dict(stage_second=False, required_second=False), 'Publicatie', 'de uitgever controleert of het document gepubliceerd kan worden'),
     # Codex P2: approved once under a four-eyes review; the second approval is still missing.
     (GOEDGEKEURD, dict(stage_second=False, required_second=True, second_pending=True), 'Tweede review',
      'een tweede reviewer beoordeelt'),

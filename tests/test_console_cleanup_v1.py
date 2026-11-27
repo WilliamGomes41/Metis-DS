@@ -119,7 +119,7 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, 
         assert denied.status_code == 400
         assert "reviewer_not_named_on_snapshot" in denied.text
     assert client.get("/inzicht/document", params={"document": second["snapshot_id"]}).status_code == 400
-    technical = client.get("/settings/technical", params={"document": snapshot})
+    technical = client.get("/inzicht/document", params={"document": snapshot})
     assert technical.status_code == 200
     assert "Documentdiagnose" in technical.text
     assert "Reviewinteracties" in technical.text

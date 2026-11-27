@@ -12,7 +12,7 @@ const {chromium} = require(process.env.METIS_PLAYWRIGHT_MODULE);
       await page.goto(base+'/login');
       await page.locator('[name=username]').fill(username);
       await page.locator('[name=password]').fill('fixture-only');
-      await Promise.all([page.waitForURL(base+'/'), page.locator('button[type=submit]').click()]);
+      await Promise.all([page.waitForURL(base+(username==='author'?'/source-selection':'/review')), page.locator('button[type=submit]').click()]);
     }
     await login('author');
     await page.goto(base+'/source-selection?document='+sid);

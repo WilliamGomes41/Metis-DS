@@ -49,7 +49,7 @@ def test_content_changes_url_with_identical_mtime_and_size(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("path", ["/", "/login"])
-def test_rendered_css_url_serves_current_tile_styles(tmp_path, path, *, production_app, production_console):
+def test_rendered_css_url_serves_current_navigation_styles(tmp_path, path, *, production_app, production_console):
     console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
@@ -66,8 +66,8 @@ def test_rendered_css_url_serves_current_tile_styles(tmp_path, path, *, producti
         assert response.status_code == 200
         assert response.content == expected_css
         assert response.headers["content-type"].startswith("text/css")
-        assert ".home-tiles" in response.text
-        assert ".home-tile-icon" in response.text
+        assert ".rooms" in response.text
+        assert ".home-tile" not in response.text
 
 
 def test_page_still_renders_when_optional_brand_assets_are_absent(tmp_path, monkeypatch):

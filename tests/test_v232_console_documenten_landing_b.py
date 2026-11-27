@@ -306,9 +306,9 @@ def test_logged_in_home_is_not_ingest_redirect(tmp_path: Path, *, production_app
     _accounts(console)
     client = _client(console, production_app=production_app)
     response = client.get("/", follow_redirects=False)
-    assert response.status_code == 200
-    assert _location_path(response) != "/ingest"
-    html = response.text
+    assert response.status_code == 303
+    assert _location_path(response) == "/source-selection"
+    html = client.get(response.headers["location"]).text
     assert 'enctype="multipart/form-data"' not in html
     for label in FORBIDDEN_LIVE_LABELS:
         assert label not in html
@@ -328,5 +328,5 @@ def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path, *, producti
     assert _location_path(login) == "/"
     assert _location_path(login) != "/ingest"
     home = client.get("/", follow_redirects=False)
-    assert home.status_code == 200
-    assert _location_path(home) != "/ingest"
+    assert home.status_code == 303
+    assert _location_path(home) == "/source-selection"

@@ -20,11 +20,9 @@
   const embedded = window.self !== window.top;
 
   const HELP = {
-    home: 'Mijn werk is je startpunt. Kies de volgende stap: inleveren, bronselectie, review, publicatie of documenten.',
-    ingest: 'Hier lever je een nieuwe bron in. Kies het bestand, de documentklasse en wie de review doet. Na inleveren ga je verder in Bronselectie.',
-    selection: 'Bronselectie start of hervat de verwerking per document. Een vastgelopen document toont hier waarom; de diagnose staat in Inzicht.',
+    ingest: 'Hier lever je een nieuwe bron in. Kies het bestand, de documentklasse en wie de review doet. Voor een richtlijn open je de annotatiewerkplek; een beslisboom gaat naar Vorming.',
+    selection: 'Open de richtlijn om de inhoudsopgave te bevestigen, te annoteren en te bouwen. Een beslisboom start of hervat je op de documentkaart. De diagnose staat in Inzicht.',
     review: 'Hier beoordeel je de voorgestelde passages. Je beoordeling is pas vastgelegd na opslaan. Bij vier-ogen is een tweede, onafhankelijke reviewer nodig.',
-    formation: 'Vormingsproblemen toont welke bronproblemen nog openstaan en waar je ze kunt behandelen. Geldige voorstellen blijven bereikbaar in Review; open problemen blijven publicatie blokkeren.',
     publish: 'Publicatie toont wat klaar is om te publiceren en wat nog ontbreekt. Publiceren gebeurt pas na een volledige, geldige review.',
     tree: 'Documenten toont alle bronnen per familie en klasse. Open een document voor details, versies en diagnose.',
     settings: 'Instellingen bevat accounts, verwerkingsinstellingen en technische informatie. Wijzigingen hier gelden voor iedereen.',
@@ -221,7 +219,7 @@
   const SETTLE = 1500;
   // Same rooms as the server-side navigation (_nav), plus Inzicht.
   const DEPLOY_PAGES = [
-    ['Mijn werk', '/'], ['Inleveren', '/ingest'], ['Vorming', '/source-selection'], ['Review', '/review'],
+    ['Inleveren', '/ingest'], ['Vorming', '/source-selection'], ['Review', '/review'],
     ['Publicatie', '/publish'], ['Documenten', '/tree'], ['Instellingen', '/settings'], ['Inzicht', '/inzicht']
   ].map(([label, path]) => ({label, path}));
 

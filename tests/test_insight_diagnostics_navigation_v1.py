@@ -166,9 +166,9 @@ def test_quality_table_history_and_graphs_stay_in_one_tab_and_same_report(tmp_pa
 def test_configuration_has_no_diagnostics_and_controls_use_insight_addresses(tmp_path, *, production_app, production_console):
     state, users, _, _ = _system(tmp_path, production_console=production_console)
     client = login(production_app(state), users['researcher']['username'])
-    config = client.get('/settings/technical').text
+    config = client.get('/settings').text
     assert '/settings/llm' in config and '/settings/api-access' in config
-    assert not any(item in config for item in ('Routevergelijking', 'Semantische veiligheidstests', 'Alle exports', 'Verwerkingsproblemen herstellen', 'href="/inzicht'))
+    assert not any(item in config for item in ('Routevergelijking', 'Semantische veiligheidstests', 'Alle exports', 'Verwerkingsproblemen herstellen'))
     insight = client.get('/inzicht?tab=controles').text
     assert '/inzicht/reviewsignalen' in Links(insight).hrefs
     assert '/inzicht/routevergelijking' not in insight and '/inzicht/veiligheidstests' not in insight
