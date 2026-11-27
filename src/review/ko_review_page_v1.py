@@ -198,6 +198,12 @@ def _rejection_notice(console, obj):
             + escape(str(event.get('actor') or 'een reviewer')) + (': ' + escape(comment) if comment else '.') + '</p>')
 
 
+def _offers_route_type(console, sid, envelope, obj):
+    # Headings and context-only graph nodes have no route-type form to link to.
+    from src.review.decision_review_ui_v1 import has_route_type
+    return has_route_type(obj, console._tree_envelope(sid, envelope=envelope).get('decision_graph'))
+
+
 def render_review_page(console, account, inputs, obj, *, task='', draft=None, error='', conflict=False,
                        origin_revision='', overview_url=''):
     from src.operations_console_app import _object_type_label, _source_bound_fields_html, new_review_interaction_id
@@ -241,7 +247,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         repair = '/annotations?' + urlencode({'document': sid, 'annotation': annotation['annotation_id']})
         repair += '#annotation-controls'
         correction_link = '<a href="' + escape(repair, quote=True) + '">Aanpassen in de kaart</a>'
-    elif path == 'boom' and 'decision_graph' in inputs.envelope:
+    elif path == 'boom' and 'decision_graph' in inputs.envelope and _offers_route_type(console, sid, inputs.envelope, obj):
         graph = '/review/decision-graph?' + urlencode({'document': sid}) + '#passage-' + quote(obj['object_id'], safe='')
         correction_link = '<a href="' + escape(graph, quote=True) + '">Passagetype in de beslisboomreview bekijken</a>'
     parent = next((row for row in inputs.objects if row['object_id'] == descriptor.parent_id), None)

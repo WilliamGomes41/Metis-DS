@@ -35,6 +35,11 @@ def _context_ids(graph):
     return {node["object_id"] for node in (graph or {}).get("nodes") or [] if node.get("mode") == "context"}
 
 
+def has_route_type(obj, graph):
+    """Whether the decision-graph review offers a route type for this passage."""
+    return not _is_structural(obj) and obj["object_id"] not in _context_ids(graph)
+
+
 def _passage_types(rows, common, immutable, context_ids=frozenset()):
     from src.operations_console_app import _object_type_label
     items = []

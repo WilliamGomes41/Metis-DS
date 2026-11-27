@@ -159,3 +159,8 @@ def test_graph_context_passage_never_receives_a_route_type(tmp_path, production_
         assert response.status_code == 400
     assert console.objects_revision(sid) == revision
     assert console._current_object(sid, context["object_id"]) == before
+    link = "Passagetype in de beslisboomreview bekijken"
+    card = client.get("/review", params={"document": sid, "object": context["object_id"]})
+    route = client.get("/review", params={"document": sid, "object": graph["nodes"][0]["object_id"]})
+    assert card.status_code == route.status_code == 200
+    assert link not in card.text and link in route.text
