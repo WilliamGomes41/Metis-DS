@@ -61,13 +61,14 @@ def _blocker_message(code: str) -> str:
     )
 
 
-def _blocker_view(code: str, snapshot_id: str) -> dict[str, Any]:
+def _blocker_view(code: str, snapshot_id: str, *, decision_tree: bool = False) -> dict[str, Any]:
     recovery_href = None
     recovery_label = None
-    if code in {'source_passage_review_incomplete', 'source_formation_incomplete'}:
+    source_blocker = code in {'source_passage_review_incomplete', 'source_formation_incomplete'}
+    if source_blocker and not decision_tree:
         recovery_href = f"/inzicht/document?document={quote(snapshot_id, safe='')}"
         recovery_label = "Bekijk documentdiagnose"
-    elif code == 'pre_review_processing_incomplete':
+    elif source_blocker or code == 'pre_review_processing_incomplete':
         recovery_href = f"/source-selection?document={quote(snapshot_id, safe='')}"
         recovery_label = "Open Vorming"
     elif code in REVIEW_RECOVERY_BLOCKERS:
@@ -85,6 +86,7 @@ def publish_readiness_view(
     *,
     snapshot_id: str,
     envelope_state: str,
+    decision_tree: bool = False,
     considered: dict[str, Any],
 ) -> dict[str, Any]:
     """Build one auditable server-side model from the Slice 4 readiness result."""
@@ -123,7 +125,7 @@ def publish_readiness_view(
         "blocker_codes": blocker_codes,
         "curation_ready": curation_ready,
         "curation_blocker_codes": curation_codes,
-        "curation_blockers": [_blocker_view(code, snapshot_id) for code in curation_codes],
+        "curation_blockers": [_blocker_view(code, snapshot_id, decision_tree=decision_tree) for code in curation_codes],
         "unresolved_review_object_count": int(
             considered.get("unresolved_review_object_count") or 0
         ),
@@ -132,19 +134,19 @@ def publish_readiness_view(
         ),
         "technical_ready": technical_ready,
         "technical_blocker_codes": technical_codes,
-        "technical_blockers": [_blocker_view(code, snapshot_id) for code in technical_codes],
+        "technical_blockers": [_blocker_view(code, snapshot_id, decision_tree=decision_tree) for code in technical_codes],
         "object_readiness": [
-            _object_readiness_view(row, snapshot_id)
+            _object_readiness_view(row, snapshot_id, decision_tree=decision_tree)
             for row in considered.get("object_readiness") or [] if row.get("blockers")
         ],
     }
 
 
-def _object_readiness_view(row: dict[str, Any], snapshot_id: str) -> dict[str, Any]:
+def _object_readiness_view(row: dict[str, Any], snapshot_id: str, *, decision_tree: bool) -> dict[str, Any]:
     priority = ("review_disposition_inconsistent", "review_repair_incomplete",
                 "review_work_incomplete", "source_passage_review_incomplete")
     code = next((code for code in priority if code in row["blockers"]), row["blockers"][0])
-    reason = _blocker_view(code, snapshot_id)
+    reason = _blocker_view(code, snapshot_id, decision_tree=decision_tree)
     if code == "review_work_incomplete":
         reason["message"] = ("Een onafhankelijke tweede beoordeling staat nog open."
             if row.get("review_stage") == "second_review" else "De eerste beoordeling staat nog open.")
@@ -431,6 +433,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
                 snapshot_id=str(envelope["snapshot_id"]),
                 envelope_state=str(envelope.get("state") or ""),
                 considered=considered,
+                decision_tree=envelope["class"] == "beslisboom",
             )
             _apply_release_state(console, envelope, view)
             display_status = _RELEASE_DISPLAY.get(view["overall_state"]) or derive_lifecycle_status(

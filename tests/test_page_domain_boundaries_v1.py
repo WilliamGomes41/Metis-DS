@@ -90,6 +90,9 @@ def test_publication_explains_blocker_and_opens_its_existing_owner(code, path, t
     assert url.path == path
     assert parse_qs(url.query) == {'document': ['snapshot & exact'], **({'task': [task]} if task else {})}
     assert view['code'] == code
+    if code in {'source_passage_review_incomplete', 'source_formation_incomplete'}:
+        tree = _blocker_view(code, 'snapshot & exact', decision_tree=True)
+        assert urlsplit(tree['recovery_href']).path == '/source-selection'
 
 
 def test_unknown_publication_gate_does_not_invent_a_human_task():
