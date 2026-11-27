@@ -10,7 +10,9 @@ from .support import console_at, command, ACTOR
 def test_source_overview_running_golden(tmp_path, production_console, golden, dispatch_state):
     from src.vorming.source_selection_ui_v1 import install
     console = console_at(tmp_path, production_console=production_console)
-    receipt = console.receive_source(**command())
+    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
+    receipt = console.receive_source(**command(class_='beslisboom', filename='boom.json',
+                                               data=_boom_freeze_bytes(), content_type='application/json'))
     sid = receipt['snapshot_id']
     console.reserve_source_selection(actor_id=ACTOR, snapshot_id=sid, command_id='golden-running',
                                      expected_revision=console.objects_revision(sid))

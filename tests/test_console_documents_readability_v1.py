@@ -54,7 +54,7 @@ def test_documents_rows_show_status_aligned_actions_and_closed_delete(production
     assert '<span class="meta">Versie 1.2 · richtlijn</span>' in summary
     # Received, never started: a normal state in the neutral tone, not a stuck document.
     assert '<span class="document-status" data-tone="neutral"><span class="visually-hidden">Status: </span>nog niet gestart</span>' in summary
-    assert "Vorming" in row and "/source-selection?document=" in row
+    assert "Open de bron om te annoteren" in row and "/annotations?document=" in row
     labels = re.findall(r'<h3 class="document-action-label">(.*?)</h3>', row)
     assert labels == ["Onderwerp", "Klasse", "Diagnose"]
     assert "Nu: <b>Eenzaamheid</b>" in row and "Nu: <b>richtlijn</b>" in row

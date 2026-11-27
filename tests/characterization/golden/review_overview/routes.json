@@ -545,12 +545,6 @@
       ]
     ],
     [
-      "/review/repair",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/review/resolve",
       [
         "POST"
@@ -732,18 +726,6 @@
     ],
     [
       "/tree/promote",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/tree/reprocess",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/tree/resume-formation",
       [
         "POST"
       ]

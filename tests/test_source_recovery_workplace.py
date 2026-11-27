@@ -110,6 +110,6 @@ def test_accounting_cannot_rewrite_a_formed_source(tmp_path, *, production_conso
     browser.post('/login', data={'username': 'researcher.anne', 'password': TEST_PASSWORD})
     result = browser.post('/inzicht/document/pagina-verantwoorden', data=dict(snapshot_id=sid, page=2,
         category='colofon_of_copyright', note='Dit mag de al gevormde bron niet wijzigen.'))
-    assert result.status_code == 400
+    assert result.status_code == 404
     restarted = restart_production(console)
     assert (restarted._envelope(sid), restarted.snapshot_objects(sid), restarted.object_review_bindings(sid)) == before

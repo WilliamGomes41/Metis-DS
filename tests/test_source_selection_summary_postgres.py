@@ -89,7 +89,8 @@ def test_source_pages_stay_available_during_real_large_checkpoints(
     from src.request_diagnostics_v1 import current_request_id
 
     console, users, _, _ = _system(tmp_path, production_console=production_console)
-    sid = _received(console, users, title='Concurrent checkpoint availability')
+    from tests.decision_graph_native_support import receive_tree
+    sid = receive_tree(console, users['researcher']['account_id'], users['reviewer_a']['account_id'], 'Concurrent checkpoint availability')
     attempt, _ = console.reserve_source_selection(
         actor_id=users['researcher']['account_id'], snapshot_id=sid,
         command_id='checkpoint-read-proof', expected_revision=console.objects_revision(sid))

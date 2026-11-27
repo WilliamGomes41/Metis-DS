@@ -67,13 +67,11 @@ def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(
     client = TestClient(production_app(console), base_url='https://testserver')
     assert client.post('/login', data={'username': 'researcher.d54', 'password': PASSWORD},
                        follow_redirects=False).status_code == 303
+    origin_request = 'b' * 32
     with monkeypatch.context() as reservation:
-        reservation.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
-        response = client.post('/source-selection/start', data={'document': sid, 'command_id': 'one-start',
-            'expected_revision': console.objects_revision(sid)}, follow_redirects=False)
-    assert response.status_code == 303
-    origin_request = response.headers['x-metis-request-id']
-    attempt = console._envelope(sid)['processing_attempts'][-1]
+        reservation.setattr('src.request_diagnostics_v1.current_request_id', lambda: origin_request)
+        attempt, _ = console.reserve_source_selection(actor_id=actor, snapshot_id=sid, command_id='one-start',
+                                                       expected_revision=console.objects_revision(sid))
     monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 0, raising=False)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     handed = console._envelope(sid)['processing_attempts'][-1]
@@ -312,7 +310,7 @@ def test_source_selection_reads_show_waiting_and_blocked_without_mutation(tmp_pa
     before = deepcopy(console._envelope(sid))
     response = client.get('/source-selection', params={'document':sid})
     assert response.status_code == 200
-    assert 'wacht op uitvoering' in response.text
+    assert 'wacht op uitvoering' not in response.text and 'lopende verwerking' in response.text
     assert '<button class="btn-primary">Hervatten</button>' not in response.text
     assert console._envelope(sid) == before and calls == []
     with console.workflow_document_store._connect() as con:
@@ -323,7 +321,7 @@ def test_source_selection_reads_show_waiting_and_blocked_without_mutation(tmp_pa
     for params in ({}, {'document':sid}):
         response = client.get('/source-selection', params=params)
         assert response.status_code == 200
-        assert 'vastgelopen' in response.text and 'totale tijdslimiet' in response.text
+        assert 'Vormingsproblemen' not in response.text and 'Bekijk status bouwopdrachten' in response.text
     assert console._envelope(sid) == before and calls == []
 
 

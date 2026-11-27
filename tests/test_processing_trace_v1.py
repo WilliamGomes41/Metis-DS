@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte opslag concurrent stale interrupt retry version-compat recovery
 # release-control-evidence: toegang beschikbaarheid kwaliteit metrics slop releasebewijs
 """
+from tests.decision_graph_native_support import receive_tree
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from hashlib import sha256
@@ -20,7 +21,7 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tmp_path, monkeypatch, *, production_app):
     actor, reviewer = accounts(console)
     bind(console, provider)
-    sid = receive(console, actor, reviewer, 'trace')
+    sid = receive_tree(console, actor, reviewer, 'trace')
     other_sid = receive(console, actor, reviewer, 'trace-other')
     monkeypatch.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
     app = production_app(console)
@@ -224,10 +225,11 @@ def test_process_death_preserves_origin_and_checkpoint_then_authorized_retry(con
     app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         login(client)
-        response = client.post('/source-selection/start', data={'document':sid, 'command_id':'crash-command',
-            'expected_revision':console.objects_revision(sid)}, follow_redirects=False)
-        assert response.status_code == 303
-        origin = response.headers['x-metis-request-id']
+        origin = 'a' * 32
+        with monkeypatch.context() as historical_request:
+            historical_request.setattr('src.request_diagnostics_v1.current_request_id', lambda: origin)
+            console.reserve_source_selection(actor_id=actor, snapshot_id=sid, command_id='crash-command',
+                                             expected_revision=console.objects_revision(sid))
     attempt = deepcopy(console._envelope(sid)['processing_attempts'][-1])
     ctx = multiprocessing.get_context('spawn'); reached = ctx.Event()
     config = console.workflow_document_store.config if hasattr(console, 'workflow_document_store') else None
@@ -383,14 +385,16 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
     app = production_app(current)
     with TestClient(app, base_url='https://testserver') as client:
         assert client.post('/login', data={'username':'author', 'password':'strong-test-password'}, follow_redirects=False).status_code == 303
-        response = client.post('/source-selection/start', data={'document':sid,
-            'command_id':'targeted-resume', 'expected_revision':current.objects_revision(sid)}, follow_redirects=False)
-        assert response.status_code == 303
-        attempt = deepcopy(current._envelope(sid)['processing_attempts'][-1])
+        origin = 'b' * 32
+        with monkeypatch.context() as historical_request:
+            historical_request.setattr('src.request_diagnostics_v1.current_request_id', lambda: origin)
+            attempt, fresh = current.reserve_source_selection(actor_id=actor, snapshot_id=sid, command_id='targeted-resume',
+                                                               expected_revision=current.objects_revision(sid))
+        assert fresh
         assert attempt['kind'] == 'resume'
         current.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
         from src.review.review_ledger import read_events
-        params = {'document': sid, 'origin_request': response.headers['x-metis-request-id']}
+        params = {'document': sid, 'origin_request': origin}
         def stored():
             return deepcopy(current._envelope(sid)), current.objects_revision(sid), read_events(current._ledger_path)
         before_reads = stored()
@@ -432,15 +436,16 @@ def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeyp
     from src.request_diagnostics_v1 import _LOGGER
     from tests.test_availability_repair import drain
     actor, reviewer = accounts(console)
-    sid = receive(console, actor, reviewer, 'background')
+    sid = receive_tree(console, actor, reviewer, 'background')
     entered, release = Event(), Event()
     inherited_metrics = []
-    def blocked(*args):
+    original = console._fragments_and_spec
+    def blocked(*args, **kwargs):
         from src.console_performance_v1 import _CURRENT as performance_current
         inherited_metrics.append(performance_current.get())
         entered.set(); assert release.wait(10)
-        return provider(*args)
-    bind(console, blocked)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(console, "_fragments_and_spec", blocked)
     events = []
     monkeypatch.setattr(_LOGGER, 'info', lambda fmt, msg: events.append(json.loads(msg)))
     app = production_app(console)

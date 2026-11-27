@@ -136,14 +136,10 @@ def test_http_zero_object_blocked_work_can_reprocess_from_blob(recovery_postgres
     client = TestClient(production_app(console))
     assert client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"}, follow_redirects=False).status_code == 303
     result = client.post("/tree/reprocess", data={"snapshot_id": sid}, follow_redirects=False)
-    assert result.status_code == 303
-    assert result.headers["location"] == f"/source-selection?document={sid}"
+    assert result.status_code == 404
     assert not console.snapshot_objects(sid)
-    with client:
-        from tests.test_availability_repair import drain
-        assert client.post("/source-selection/start", data={"document": sid, "command_id": "recover-cache",
-            "expected_revision": console.objects_revision(sid)}, follow_redirects=False).status_code == 303
-        drain(client, client.app)
+    from tests.test_review_formation_problems import execute
+    execute(console, sid, accounts['researcher']['account_id'], 'recover-cache')
     assert console.snapshot_objects(sid)
     assert console._envelope(sid)["sha256"] == receipt["sha256"]
     assert "processing_blocker" not in console._envelope(sid)

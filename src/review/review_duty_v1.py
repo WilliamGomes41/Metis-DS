@@ -195,15 +195,15 @@ def review_duty_lane(
     *,
     review_path: str,
     stage: str,
-) -> str:
+) -> str | None:
     obj_type = authoritative_review_type(obj)
+    if review_path != "boom" and obj_type == "heading":
+        return None
 
     if stage == SECOND_REVIEW:
         return LANE_CONTEXTUAL
 
-    if (review_path == "boom" and obj_type == "path") or (
-        review_path != "boom" and obj_type == "heading"
-    ):
+    if review_path == "boom" and obj_type == "path":
         return LANE_STRUCTURE
 
     if (

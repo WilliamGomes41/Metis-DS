@@ -41,12 +41,14 @@ def test_installed_work_pages_lead_to_one_document_diagnosis_without_writes(inst
     before = deepcopy(state.snapshot_objects(sid)), state.objects_revision(sid), read_events(state._ledger_path)
     source = client.get('/source-selection', params={'document': sid})
     assert source.status_code == 200
-    links = Links(source.text).hrefs
+    assert 'Bekijk status bouwopdrachten' in source.text
+    documents = client.get('/tree')
+    assert documents.status_code == 200
+    links = Links(documents.text).hrefs
     diagnosis = [url for url in links if urlsplit(url).path == '/inzicht/document']
     assert len(diagnosis) == 1
     assert parse_qs(urlsplit(diagnosis[0]).query)['document'] == [sid]
     assert not any(urlsplit(url).path in {'/source-selection/blockage', '/source-selection/processing-trace'} for url in links)
-    assert source.text.count('Naar Review</a>') == 1
     page = client.get(diagnosis[0])
     assert page.status_code == 200, page.text
     for section in ('id="verwerking"', 'id="passages"', 'id="bewijs"', 'Reviewinteracties'):

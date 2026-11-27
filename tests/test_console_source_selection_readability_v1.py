@@ -44,7 +44,7 @@ def test_page_has_picker_button_and_one_action_row(tmp_path, *, production_app, 
     assert '<button class="btn-secondary" type="submit">Document selecteren</button>' in html
     card = html.split(f'id="source-{sid}"', 1)[1].split('</article>', 1)[0]
     meta = card.split('<p class="source-meta">', 1)[1].split('</p>', 1)[0]
-    assert ' · Bronversie ' in meta
+    assert 'Bronversie ' in meta
     assert not re.search(r'\d,\d{3}\s?bytes', meta)  # no English thousands separator
     actions = card.split('<div class="source-actions">', 1)[1]
-    assert 'Bekijk diagnose in Inzicht</a></div>' in actions
+    assert 'Bekijk status bouwopdrachten</a></div>' in actions

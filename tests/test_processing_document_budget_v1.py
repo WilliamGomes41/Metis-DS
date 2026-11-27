@@ -285,7 +285,7 @@ def test_new_worker_rechecks_authority_and_configuration(tmp_path, production_co
     assert console.snapshot_objects(sid) == []
 
 
-def test_http_legacy_budget_remains_while_fresh_source_offers_annotation(tmp_path, production_console, monkeypatch):
+def test_http_prose_cannot_reserve_a_document_budget(tmp_path, production_console, monkeypatch):
     from fastapi.testclient import TestClient
     from tests.production_support import application_for
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch,reserve=False)
@@ -299,17 +299,9 @@ def test_http_legacy_budget_remains_while_fresh_source_offers_annotation(tmp_pat
         assert console._envelope(sid) == before
         started = client.post('/source-selection/start',data={'document':sid,'command_id':'one-http-start',
             'expected_revision':console.objects_revision(sid)},follow_redirects=False)
-        assert started.status_code == 303
-        until = time.monotonic()+10
-        while console._envelope(sid)['processing_attempts'][0]['state'] == 'running' and time.monotonic() < until:
-            time.sleep(.02)
-        final = deepcopy(console._envelope(sid))
-        assert final['processing_attempts'][0]['state'] == 'succeeded' and len(final['processing_attempts']) == 1
-        for params in ({},{'document':sid}):
-            page = client.get('/source-selection',params=params)
-            assert page.status_code == 200 and 'Documentbudget: vier uur' in page.text
-            assert '3 van 6' in page.text
-        assert console._envelope(sid) == final and len(calls) == 3
+        assert started.status_code == 404
+        assert console.workflow_document_store.get_envelope(sid).get('processing_attempts', []) == []
+        assert console._envelope(sid) == before and calls == []
 
 
 def test_process_death_does_not_refund_an_uncertain_call_or_need_a_new_start(tmp_path, production_console, monkeypatch):

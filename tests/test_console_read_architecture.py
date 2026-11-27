@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 
+from tests.decision_graph_native_support import receive_tree
 from tests.ko_review_fixture_support import affirmative_assessment
 from collections import Counter
 from copy import deepcopy
@@ -124,7 +125,7 @@ def test_compact_page_routes_do_not_fetch_full_envelopes(tmp_path, production_co
         raise AssertionError('Compact page fetched a full envelope')
     monkeypatch.setattr(console.workflow_document_store, 'list_envelopes', forbidden)
     monkeypatch.setattr(console.workflow_document_store, 'get_envelope', forbidden)
-    for path in ['/ingest', '/tree', '/publish', '/review', '/review/repair', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen']:
+    for path in ['/ingest', '/tree', '/publish', '/review', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen']:
         assert client.get(path).status_code == 200, path
 
 
@@ -289,9 +290,9 @@ def test_source_overview_never_loads_full_payloads_or_offers_unchecked_commands(
         monkeypatch.setattr(console.workflow_document_store, name, forbidden)
     response = client.get('/source-selection')
     assert response.status_code == 200
-    assert 'Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd' in response.text
+    assert 'Bekijk status bouwopdrachten' in response.text
     assert 'action="/source-selection/start"' not in response.text
-    assert 'Document openen' in response.text
+    assert 'Nieuwe bronversie inleveren' in response.text
 
 
 def test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked(tmp_path, production_console, production_app, monkeypatch):
@@ -459,7 +460,7 @@ def test_notices_second_diagnostic_batch_failure_is_explicit_partial(tmp_path, p
 
 def test_source_overview_refreshes_running_document(tmp_path, production_console, production_app):
     console, users, _, _ = _system(tmp_path, production_console=production_console)
-    sid = _received(console, users)
+    sid = receive_tree(console, users['researcher']['account_id'], users['reviewer_a']['account_id'], 'Running tree')
     console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
         command_id='overview-running', expected_revision=console.objects_revision(sid))
     response = _login(console, users['researcher']['username'], production_app=production_app).get('/source-selection')
@@ -585,7 +586,7 @@ def test_failed_or_expired_latest_attempt_is_a_stored_block(tmp_path, production
     assert next(r for r in client.get('/raad/meldingen').json()['documents'] if r['snapshot_id'] == sid)['processing_blocked']
 
 
-@pytest.mark.parametrize('path', ['/review', '/review/repair', '/inzicht/routevergelijking'])
+@pytest.mark.parametrize('path', ['/review', '/inzicht/routevergelijking'])
 def test_cleanup_compact_gets_do_not_read_full_envelopes(tmp_path, production_console, production_app, monkeypatch, path):
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     client = _login(console, users['researcher']['username'], production_app=production_app)
@@ -607,7 +608,7 @@ def test_console_gets_never_take_command_write_lock(tmp_path, production_console
         lock_calls.append(True)
         raise AssertionError('GET took the command write lock')
     monkeypatch.setattr(console, '_store_write_lock', forbidden)
-    for path in ['/', '/ingest', '/source-selection', '/publish', '/review', '/review/repair', '/tree', '/settings',
+    for path in ['/', '/ingest', '/source-selection', '/publish', '/review', '/tree', '/settings',
                  '/inzicht', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen',
                  '/inzicht/api/quality', '/inzicht/document?document='+sid, '/review?document='+sid,
                  '/source-selection?document='+sid, '/publish?document='+sid]:

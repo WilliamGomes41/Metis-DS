@@ -375,8 +375,9 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path, *,
                 await _login(researcher, "researcher.dirk", "dirk-secret")
                 await _login(reviewer, "reviewer.bert", "bert-secret")
                 async def receive_and_select():
-                    received = await researcher.post("/ingest", data=_ingest_form(accounts),
-                        files={"file": ("continentie.html", HTML_FIXTURE.read_bytes(), "text/html")})
+                    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
+                    received = await researcher.post("/ingest", data={**_ingest_form(accounts), "class_":"beslisboom"},
+                        files={"file": ("boom.json", _boom_freeze_bytes(), "application/json")})
                     assert received.status_code == 303
                     from urllib.parse import parse_qs, urlparse
                     sid = parse_qs(urlparse(received.headers["location"]).query)["document"][0]
@@ -411,7 +412,7 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path, *,
         assert posted.status_code in {303, 200}
         assert elapsed < 0.6, f"review POST waited {elapsed:.3f}s during ingest extract"
         assert ingest_response.status_code == 303
-        assert ingest_response.headers["location"].startswith("/annotations?document=")
+        assert ingest_response.headers["location"].startswith("/source-selection?document=")
 
     asyncio.run(_run())
     live = next(

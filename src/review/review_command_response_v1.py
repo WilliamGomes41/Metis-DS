@@ -25,10 +25,11 @@ def review_command_error(console, account, snapshot_id, object_id, revision, tas
         obj = next(row for row in objects if row['object_id'] == object_id)
         view = ReviewPassageInputs(dict(inputs.envelope), objects, list(inputs.bindings),
             revision, inputs.fragments, getattr(error, 'review_source_available', False))
+        review_path = review_path_for_klasse(inputs.envelope['class'])
         content = _render_review_card(console, snapshot_id, obj, objects,
-            review_path_for_klasse(inputs.envelope['class']), draft, '',
+            review_path, draft, '',
             snapshot_revision=revision, task=task, read_inputs=view)
-        content = _review_formation_notice(console, snapshot_id, view) + content
+        content = _review_formation_notice(console, snapshot_id, view, review_path=review_path) + content
     else:
         # Stale input is retained without issuing a fresh mutation precondition.
         # The reviewer must open and inspect the current passage before saving.

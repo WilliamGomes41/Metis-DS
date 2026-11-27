@@ -183,7 +183,7 @@ class ViewChecks:
                 'objects_checked': [str(oid)[:200] for oid in raw.get('coverage', {}).get('objects_checked', [])[:1000]],
                 'objects_unchecked': [str(oid)[:200] for oid in raw.get('coverage', {}).get('objects_unchecked', [])[:1000]],
                 'clinical': 'not_established', 'source_extraction': 'not_established',
-                'formation_problems': 'first_page_read_only' if raw.get('coverage', {}).get('formation_problems') == 'first_page_read_only' else 'not_established'}
+                'formation_problems': raw['coverage']['formation_problems'] if raw.get('coverage', {}).get('formation_problems') in ('first_page_read_only', 'not_applicable') else 'not_established'}
             if raw.get('incomplete'):
                 raise ValueError('browser_failed')
             if context(self.state, job['owner_account_id'], job['snapshot_id'], pinned['attempt_id']) != pinned:

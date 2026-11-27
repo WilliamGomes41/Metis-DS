@@ -68,9 +68,11 @@ def test_real_problem_page_shows_source_without_losing_findings_or_writing(tmp_p
     assert len(report['problems']) == 2
     assert all(row['source_excerpt']['quotes'][0]['text'] == SECOND for row in report['problems'])
     page = client.get('/source-selection', params={'document': sid})
-    assert page.status_code == 200 and '1 bronstuk · 2 meldingen' in page.text
-    assert page.text.count('class="formation-item"') == 1
-    assert SECOND in page.text and 'Technische details' in page.text
-    assert set(re.findall(r'id="problem-([0-9a-f]{64})"', page.text)) == {row['problem_id'] for row in report['problems']}
+    assert page.status_code == 200 and 'class="formation-item"' not in page.text
+    rendered = _formation_problems_html(report, offset=0, esc=escape)
+    assert '1 bronstuk · 2 meldingen' in rendered
+    assert rendered.count('class="formation-item"') == 1
+    assert SECOND in rendered and 'Technische details' in rendered
+    assert set(re.findall(r'id="problem-([0-9a-f]{64})"', rendered)) == {row['problem_id'] for row in report['problems']}
     assert before == (console._envelope(sid), console.snapshot_objects(sid), console.object_review_bindings(sid))
     assert len(calls) == 3 and 'source_formation_incomplete' in console.publication_readiness(sid)['blockers']

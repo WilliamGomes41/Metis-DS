@@ -1950,20 +1950,6 @@ def _individual_review_reason(obj: dict[str, Any], *, priority: bool = False) ->
     return "Deze passage kan niet veilig samen met andere passages worden bevestigd. Beoordeel haar daarom afzonderlijk."
 
 
-def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]]) -> dict[str, str]:
-    if review_path == "boom":
-        return {
-            "fast_title": f"Paden controleren ({len(koppen)})",
-            "fast_lead": "Paden helpen bij het plaatsen van onderdelen. Zij veranderen de inhoud niet.",
-            "fast_button": "Bevestig geselecteerde paden als structuur",
-        }
-    return {
-        "fast_title": f"Koppen controleren ({len(koppen)})",
-        "fast_lead": "Koppen helpen passages op de juiste plek te plaatsen. Zij veranderen de inhoud niet.",
-        "fast_button": "Bevestig geselecteerde koppen als structuur",
-    }
-
-
 def _review_is_final(obj: dict[str, Any]) -> bool:
     from src.review.knowledge_object_state_v1 import FINAL_VALIDATION_STATUSES
     return (obj.get("governance") or {}).get("validation_status") in FINAL_VALIDATION_STATUSES
@@ -2579,7 +2565,7 @@ def _review_inventory(
                 f'<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
                 + f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Bekijk bronpassage</a>'
-                + ('</li>' if source_only else f' · <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=disposition">Brongebruik verantwoorden</a></li>')))
+                + ('</li>' if source_only or review_path != 'boom' else f' · <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=disposition">Brongebruik verantwoorden</a></li>')))
             continue
         if is_source_record(obj):
             evidence = evidence_of(obj)
@@ -2722,7 +2708,7 @@ def _review_inventory(
         elif metadata_items:
             source_html += (f'<h4>Voorgestelde metadata en structuur ({len(metadata_items)})</h4><ol>'
                             + ''.join(metadata_items) + '</ol>')
-            if not source_only:
+            if not source_only and review_path == 'boom':
                 source_html += (f'<p><a class="btn-secondary" href="/source-selection?document={_esc(snapshot_id)}&amp;task=disposition">'
                                 'Bronregels gemotiveerd uitsluiten in Vorming</a></p>')
         if source_items:
@@ -2847,26 +2833,25 @@ def _render_review_index(
         return (_review_task_header(snapshot_id, "Kennisvoorstellen beoordelen", "") +
             '<section data-content-review-workplace>' + content +
             f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p></section>')
-    koppen = _review_route_objects(snapshot_objects, review_path=review_path,
-        bindings=bindings, reviewer_id=reviewer_id, canonical_task="structure", fragments=fragments)
-    copy = _review_lane_copy(review_path, koppen)
-    if task == "structure":
-        if review_path != "boom":
-            return ""
+    if task == "structure" and review_path == "boom":
+        paths = _review_route_objects(snapshot_objects, review_path=review_path, bindings=bindings,
+            reviewer_id=reviewer_id, canonical_task="structure", fragments=fragments)
+        header = _review_task_header(snapshot_id, f"Paden controleren ({len(paths)})",
+            "Paden helpen bij het plaatsen van onderdelen. Zij veranderen de inhoud niet.")
         return f'''
-          {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
+          {header}
           <section class="review-lane-fast">
             <form method="post" action="/review/headings/batch-confirm">
               <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
               <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
               {_snapshot_revision_input(snapshot_revision)}
               <div class="review-batch-tools">
-                <span>Selecteer alleen koppen die je hebt gecontroleerd.</span>
+                <span>Selecteer alleen paden die je hebt gecontroleerd.</span>
                 <button class="btn-secondary" type="button" data-select-review-batch>Selecteer alles</button>
                 <button class="btn-secondary" type="button" data-clear-review-batch>Selectie wissen</button>
               </div>
-              <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
-              <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
+              <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in paths)}</ol>
+              <button class="btn-primary" type="submit">Bevestig geselecteerde paden als structuur</button>
             </form>
           </section>
         '''
@@ -3086,7 +3071,7 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
-def _formation_incomplete_banner(console, snapshot_id: str, *, formation_fragments=None) -> str:
+def _formation_incomplete_banner(console, snapshot_id: str, *, review_path, formation_fragments=None) -> str:
     """Keep unresolved formation visible alongside independent review work."""
     try:
         status = (console.processing_status(snapshot_id) if formation_fragments is None else
@@ -3095,11 +3080,13 @@ def _formation_incomplete_banner(console, snapshot_id: str, *, formation_fragmen
         return ""
     if not status.get("formation_incomplete"):
         return ""
-    link = f'/source-selection?{urlencode({"document": snapshot_id})}'
+    path, label = (('/source-selection', 'Vormingsproblemen behandelen') if review_path == 'boom'
+                   else ('/inzicht/document', 'Bekijk documentdiagnose'))
+    link = f'{path}?{urlencode({"document": snapshot_id})}'
     return ('<div class="banner warn" role="alert" data-formation-incomplete>'
             '<p><strong>Kennisvorming onvolledig.</strong> Zelfstandig geldige voorstellen kunnen worden beoordeeld. '
-            'Resterende bronproblemen en hun herstelacties blijven beschikbaar; publicatie is geblokkeerd.</p>'
-            f'<p><a class="btn-secondary" href="{_esc(link)}">Vormingsproblemen behandelen</a></p></div>')
+            'Publicatie is geblokkeerd.</p>'
+            f'<p><a class="btn-secondary" href="{_esc(link)}">{label}</a></p></div>')
 
 
 def _review_document_source_inputs(console, snapshot_id, objects, read_inputs):
@@ -3113,20 +3100,20 @@ def _review_document_source_inputs(console, snapshot_id, objects, read_inputs):
     return _review_bindings(console, snapshot_id, objects=objects), fragments
 
 
-def _review_formation_notice(console, snapshot_id, read_inputs, *, document_source=None):
+def _review_formation_notice(console, snapshot_id, read_inputs, *, review_path, document_source=None):
     """A passage observation never evaluates or implies document closure."""
     from src.review.review_passage_read_v1 import ReviewPassageInputs
     if read_inputs is None:
-        return _formation_incomplete_banner(console, snapshot_id)
+        return _formation_incomplete_banner(console, snapshot_id, review_path=review_path)
     if not read_inputs.envelope['_review_check_formation']:
         return ''
     if isinstance(read_inputs, ReviewPassageInputs):
-        link = '/source-selection?' + urlencode({'document': snapshot_id})
+        path = '/source-selection' if review_path == 'boom' else '/inzicht/document'
+        link = path + '?' + urlencode({'document': snapshot_id})
         return ('<div class="banner" role="status" data-document-assessment="not_evaluated">'
-                '<p>De vorming van dit document wordt apart beoordeeld. Je kunt hier deze passage beoordelen. '
-                'Bekijk bij Vorming of er nog bronwerk openstaat.</p>'
+                '<p>De vorming van dit document wordt apart beoordeeld. Je kunt hier deze passage beoordelen.</p>'
                 f'<p><a class="btn-secondary" href="{_esc(link)}">Bekijk documentbeoordeling</a></p></div>')
-    return _formation_incomplete_banner(console, snapshot_id, formation_fragments=document_source)
+    return _formation_incomplete_banner(console, snapshot_id, review_path=review_path, formation_fragments=document_source)
 
 
 def _review_detail_projection(console, account, snapshot_id, obj, objects, review_path, read_inputs):
@@ -3215,7 +3202,7 @@ def _render_review_room(
         bindings = None
         if not chosen_object_id:
             bindings, fragments = _review_document_source_inputs(console, chosen, snapshot_objects, read_inputs)
-        objects_html += _review_formation_notice(console, chosen, read_inputs, document_source=fragments)
+        objects_html += _review_formation_notice(console, chosen, read_inputs, review_path=review_path, document_source=fragments)
         if not chosen_object_id:
             objects_html += _render_review_index(
                 chosen,
@@ -3442,7 +3429,7 @@ def create_console_app(
                 return await call_next(request)
         return await call_next(request)
 
-    from src.vorming.source_selection_ui_v1 import install as install_source_selection
+    from src.vorming.source_selection_ui_v1 import install as install_source_selection, require_decision_tree
     source_dispatcher = install_source_selection(app, state, _require, _page, _nav, _esc)
     # The controlled stop stays until the old AI start and worker paths are retired (#1017).
     from src.vorming.prose_transition_api_v1 import install as install_prose_transition
@@ -4703,7 +4690,7 @@ def create_console_app(
         payload = state.family_tree()
         named_on = ({row["snapshot_id"] for row in state.list_document_cards()
                      if account["account_id"] in (row.get("named_reviewers") or [])}
-                    if can_promote and not can_move else set())
+                    if can_promote and "researcher" not in account["roles"] else set())
         move_family_options = "".join(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted(payload["families"], key=str.casefold)
@@ -4733,18 +4720,18 @@ def create_console_app(
                     if "researcher" in account["roles"]:
                         locked.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
                     rows.append(_document_action_row("Wijzigen", "".join(locked)))
-                if not_started:
-                    next_step = (
-                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten.'
-                        if can_move else ""
-                    )
-                    pre_review_notice = f'<p class="banner">Verwerking nog niet gestart. Beoordelen kan daarna.{next_step}</p>'
-                elif blocked:
-                    next_step = (
-                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten of te hervatten.'
-                        if can_move else ""
-                    )
-                    pre_review_notice = f'<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.{next_step}</p>'
+                if blocked:
+                    query = _esc(urlencode({"document": child["snapshot_id"]}))
+                    if child["class"] == "beslisboom":
+                        notice = ("Verwerking nog niet gestart." if not_started else "Verwerking niet afgerond.")
+                        link = f'<a href="/source-selection?{query}">Open de beslisboom in Vorming</a>'
+                    else:
+                        notice = "Na het annoteren en bouwen van kennisobjecten kan de beoordeling beginnen."
+                        link = f'<a href="/annotations?{query}">Open de bron om te annoteren</a>'
+                    if "researcher" in account["roles"] or child["snapshot_id"] in named_on:
+                        notice += " " + link
+                    banner = "banner" if not_started else "banner warn"
+                    pre_review_notice = f'<p class="{banner}">{notice}</p>'
                 if can_move and mutable:
                     rows.append(_document_action_row("Onderwerp", f"""
                         <p class="document-current">Nu: <b>{_esc(child["family"])}</b></p>
@@ -4835,6 +4822,7 @@ def create_console_app(
     @app.post("/tree/processing-recovery")
     def tree_processing_recovery(request: Request, snapshot_id: str = Form(...), reason: str = Form(...)):
         account = _require(request)
+        require_decision_tree(state._envelope(snapshot_id))
         try:
             state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
         except ConsoleError as exc:
@@ -4857,6 +4845,7 @@ def create_console_app(
     def account_source_page(request: Request, snapshot_id: str = Form(...), page: int = Form(...),
                             category: str = Form(...), note: str = Form(...)):
         account = _require(request)
+        require_decision_tree(state._envelope(snapshot_id))
         try:
             state.account_source_page(actor_id=account["account_id"], snapshot_id=snapshot_id,
                                       page=page, category=category, note=note)
@@ -4890,17 +4879,6 @@ def create_console_app(
             attempt = {**attempt, "diagnostic":store.diagnostic(attempt)}
             return JSONResponse(replay_diagnostic(attempt,input_resolver=lambda ref:store.resolve_input(ref,expected_snapshot_id=document)),headers={"Cache-Control":"no-store"})
         return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
-
-    @app.post("/tree/reprocess")
-    @app.post("/tree/resume-formation")
-    def tree_source_selection(request: Request, snapshot_id: str = Form(...)) -> RedirectResponse:
-        account = _require(request)
-        if state.snapshot_is_published(snapshot_id):
-            raise ConsoleError("published_objects_must_not_be_rewritten")
-        state.processing_status(snapshot_id, actor_id=account["account_id"])
-        # Compatibility URLs navigate only. The current revision and operation
-        # are authorized by the existing explicit Starten/Hervatten command.
-        return RedirectResponse("/source-selection?" + urlencode({"document": snapshot_id}), status_code=303)
 
     @app.post("/tree/move")
     def tree_move(
@@ -5498,6 +5476,7 @@ def create_console_app(
             command_id: str = Form(""), snapshot_revision: str = Form(""),
             source_checked: str = Form("")) -> Response:
         account = _require(request)
+        require_decision_tree(state._envelope(snapshot_id))
         if source_checked != "1":
             raise ConsoleError("source_context_check_required")
         from src.review.source_context_review_v1 import confirm_source_exclusions
@@ -5514,6 +5493,7 @@ def create_console_app(
             reason: str = Form(""), command_id: str = Form(""), snapshot_revision: str = Form(""),
             source_checked: str = Form("")) -> Response:
         account = _require(request)
+        require_decision_tree(state._envelope(snapshot_id))
         if source_checked != "1":
             raise ConsoleError("source_context_check_required")
         from src.review.source_context_review_v1 import confirm_source_group
@@ -5528,6 +5508,7 @@ def create_console_app(
             group_command_id: str = Form(""), reason: str = Form(""), command_id: str = Form(""),
             snapshot_revision: str = Form("")) -> Response:
         account = _require(request)
+        require_decision_tree(state._envelope(snapshot_id))
         from src.review.source_context_review_v1 import reset_source_group
         reset_source_group(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
             group_command_id=group_command_id, reason=reason, command_id=command_id,

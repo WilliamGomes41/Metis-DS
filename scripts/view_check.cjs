@@ -107,8 +107,14 @@ async function run(input) {
     step='formation_problems'; expectedState='problem_room_and_existing_actions';
     // Problem details now share the selected source page. Observe the same
     // captured page instead of repeating its potentially deep document read.
-    await page.getByRole('heading', {name:'Vormingsproblemen', exact:true}).waitFor();
-    coverage.formation_problems='first_page_read_only';
+    const card = page.locator('[data-source-document][data-selected="true"]');
+    if (await card.getAttribute('data-document-class') === 'beslisboom') {
+      await card.getByRole('heading', {name:'Vormingsproblemen', exact:true}).waitFor();
+      coverage.formation_problems='first_page_read_only';
+    } else {
+      await card.getByRole('link', {name:'Bekijk status bouwopdrachten', exact:true}).waitFor();
+      coverage.formation_problems='not_applicable';
+    }
     step='review_inventory'; expectedState='visible_inventory_with_stored_text';
     const review = await page.goto(origin+'/review?'+query+'&task=inventory');
     if (review.status() !== 200 || new URL(page.url()).pathname !== '/review') throw Error('review_unavailable');

@@ -11,7 +11,6 @@ from fastapi import HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
-from src.review.beslisboom_path_v1 import review_path_for_klasse
 from src.vorming.source_selection_v1 import (
     UNCHECKED, comparable_observations, progress_attempt_key, projection, summary_projection,
 )
@@ -51,13 +50,16 @@ def _source_pages_html(envelope: dict, diagnostic: dict, document: str, *, edita
                 <label>Reden<select name="category" required>{page_options}</select></label>
                 <label>Toelichting<input name="note" value="{escape(str(draft.get("note") or ""), quote=True) if str(draft.get("page")) == str(row["page"]) else ""}" required minlength="10" maxlength="500"></label>
                 <button type="submit">Pagina verantwoorden</button></form></td></tr>''')
-            else:
+            elif envelope['class'] == 'beslisboom':
                 owner = '/source-selection?' + urlencode({'document': document}) + '#source-page-' + str(int(row['page']))
                 rows.append(f'<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
                             f'<td><a href="{escape(owner, quote=True)}">Pagina verantwoorden in Vorming</a></td></tr>')
+            else:
+                rows.append(f'<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td><td>Open</td></tr>')
         parts.append('<section id="paginas"><h3>Onopgeloste pagina’s</h3>'
-                     '<p>Verantwoord alleen een pagina zonder kennisinhoud in Vorming. Start daarna de verwerking opnieuw.</p>'
-                     '<table><thead><tr><th>Pagina</th><th>Probleem</th><th>Herstelactie</th><th>Verantwoorden</th></tr></thead>'
+                     + ('<p>Verantwoord alleen een pagina zonder kennisinhoud in Vorming. Start daarna de verwerking opnieuw.</p>'
+                        if envelope['class'] == 'beslisboom' else '')
+                     + '<table><thead><tr><th>Pagina</th><th>Probleem</th><th>Herstelactie</th><th>Verantwoorden</th></tr></thead>'
                      f'<tbody>{"".join(rows)}</tbody></table></section>')
     # Accepted-extraction evidence belongs to Inzicht. Vorming only needs
     # current findings/accountings; reading it here would repeat collect's read.
@@ -373,12 +375,6 @@ def _progress_html(result, esc):
                   'not_authenticated':'Het verantwoordelijke account is niet meer actief'}.get(result['blocked_reason'], 'Een verwerkingsvoorwaarde blokkeert de uitvoering')
         progress = (f'<p>Verwerking vastgelopen: {esc(reason)}. '
                     f'{esc(result.get("required_action") or "Los de blokkade op voordat u opnieuw start.")}</p>')
-    if result.get('document_budget'):
-        budget = result['document_budget']
-        maximum = budget['max_model_calls']
-        calls = (f"{budget['calls_reserved']} van {maximum}" if maximum is not None else "maximum volgt uit de taakplanning")
-        progress += (f'<p>Documentbudget: vier uur inclusief wachttijd. '
-            f'Resterend: {esc(_minutes(budget["remaining_seconds"]))}. Modelaanroepen gereserveerd: {esc(calls)}.</p>')
     if result.get('budget_stopped') and not result.get('blocked_reason'):
         counts = result.get('progress') or {}
         done, open_ = counts.get('terminal_task_count'), counts.get('pending_task_count')
@@ -530,11 +526,7 @@ def _progress_script():
         const current = new Map(rows.map(row => [row.snapshot, row]));
         for (const [id, card] of group) {
           const row = current.get(id);
-          if (row?.manual_detail) {
-            cards.delete(id);
-            replaceCard(card, row.manual_detail);
-            if (!cards.size) controls.hidden = true;
-          } else if (row) lostAccess = (await apply(card, row, manual) === false) || lostAccess;
+          if (row) lostAccess = (await apply(card, row, manual) === false) || lostAccess;
           else {
             hideCard(id, card);
             lostAccess = true;
@@ -570,14 +562,9 @@ def _progress_script():
 </script>"""
 
 
-def _manual_card(envelope):
-    from src.vorming.human_annotation_source_v1 import has_automatic_attempt, received_prose
-
-    # A document whose latest attempt is automatic processing (running, failed or
-    # interrupted) keeps its processing card with status, estimate and recovery.
-    return envelope['annotation_source_prepared'] or (
-        received_prose(envelope) and not envelope['annotation_has_formed_work'] and not has_automatic_attempt(envelope)
-    )
+def require_decision_tree(envelope):
+    if envelope['class'] != 'beslisboom':
+        raise HTTPException(status_code=404)
 
 
 def install(app, console, require, page, nav, esc):
@@ -586,10 +573,17 @@ def install(app, console, require, page, nav, esc):
 
     def render_card(envelope, actor, observations, *, selected, detail, offset):
         sid = envelope['snapshot_id']
-        if _manual_card(envelope):
+        if envelope['class'] != 'beslisboom':
             query = esc(urlencode({'document': sid}))
-            if envelope['annotation_source_prepared'] or envelope['annotation_source_started']:
+            latest = next(reversed(envelope.get('processing_attempts') or []), {})
+            if envelope['annotation_source_prepared'] or envelope.get('annotation_source_started'):
                 annotate = f'<a class="btn-primary" href="/annotations?{query}">Annoteren</a>'
+            elif not envelope.get('received_source') or envelope['annotation_has_formed_work']:
+                annotate = '<p>Lever een nieuwe bronversie in om deze tekst te annoteren.</p>'
+                if 'researcher' in actor['roles']:
+                    annotate += '<a class="btn-primary" href="/ingest">Nieuwe bronversie inleveren</a>'
+            elif latest.get('state') == 'running':
+                annotate = '<p>Bronvoorbereiding voor annotatie is beschikbaar zodra de lopende verwerking is beëindigd.</p>'
             else:
                 from src.vorming.human_annotation_ui_v1 import source_preparation_form
 
@@ -597,7 +591,7 @@ def install(app, console, require, page, nav, esc):
                 # the empty-frontier token against the locked current document.
                 revision = console.workflow_document_store.revision_for_rows([])
                 annotate = source_preparation_form(sid, revision, 'Annoteren', esc)
-            return (f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}"'
+            return (f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-document-class="{esc(envelope["class"])}"'
                     f' data-selected="{str(sid == selected).lower()}"><h2>{esc(envelope["title"])}</h2>'
                     f'<p class="source-meta">Bronversie {esc(envelope["version"])}</p>'
                     f'<div class="source-actions">{annotate}<a class="btn-secondary" href="/annotations/build?{query}">'
@@ -622,10 +616,7 @@ def install(app, console, require, page, nav, esc):
             action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
         elif result['can_start']:
             label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
-            from src.vorming.processing_document_budget_v1 import enabled as document_budget_enabled
-            authorization = ('<p>Starten geeft één opdracht voor het volledige document, binnen vier uur inclusief wachttijd. '
-                'Het maximum aantal modelaanroepen is tweemaal het aantal geplande taken.</p>' if document_budget_enabled() else '')
-            action = authorization + (f'<form method="post" action="/source-selection/start">'
+            action = (f'<form method="post" action="/source-selection/start">'
                       f'<input type="hidden" name="document" value="{esc(sid)}">'
                       f'<input type="hidden" name="expected_revision" value="{esc(result["revision"])}">'
                       f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
@@ -641,10 +632,6 @@ def install(app, console, require, page, nav, esc):
             summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
         diagnosis_link = ('' if detail else f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid}))}#formation-problems">Vormingsproblemen</a>')
         diagnosis_link += f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
-        if (detail and 'reviewer' in actor.get('roles', [])
-                and actor['account_id'] in envelope.get('named_reviewers', [])):
-            diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "disposition"}))}">'
-                               'Brongebruik verantwoorden</a>')
         review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
         extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
         fragment_count = envelope.get('source_fragment_count')
@@ -658,7 +645,14 @@ def install(app, console, require, page, nav, esc):
                     and 'researcher' in actor['roles'] and actor['account_id'] in envelope.get('named_reviewers', [])):
                 work_revision_url = '/review/policy?' + urlencode({'document': sid})
             # collect has already loaded this request's full envelope; the list row is compact.
-            problems = source_recovery_controls(console._envelope(sid), status, actor)
+            document = console._envelope(sid)
+            if 'decision_graph' in document:
+                if 'reviewer' in actor['roles'] and actor['account_id'] in document.get('named_reviewers', []):
+                    graph = esc(urlencode({'document': sid, 'task': 'graph'}))
+                    action += f'<a class="btn-secondary" href="/source-selection?{graph}">Beslisstructuur vastleggen</a>'
+                if not review:
+                    review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>'
+            problems = source_recovery_controls(document, status, actor)
             problems += ('<section class="formation-room" id="formation-problems">' +
                 _formation_problems_html(report, offset=offset, esc=esc, work_revision_url=work_revision_url) + '</section>')
         key = progress_attempt_key(next(reversed(envelope.get('processing_attempts') or []), {}))
@@ -671,7 +665,7 @@ def install(app, console, require, page, nav, esc):
                     f' data-source-range="{esc(json.dumps(result["estimate"]["range_seconds"]))}"')
             status_markup = f'<p role="status" data-source-status>Status: {esc(result["state"])}</p>'
             progress_markup = f'<div data-source-progress>{progress_markup}</div>'
-        return (f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}"'
+        return (f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-document-class="{esc(envelope["class"])}"'
                 f' data-selected="{str(sid == selected).lower()}"{live}>'
                 f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
                 f'{status_markup}<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
@@ -686,7 +680,16 @@ def install(app, console, require, page, nav, esc):
             raise HTTPException(status_code=404)
         with diagnostic_phase("authorization"):
             actor = require(request)
-        if document and not selected_document:
+        if task and not document:
+            raise HTTPException(status_code=404)
+        if task:
+            from src.vorming.source_selection_v1 import authorize_account
+            if actor.get('_view_document') and document != actor['_view_document']:
+                raise ConsoleError('reviewer_not_named_on_snapshot')
+            envelope = console._envelope(document)
+            authorize_account(actor, envelope)
+            require_decision_tree(envelope)
+        if document and not task and not selected_document and not actor.get('_view_document'):
             from src.vorming.human_annotation_v1 import owns_source
             if owns_source(console, document):
                 return RedirectResponse('/annotations?' + urlencode({'document': document}), status_code=303)
@@ -714,7 +717,7 @@ def install(app, console, require, page, nav, esc):
         cards = []
         running_visible = False
         # Eén keer per verzoek (PR-b): vergelijkbare metingen over alle documenten.
-        observations = comparable_observations(documents)
+        observations = comparable_observations([row for row in documents if row['class'] == 'beslisboom'])
         for envelope in visible:
             markup, _ = render_card(envelope, actor, observations, selected=selected,
                 detail=bool(document) and envelope['snapshot_id'] == document, offset=offset)
@@ -750,14 +753,7 @@ def install(app, console, require, page, nav, esc):
                          if requested else [])
             rows = []
             for envelope in documents:
-                if _manual_card(envelope):
-                    # A legacy processing card might become eligible for manual
-                    # annotation when its attempt stops before producing work.
-                    latest = next(reversed(envelope.get('processing_attempts') or []), {})
-                    if latest.get('kind') not in {None, 'human_annotation_source', 'human_annotation_build'}:
-                        sid = envelope['snapshot_id']
-                        card, _ = render_card(envelope, actor, {}, selected=detail or sid, detail=False, offset=offset)
-                        rows.append({'snapshot': sid, 'manual_detail': card})
+                if envelope['class'] != 'beslisboom':
                     continue
                 result = summary_projection(console, envelope=envelope, observations={})
                 sid = result['snapshot_id']
@@ -828,15 +824,23 @@ def install(app, console, require, page, nav, esc):
         return HTMLResponse(page(nav(actor, 'settings') + '<section class="room" id="blockage-report" style="overflow-wrap:anywhere">' + insight_tabs('documenten') +
             '<p><a href="/inzicht/document?' + esc(urlencode({'document': document})) + '">← Documentdiagnose</a></p>' + _blockage_html(report, esc) + selector + links + '</section>'), headers={'Cache-Control':'no-store'})
 
+    def reserve_tree(actor, sid, command, revision):
+        from src.vorming.source_selection_v1 import authorize_account
+        envelope = console._envelope(sid)
+        authorize_account(actor, envelope)
+        # Changing to or from a tree requires a separate successor snapshot.
+        require_decision_tree(envelope)
+        return console.reserve_source_selection(actor_id=actor['account_id'], snapshot_id=sid,
+                                                command_id=command, expected_revision=revision)
+
     @app.post('/source-selection/start')
     async def selection_start(request: Request):
         actor = require(request)
         form = await request.form()
         sid = str(form.get('document') or '')
         try:
-            attempt, fresh = await asyncio.to_thread(console.reserve_source_selection,
-                actor_id=actor['account_id'], snapshot_id=sid, command_id=str(form.get('command_id') or ''),
-                expected_revision=str(form.get('expected_revision') or ''))
+            attempt, fresh = await asyncio.to_thread(reserve_tree, actor, sid,
+                str(form.get('command_id') or ''), str(form.get('expected_revision') or ''))
         except ConsoleError as exc:
             if exc.code != 'processing_attempt_in_progress':
                 raise

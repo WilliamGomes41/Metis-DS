@@ -114,6 +114,8 @@ def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_
     assert not any(tag == "select" and a.get("name") in {"confirmed_object_type", "parent_choice"}
                    for tag, a in surface.tags)
     assert not any(a.get("name") == "proposed_correction" for _, a in surface.tags)
+    assert any(a.get("href", "").startswith(f"/review?document={sid}") for _, a in surface.tags)
+    assert not any(a.get("href", "").startswith("/source-selection?") for _, a in surface.tags)
     assert not any("task=repair" in a.get("href", "") for _, a in surface.tags)
     assert all('checked' not in a for a in radios)
     assert len([a for tag, a in surface.tags if tag == 'button' and a.get('value') == 'approve']) == 1
@@ -130,14 +132,13 @@ def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_
         'reason_code': 'pre_review_llm_provider_unavailable', 'retry_not_before': None})
     page = client.get('/inzicht/document', params={'document': sid})
     assert page.status_code == 200
-    assert f'href="/source-selection?document={sid}"' in page.text
+    assert "Naar Vorming voor Starten of Hervatten" not in page.text
     assert 'action="/tree/reprocess"' not in page.text
     assert 'pre_review_llm_provider_unavailable' in page.text
     commands = []
     monkeypatch.setattr(console, 'retry_pre_review', lambda **kw: commands.append(kw))
     response = client.post('/tree/reprocess', data={'snapshot_id': sid, 'command_id': 'reviewable-retry'}, follow_redirects=False)
-    assert response.status_code == 303
-    assert response.headers['location'] == f'/source-selection?document={sid}'
+    assert response.status_code == 404
     assert commands == []
 
 

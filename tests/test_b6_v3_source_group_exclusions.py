@@ -60,23 +60,22 @@ def test_v3_metadata_proposal_is_excluded_per_section_and_clinical_text_stays_op
         assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
                            follow_redirects=False).status_code == 303
         page = client.get("/source-selection", params={"document": sid, "task": "disposition"})
-        assert page.status_code == 200
-        forms = [f for f in Forms(page.text).forms if f["attrs"].get("action") == "/review/source-exclusions"]
-        assert len(forms) == 1 and "data-source-group-exclusion" in forms[0]["attrs"]
-        selected = [f["value"] for f in forms[0]["inputs"] if f.get("name") == "source_object_ids"]
-        # Only the model's metadata proposal is offered; the clinical remainder is not.
-        assert selected == [colofon["object_id"]]
-        data = {f["name"]: f.get("value", "") for f in forms[0]["inputs"] if f.get("type") == "hidden"}
-        data.update(source_object_ids=selected, reason="Colofon, geen kennis.")
-        # No write without the explicit check, nor from a stale page.
-        assert client.post("/review/source-exclusions", data=data).status_code == 400
-        assert client.post("/review/source-exclusions",
-                           data={**data, "snapshot_revision": "stale", "source_checked": "1"}).status_code == 400
-        assert state.snapshot_objects(sid) == before
-        done = client.post("/review/source-exclusions", data={**data, "source_checked": "1"}, follow_redirects=False)
-        assert done.status_code == 303
-        after = client.get(done.headers["location"])
-        assert not any(f["attrs"].get("action") == "/review/source-exclusions" for f in Forms(after.text).forms)
+        assert page.status_code == 404
+        selected = [colofon["object_id"]]
+        revision = state.objects_revision(sid)
+        data = dict(snapshot_id=sid, source_object_ids=selected, reason="Colofon, geen kennis.",
+                    snapshot_revision=revision, command_id="metadata", source_checked="1")
+        assert client.post("/review/source-exclusions", data=data).status_code == 404
+    assert state.snapshot_objects(sid) == before
+    from src.review.source_context_review_v1 import confirm_source_exclusions
+    from src.operations_console_v1 import ConsoleError
+    import pytest
+    command = dict(actor_id=state._envelope(sid)['named_reviewers'][0], snapshot_id=sid,
+                   source_object_ids=selected, reason=data['reason'], command_id='metadata')
+    with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
+        confirm_source_exclusions(state, **command, expected_revision='stale')
+    assert state.snapshot_objects(sid) == before
+    confirm_source_exclusions(state, **command, expected_revision=revision)
     rows = state.snapshot_objects(sid)
     unresolved = source_passage_closure(rows)["unresolved_source_passage_ids"]
     assert colofon["object_id"] not in unresolved and condition["object_id"] in unresolved
@@ -98,11 +97,11 @@ def test_published_or_unnamed_viewers_get_no_group_form(tmp_path, monkeypatch, *
                            follow_redirects=False).status_code == 303
         monkeypatch.setattr(state, "snapshot_is_published", lambda _: True)
         frozen = client.get("/source-selection", params={"document": sid, "task": "disposition"})
-        assert frozen.status_code == 200 and 'name="source_object_ids"' not in frozen.text
+        assert frozen.status_code == 404 and 'name="source_object_ids"' not in frozen.text
     with TestClient(production_app(state), base_url="https://testserver") as outsider:
         assert outsider.post("/login", data={"username": "author", "password": "long-test-password"},
                              follow_redirects=False).status_code == 303
-        assert outsider.get("/source-selection", params={"document": sid, "task": "disposition"}).status_code == 403
+        assert outsider.get("/source-selection", params={"document": sid, "task": "disposition"}).status_code == 404
 
 
 def test_section_groups_key_on_the_raw_path_not_its_display_text(tmp_path, *, production_console):

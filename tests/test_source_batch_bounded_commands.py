@@ -3,29 +3,26 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: toegang kwaliteit slop releasebewijs
 """
-from fastapi.testclient import TestClient
+from src.review.source_context_review_v1 import confirm_source_exclusions
+from src.operations_console_v1 import ConsoleError
+from src.review.review_passage_read_v1 import read_review_document
 from tests.test_source_accountability_v1 import system
 from src.workflows import revision_frontiers_postgres_v1 as frontiers
 import pytest
 
 
-def test_native_http_source_batch_uses_existing_delta_and_keeps_prepared_frontiers(
+def test_native_source_batch_uses_existing_delta_and_keeps_prepared_frontiers(
     tmp_path,production_console,production_app,monkeypatch,
 ):
     console,initial,command=system(tmp_path,production_console=production_console)
     sid=command['snapshot_id'];reviews=console.workflow_review_store
-    with TestClient(production_app(console)) as client:
-        assert client.post('/login',data={'username':'reviewer','password':'long-test-password'},follow_redirects=False).status_code==303
-        def forbidden(*args,**kwargs):raise AssertionError('batch used full/global write work')
-        with monkeypatch.context() as patch:
-            patch.setattr(frontiers,'seal_complete',forbidden)
-            patch.setattr(console,'_reload_store_locked',forbidden)
-            patch.setattr(reviews,'read_events',forbidden)
-            patch.setattr(console.workflow_document_store,'write_bundle',forbidden)
-            result=client.post('/review/source-exclusions',data={
-                'snapshot_id':sid,'source_object_ids':command['source_object_ids'],'reason':command['reason'],
-                'command_id':command['command_id'],'snapshot_revision':command['expected_revision'],'source_checked':'1'},follow_redirects=False)
-        assert result.status_code==303,result.text
+    def forbidden(*args,**kwargs):raise AssertionError('batch used full/global write work')
+    with monkeypatch.context() as patch:
+        patch.setattr(frontiers,'seal_complete',forbidden)
+        patch.setattr(console,'_reload_store_locked',forbidden)
+        patch.setattr(reviews,'read_events',forbidden)
+        patch.setattr(console.workflow_document_store,'write_bundle',forbidden)
+        confirm_source_exclusions(console, **command)
     window=console.workflow_document_store.review_command_window(sid,[row['object_id'] for row in initial])
     assert window is not None
     for obj in window:
@@ -52,9 +49,6 @@ def test_generation_source_batch_keeps_history_outside_command_and_rejects_stale
             reason='Retained-history source command cost proof', actor='synthetic-fixture', force=True)
         rows.append(previous)
     console._save_objects(sid, rows, expected_revision=console.objects_revision(sid))
-    data = {'snapshot_id': sid, 'source_object_ids': command['source_object_ids'],
-            'reason': command['reason'], 'command_id': command['command_id'],
-            'source_checked': '1'}
     holds, depth = [], 0
     lock = console._store_write_lock
     @contextmanager
@@ -70,35 +64,26 @@ def test_generation_source_batch_keeps_history_outside_command_and_rejects_stale
                 depth -= 1
                 if outer:
                     holds.append(perf_counter() - started)
-    with TestClient(production_app(console)) as client:
-        assert client.post('/login', data={'username':'reviewer', 'password':'long-test-password'},
-                           follow_redirects=False).status_code == 303
-        from tests.test_source_context_review_ui_v1 import Forms
-        with monkeypatch.context() as patch:
-            def no_history(*args, **kwargs):
-                raise AssertionError('source page loaded complete retained history')
-            patch.setattr(documents, 'list_document_objects', no_history)
-            page = client.get('/source-selection', params={'document':sid, 'task':'disposition'})
-        assert page.status_code == 200, page.text
-        form = next(row for row in Forms(page.text).forms
-                    if row['attrs'].get('action') == '/review/source-exclusions')
-        data['snapshot_revision'] = next(row['value'] for row in form['inputs']
-                                         if row.get('name') == 'snapshot_revision')
-        assert data['snapshot_revision'].startswith('review-generation-v1:')
-        assert len(data['snapshot_revision']) < 512
-        with bounded_post_only(console, sid, monkeypatch), monkeypatch.context() as patch:
-            patch.setattr(console, '_store_write_lock', measured_lock)
-            started = perf_counter()
-            response = client.post('/review/source-exclusions', data=data, follow_redirects=False)
-            elapsed = perf_counter() - started
-        assert response.status_code == 303, response.text
-        assert elapsed <= 3, elapsed
-        assert max(holds) <= .250, holds
-        durable = physical_state(console, sid)
-        assert client.post('/review/source-exclusions', data=data, follow_redirects=False).status_code == 409
-        assert physical_state(console, sid) == durable
+    with monkeypatch.context() as patch:
+        def no_history(*args, **kwargs):
+            raise AssertionError('source read loaded complete retained history')
+        patch.setattr(documents, 'list_document_objects', no_history)
+        inputs = read_review_document(console, console._account(command['actor_id']), sid, current_only=True)
+    command['expected_revision'] = inputs.revision
+    assert inputs.revision.startswith('review-generation-v1:') and len(inputs.revision) < 512
+    with bounded_post_only(console, sid, monkeypatch), monkeypatch.context() as patch:
+        patch.setattr(console, '_store_write_lock', measured_lock)
+        started = perf_counter()
+        confirm_source_exclusions(console, **command)
+        elapsed = perf_counter() - started
+    assert elapsed <= 3, elapsed
+    assert max(holds) <= .250, holds
+    durable = physical_state(console, sid)
+    with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
+        confirm_source_exclusions(console, **command)
+    assert physical_state(console, sid) == durable
     assert documents.review_command_window(sid, [obj['object_id'] for obj in initial]) is not None
-    print({'source_history_rows': len(rows), 'http_seconds': elapsed, 'outer_hold_seconds': max(holds)})
+    print({'source_history_rows': len(rows), 'command_seconds': elapsed, 'outer_hold_seconds': max(holds)})
 
 
 def test_group_capture_includes_nonadjacent_automatic_context_target(complete_postgres):

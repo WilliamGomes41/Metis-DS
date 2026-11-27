@@ -189,10 +189,10 @@ def test_source_selection_never_shows_unchecked_formation_as_complete(tmp_path, 
 
     assert page.status_code == 200
     assert "Status: voltooid" not in page.text
-    assert page.text.count(f"Status: {UNCHECKED}") == N_DOCUMENTS
+    assert page.text.count("Bekijk status bouwopdrachten") == N_DOCUMENTS
 
 
-def test_source_selection_selected_document_runs_full_check_only_for_it(tmp_path, helper_calls, *, production_app, production_console):
+def test_selected_guideline_does_not_run_automatic_formation_checks(tmp_path, helper_calls, *, production_app, production_console):
     console, _accounts, receipts, _source = _documents(tmp_path, production_console=production_console)
     _mark_formation_incomplete(console, [r["snapshot_id"] for r in receipts])
     client = publish_fixture._client(console, production_app=production_app)
@@ -202,9 +202,9 @@ def test_source_selection_selected_document_runs_full_check_only_for_it(tmp_path
     page = client.get("/source-selection", params={"document": receipts[0]["snapshot_id"]})
 
     assert page.status_code == 200
-    assert helper_calls["stored_extraction"] == 1
-    assert helper_calls["incomplete_deep"] == 1
-    assert page.text.count(f"Status: {UNCHECKED}") == N_DOCUMENTS - 1
+    assert helper_calls["stored_extraction"] == 0
+    assert helper_calls["incomplete_deep"] == 0
+    assert page.text.count("Bekijk status bouwopdrachten") == N_DOCUMENTS
     assert "Status: voltooid" not in page.text
 
 

@@ -94,7 +94,7 @@ def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path, *, pro
         html = _room(console, account, sid, task=task)
         assert 'action="/review/source-exclusions"' not in html
         assert 'name="source_object_ids"' not in html
-        assert 'Bronregels gemotiveerd uitsluiten in Vorming' in html
+        assert 'Bronregels gemotiveerd uitsluiten in Vorming' not in html
         assert 'data-review-filter' in html and f'task=disposition">Onbeslist' in html
         tiles = re.findall(r'data-source-category="(\w+)"[^>]*><b>(\d+)</b>', html)
         assert dict(tiles) == {"unresolved": "2", "invalid_evidence": "0", "linked_context": "0",
