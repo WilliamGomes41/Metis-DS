@@ -128,3 +128,34 @@ def test_structural_heading_never_receives_a_route_type(tmp_path, production_app
         assert response.status_code == 400
     assert console.objects_revision(sid) == revision
     assert console._current_object(sid, heading["object_id"]) == before
+
+
+def test_graph_context_passage_never_receives_a_route_type(tmp_path, production_app, production_console):
+    """A context-only graph node supports routes; it gets no form and no type command (#1180)."""
+    from tests.test_decision_graph_chain import command, complete_graph, ingest
+
+    console = _console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    sid = ingest(console, accounts)["snapshot_id"]
+    graph = complete_graph(console, sid)
+    # Fixture has two passages: one terminal route passage and one context-only passage.
+    graph["nodes"][0]["mode"], graph["edges"] = "terminal", []
+    context = graph["nodes"][-1]
+    context["mode"] = "context"
+    console.update_decision_graph(**command(console, accounts, sid, "context", graph=graph))
+    client = TestClient(production_app(console), base_url="https://testserver")
+    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    url = "/review/decision-graph"
+    view = client.get(url, params={"document": sid})
+    assert view.status_code == 200
+    assert f'id="passage-{context["object_id"]}"' not in view.text
+    assert 'id="passage-' + graph["nodes"][0]["object_id"] + '"' in view.text
+    before = deepcopy(console._current_object(sid, context["object_id"]))
+    revision = console.objects_revision(sid)
+    for passage_type in ("node", "path", "outcome"):
+        response = client.post(url, data={"document": sid, "expected_revision": revision,
+                                          "object_id": context["object_id"], "action": "classification",
+                                          "confirmed_object_type": passage_type, "reason": "Context als route opslaan."})
+        assert response.status_code == 400
+    assert console.objects_revision(sid) == revision
+    assert console._current_object(sid, context["object_id"]) == before
