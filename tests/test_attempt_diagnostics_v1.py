@@ -146,7 +146,7 @@ def test_only_diagnostic_metadata_is_excluded_from_activation_comparison():
 def test_production_adapter_restart_replay_and_activation(tmp_path, monkeypatch, *, production_console):
     from tests import test_attempt_diagnostics_postgres as proof
     monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=bind_fixture_selections, root=root, source_store=root/"sources", runtime=root/"runtime"))
-    proof.test_failed_initial_ingest_evidence_restart_http_replay_and_success_activation(None, tmp_path)
+    proof.test_failed_initial_ingest_evidence_restart_replay_and_success_activation(None, tmp_path)
 
 
 def test_production_adapter_recovery_http_and_concurrent_consumption(tmp_path, monkeypatch, *, production_console):
