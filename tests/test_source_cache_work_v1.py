@@ -136,8 +136,7 @@ def test_http_zero_object_blocked_work_can_reprocess_from_blob(recovery_postgres
     client = TestClient(production_app(console))
     assert client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"}, follow_redirects=False).status_code == 303
     result = client.post("/tree/reprocess", data={"snapshot_id": sid}, follow_redirects=False)
-    assert result.status_code == 303
-    assert result.headers["location"] == f"/source-selection?document={sid}"
+    assert result.status_code == 404
     assert not console.snapshot_objects(sid)
     with client:
         from tests.test_availability_repair import drain

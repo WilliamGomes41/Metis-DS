@@ -156,7 +156,7 @@ def test_installed_http_denials_have_no_effect(console, monkeypatch):
     with TestClient(installed_app(console), base_url="https://testserver") as client:
         login(client, "outsider")
         for route in ("/tree/reprocess", "/tree/resume-formation"):
-            assert client.post(route, data={"snapshot_id": sid}, follow_redirects=False).status_code == 400
+            assert client.post(route, data={"snapshot_id": sid}, follow_redirects=False).status_code == 404
         assert client.post("/source-selection/start", data={"document": sid, "command_id": "denied",
             "expected_revision": console.objects_revision(sid)}, follow_redirects=False).status_code == 400
     assert snapshot(restart(console), sid) == before

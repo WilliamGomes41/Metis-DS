@@ -116,8 +116,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert "Nul kandidaten betekent niet" in payload["pre_review"]["note"]
 
         response = client.post("/tree/reprocess", data={"snapshot_id": sid}, follow_redirects=False)
-        assert response.status_code == 303
-        assert response.headers["location"] == f"/source-selection?document={sid}"
+        assert response.status_code == 404
         assert console._envelope(sid) == before
         started = client.post("/source-selection/start", data={"document": sid,
             "command_id": "retry-diagnostics", "expected_revision": console.objects_revision(sid)}, follow_redirects=False)

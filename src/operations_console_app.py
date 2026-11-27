@@ -4702,7 +4702,7 @@ def create_console_app(
         payload = state.family_tree()
         named_on = ({row["snapshot_id"] for row in state.list_document_cards()
                      if account["account_id"] in (row.get("named_reviewers") or [])}
-                    if can_promote and not can_move else set())
+                    if can_promote and "researcher" not in account["roles"] else set())
         move_family_options = "".join(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted(payload["families"], key=str.casefold)
@@ -4732,18 +4732,18 @@ def create_console_app(
                     if "researcher" in account["roles"]:
                         locked.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
                     rows.append(_document_action_row("Wijzigen", "".join(locked)))
-                if not_started:
-                    next_step = (
-                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten.'
-                        if can_move else ""
-                    )
-                    pre_review_notice = f'<p class="banner">Verwerking nog niet gestart. Beoordelen kan daarna.{next_step}</p>'
-                elif blocked:
-                    next_step = (
-                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten of te hervatten.'
-                        if can_move else ""
-                    )
-                    pre_review_notice = f'<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.{next_step}</p>'
+                if blocked:
+                    query = _esc(urlencode({"document": child["snapshot_id"]}))
+                    if child["class"] == "beslisboom":
+                        notice = ("Verwerking nog niet gestart." if not_started else "Verwerking niet afgerond.")
+                        link = f'<a href="/source-selection?{query}">Open de beslisboom in Vorming</a>'
+                    else:
+                        notice = "Na het annoteren en bouwen van kennisobjecten kan de beoordeling beginnen."
+                        link = f'<a href="/annotations?{query}">Open de bron om te annoteren</a>'
+                    if "researcher" in account["roles"] or child["snapshot_id"] in named_on:
+                        notice += " " + link
+                    banner = "banner" if not_started else "banner warn"
+                    pre_review_notice = f'<p class="{banner}">{notice}</p>'
                 if can_move and mutable:
                     rows.append(_document_action_row("Onderwerp", f"""
                         <p class="document-current">Nu: <b>{_esc(child["family"])}</b></p>
@@ -4889,17 +4889,6 @@ def create_console_app(
             attempt = {**attempt, "diagnostic":store.diagnostic(attempt)}
             return JSONResponse(replay_diagnostic(attempt,input_resolver=lambda ref:store.resolve_input(ref,expected_snapshot_id=document)),headers={"Cache-Control":"no-store"})
         return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
-
-    @app.post("/tree/reprocess")
-    @app.post("/tree/resume-formation")
-    def tree_source_selection(request: Request, snapshot_id: str = Form(...)) -> RedirectResponse:
-        account = _require(request)
-        if state.snapshot_is_published(snapshot_id):
-            raise ConsoleError("published_objects_must_not_be_rewritten")
-        state.processing_status(snapshot_id, actor_id=account["account_id"])
-        # Compatibility URLs navigate only. The current revision and operation
-        # are authorized by the existing explicit Starten/Hervatten command.
-        return RedirectResponse("/source-selection?" + urlencode({"document": snapshot_id}), status_code=303)
 
     @app.post("/tree/move")
     def tree_move(

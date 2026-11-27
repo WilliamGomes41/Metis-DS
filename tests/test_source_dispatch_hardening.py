@@ -44,7 +44,7 @@ def reserve(console, actor, sid):
         expected_revision=console.objects_revision(sid))[0]
 
 
-def test_http_technical_routes_only_navigate_and_unauthorized_cannot_start(console, monkeypatch):
+def test_removed_tree_routes_never_reserve_or_execute(console, monkeypatch):
     actor, reviewer = accounts(console)
     bind(console, provider)
     sid = receive(console, actor, reviewer, "technical")
@@ -59,8 +59,7 @@ def test_http_technical_routes_only_navigate_and_unauthorized_cannot_start(conso
         for route in ("/tree/reprocess", "/tree/resume-formation"):
             response = client.post(route, data={"snapshot_id": sid, "command_id": "old",
                 "expected_revision": "old"}, follow_redirects=False)
-            assert response.status_code == 303
-            assert response.headers["location"] == f"/source-selection?document={sid}"
+            assert response.status_code == 404
         assert console._envelope(sid).get("processing_attempts", []) == []
         assert console.snapshot_objects(sid) == []
         page = client.get("/inzicht/document", params={"document": sid}).text
@@ -68,7 +67,7 @@ def test_http_technical_routes_only_navigate_and_unauthorized_cannot_start(conso
         stranger = console.create_account(username="stranger", password="fixture-only", roles=("reviewer",))
         login(client, stranger["username"])
         for route in ("/tree/reprocess", "/tree/resume-formation"):
-            assert client.post(route, data={"snapshot_id": sid}, follow_redirects=False).status_code == 400
+            assert client.post(route, data={"snapshot_id": sid}, follow_redirects=False).status_code == 404
 
 
 def test_notify_and_scan_bound_handles_shutdown_keeps_unstarted_work(console):

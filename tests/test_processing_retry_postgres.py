@@ -73,8 +73,7 @@ def test_failure_deduplication_success_http_and_restart(workflow_postgres, tmp_p
     monkeypatch.setattr(console, "_fragments_and_spec", original)
     client = _client(restarted)
     response = client.post("/tree/reprocess", data={"snapshot_id": sid, "command_id": "success"}, follow_redirects=False)
-    assert response.status_code == 303, response.text
-    assert response.headers["location"] == f"/source-selection?document={sid}"
+    assert response.status_code == 404
     assert restarted._envelope(sid)[KEY][-1]["state"] == "failed"
     with client:
         from tests.test_availability_repair import drain

@@ -173,7 +173,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
     assert tables['formation_progress'][0]['pending_task_count'] > 0
     client = TestClient(production_app(state))
     command = {'snapshot_id': sid, 'command_id': 'http-resume', 'expected_revision': state.objects_revision(sid)}
-    assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code in {302, 303, 401, 403}
+    assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code == 404
     assert len(calls) == 2
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
     page = client.get('/inzicht/document', params={'document': sid})
@@ -181,7 +181,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
     assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False
     response = client.post('/tree/resume-formation', data=command, follow_redirects=False)
-    assert response.status_code == 303 and response.headers['location'] == f'/source-selection?document={sid}'
+    assert response.status_code == 404
     assert len(calls) == 2
     with client:
         from tests.test_availability_repair import drain

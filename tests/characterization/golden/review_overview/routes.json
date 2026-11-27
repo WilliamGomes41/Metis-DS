@@ -737,18 +737,6 @@
       ]
     ],
     [
-      "/tree/reprocess",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/tree/resume-formation",
-      [
-        "POST"
-      ]
-    ],
-    [
       "/wat-is-nieuw",
       [
         "GET"
