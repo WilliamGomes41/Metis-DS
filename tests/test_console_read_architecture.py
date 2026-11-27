@@ -125,7 +125,7 @@ def test_compact_page_routes_do_not_fetch_full_envelopes(tmp_path, production_co
         raise AssertionError('Compact page fetched a full envelope')
     monkeypatch.setattr(console.workflow_document_store, 'list_envelopes', forbidden)
     monkeypatch.setattr(console.workflow_document_store, 'get_envelope', forbidden)
-    for path in ['/ingest', '/tree', '/publish', '/review', '/review/repair', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen']:
+    for path in ['/ingest', '/tree', '/publish', '/review', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen']:
         assert client.get(path).status_code == 200, path
 
 
@@ -586,7 +586,7 @@ def test_failed_or_expired_latest_attempt_is_a_stored_block(tmp_path, production
     assert next(r for r in client.get('/raad/meldingen').json()['documents'] if r['snapshot_id'] == sid)['processing_blocked']
 
 
-@pytest.mark.parametrize('path', ['/review', '/review/repair', '/inzicht/routevergelijking'])
+@pytest.mark.parametrize('path', ['/review', '/inzicht/routevergelijking'])
 def test_cleanup_compact_gets_do_not_read_full_envelopes(tmp_path, production_console, production_app, monkeypatch, path):
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     client = _login(console, users['researcher']['username'], production_app=production_app)
@@ -608,7 +608,7 @@ def test_console_gets_never_take_command_write_lock(tmp_path, production_console
         lock_calls.append(True)
         raise AssertionError('GET took the command write lock')
     monkeypatch.setattr(console, '_store_write_lock', forbidden)
-    for path in ['/', '/ingest', '/source-selection', '/publish', '/review', '/review/repair', '/tree', '/settings',
+    for path in ['/', '/ingest', '/source-selection', '/publish', '/review', '/tree', '/settings',
                  '/inzicht', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen',
                  '/inzicht/api/quality', '/inzicht/document?document='+sid, '/review?document='+sid,
                  '/source-selection?document='+sid, '/publish?document='+sid]:

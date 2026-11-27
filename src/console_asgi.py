@@ -28,7 +28,6 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.review.proportionate_review_v1 import install_proportionate_review_routes
 from src.publication.publish_readiness_ui_v1 import install_publish_readiness_ui
-from src.review.review_closure_v1 import install_review_recovery_page
 from src.review.review_workboard_v1 import install_review_workboard
 from src.settings.semantic_safety_app_v1 import install_semantic_safety_routes
 from src.structured_logging_v1 import install_startup_reinstall, install_structured_logging
@@ -244,7 +243,6 @@ def build_console_app(console: OperationsConsole, *, trusted_origin=None, topolo
     install_proportionate_review_routes(app, console)
     install_deterministic_review_repair_routes(app, console)
     install_closed_review_routes(app, console)
-    install_review_recovery_page(app, console)
     install_semantic_safety_routes(app, console)
     install_navigation_simplification(app)
     app.state.operations_kernel = console

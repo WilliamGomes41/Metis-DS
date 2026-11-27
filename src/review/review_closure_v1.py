@@ -6,14 +6,10 @@ records are safely reopened for the new Review flow at startup.
 """
 from __future__ import annotations
 
-import html
 from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any, Iterator
-
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
 
 from src.review.closed_review_loop_v1 import (
     REVIEW_AUDIT_EVIDENCE_EVENT,
@@ -35,10 +31,6 @@ PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"
 _REPAIR_EVIDENCE: ContextVar[dict[str, Any] | None] = ContextVar(
     "metis_repair_evidence", default=None
 )
-
-
-def _esc(value: Any) -> str:
-    return html.escape(str(value or ""), quote=True)
 
 
 @contextmanager
@@ -218,47 +210,3 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
             )
         with _repair_evidence(spec):
             return super().submit_review_resolution(**kwargs)
-
-
-
-def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) -> None:
-    """Read-only recovery view for objects left in the legacy ``revise`` state."""
-    @app.get("/review/repair", response_class=HTMLResponse)
-    def review_recovery(request: Request) -> str:
-        account = console.session_account(request.cookies.get("console_session"))
-        roles = set(account.get("roles") or [])
-        if not ({"researcher", "reviewer"} & roles):
-            raise ConsoleError("researcher_role_required")
-        cards: list[str] = []
-        for envelope in console.list_document_cards():
-            snapshot_id = str(envelope.get("snapshot_id") or "")
-            allowed = (
-                "researcher" in roles
-                and envelope.get("uploader_account_id") == account["account_id"]
-            ) or (
-                "reviewer" in roles
-                and account["account_id"] in (envelope.get("named_reviewers") or [])
-            )
-            if not allowed:
-                continue
-            for obj in console.snapshot_objects(snapshot_id, envelope=envelope):
-                if (obj.get("governance") or {}).get("validation_status") != "revise":
-                    continue
-                object_id = str(obj.get("object_id") or "")
-                text = str((obj.get("content") or {}).get("clean_text") or object_id)
-                cards.append(
-                    "<article class='doc-card'>"
-                    f"<p class='doc-title'>{_esc(text)}</p>"
-                    "<p>Legacy herstelstatus. Dit object moet opnieuw via Review worden beoordeeld.</p>"
-                    "</article>"
-                )
-        from src.operations_console_app import _nav, _page
-
-        body = (
-            f"{_nav(account, 'review')}"
-            "<section class='room'><h1>Review — herstelstatus</h1>"
-            "<p class='lead'>Alleen read-only herstelzicht. Canonieke correcties voer je uit op Vorming.</p>"
-            + ("".join(cards) or "<p class='muted'>Geen achtergebleven herstelwerk.</p>")
-            + "</section>"
-        )
-        return _page(body, title="Review herstel — V&amp;VN Data Services")

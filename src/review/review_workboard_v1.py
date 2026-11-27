@@ -42,7 +42,7 @@ from src.vorming.knowledge_materialisation_v1 import source_reconstruction_scope
 
 
 _TASK_COPY = {
-    "structure": ("Structuur beoordelen", "Controleer koppen en documentstructuur"),
+    "structure": ("Paden controleren", "Controleer de paden van de beslisboom"),
     "contextual": (
         "In samenhang beoordelen",
         "Beoordeel passages die inhoudelijke of relationele context nodig hebben",
@@ -275,7 +275,7 @@ def review_work_item(
         fragments = prepare(fragments).fragments
 
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
-    headings, _ = review_stacks(objects, review_path=review_path)
+    headings = review_stacks(objects, review_path=review_path)[0] if review_path == "boom" else []
     open_headings = [row for row in headings if not _review_is_final(row)]
     heading_pending = len(open_headings)
 
@@ -326,9 +326,6 @@ def review_work_item(
             "actionable_batch_duties": duty_counts["batch_review_duties"],
             "actionable_second_review_duties": duty_counts["second_review_duties"],
         }
-    if review_path != "boom":
-        # Koppen stay a structure check. They are not content-review duties.
-        route_counts["actionable_structure_duties"] = heading_pending
 
     item = _work_item_from_counts(
         envelope=envelope,
@@ -405,6 +402,8 @@ def review_workboard_items(
                 if item is not None:
                     items.append(item)
                 continue
+            tree = _review_path_of(envelope) == "boom"
+            heading_pending = int(summary.get("heading_pending") or 0) if tree else 0
             closure_gap_count = int(summary.get("closure_gap_count") or 0)
             closure_gap_first = str(summary.get("closure_gap_first") or "")
             closure_gap_ids = [closure_gap_first] if closure_gap_count and closure_gap_first else []
@@ -414,7 +413,7 @@ def review_workboard_items(
                     snapshot_id=snapshot_id,
                     lifecycle_status=(lifecycle_statuses[snapshot_id] if lifecycle_statuses is not None
                                       else _lifecycle_for_work_item(console, snapshot_id)),
-                    heading_pending=int(summary.get("heading_pending") or 0),
+                    heading_pending=heading_pending,
                     individual_pending=int(summary.get("individual_pending") or 0),
                     normal_passages=int(summary.get("normal_passages") or 0),
                     normal_batches=int(summary.get("normal_batches") or 0),
@@ -427,22 +426,22 @@ def review_workboard_items(
                     review_duties=(
                         int(summary.get("review_duties") or 0)
                         if "review_duties" in summary
-                        else int(summary.get("heading_pending") or 0)
+                        else heading_pending
                         + int(summary.get("individual_pending") or 0)
                         + int(summary.get("normal_passages") or 0)
                     ),
                     first_review_duties=(
                         int(summary.get("first_review_duties") or 0)
                         if "first_review_duties" in summary
-                        else int(summary.get("heading_pending") or 0)
+                        else heading_pending
                         + int(summary.get("individual_pending") or 0)
                         + int(summary.get("normal_passages") or 0)
                     ),
                     second_review_duties=int(summary.get("second_review_duties") or 0),
                     structure_review_duties=(
                         int(summary.get("structure_review_duties") or 0)
-                        if "structure_review_duties" in summary
-                        else int(summary.get("heading_pending") or 0)
+                        if tree and "structure_review_duties" in summary
+                        else heading_pending
                     ),
                     contextual_review_duties=(
                         int(summary.get("contextual_review_duties") or 0)
@@ -464,7 +463,7 @@ def review_workboard_items(
                     ),
                     actionable_structure_duties=(
                         int(summary.get("actionable_structure_duties") or 0)
-                        if "actionable_structure_duties" in summary
+                        if tree and "actionable_structure_duties" in summary
                         else None
                     ),
                     actionable_contextual_duties=(

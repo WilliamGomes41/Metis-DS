@@ -545,12 +545,6 @@
       ]
     ],
     [
-      "/review/repair",
-      [
-        "GET"
-      ]
-    ],
-    [
       "/review/resolve",
       [
         "POST"

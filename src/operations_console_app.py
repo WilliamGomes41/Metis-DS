@@ -1950,20 +1950,6 @@ def _individual_review_reason(obj: dict[str, Any], *, priority: bool = False) ->
     return "Deze passage kan niet veilig samen met andere passages worden bevestigd. Beoordeel haar daarom afzonderlijk."
 
 
-def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]]) -> dict[str, str]:
-    if review_path == "boom":
-        return {
-            "fast_title": f"Paden controleren ({len(koppen)})",
-            "fast_lead": "Paden helpen bij het plaatsen van onderdelen. Zij veranderen de inhoud niet.",
-            "fast_button": "Bevestig geselecteerde paden als structuur",
-        }
-    return {
-        "fast_title": f"Koppen controleren ({len(koppen)})",
-        "fast_lead": "Koppen helpen passages op de juiste plek te plaatsen. Zij veranderen de inhoud niet.",
-        "fast_button": "Bevestig geselecteerde koppen als structuur",
-    }
-
-
 def _review_is_final(obj: dict[str, Any]) -> bool:
     from src.review.knowledge_object_state_v1 import FINAL_VALIDATION_STATUSES
     return (obj.get("governance") or {}).get("validation_status") in FINAL_VALIDATION_STATUSES
@@ -2847,26 +2833,25 @@ def _render_review_index(
         return (_review_task_header(snapshot_id, "Kennisvoorstellen beoordelen", "") +
             '<section data-content-review-workplace>' + content +
             f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p></section>')
-    koppen = _review_route_objects(snapshot_objects, review_path=review_path,
-        bindings=bindings, reviewer_id=reviewer_id, canonical_task="structure", fragments=fragments)
-    copy = _review_lane_copy(review_path, koppen)
-    if task == "structure":
-        if review_path != "boom":
-            return ""
+    if task == "structure" and review_path == "boom":
+        paths = _review_route_objects(snapshot_objects, review_path=review_path, bindings=bindings,
+            reviewer_id=reviewer_id, canonical_task="structure", fragments=fragments)
+        header = _review_task_header(snapshot_id, f"Paden controleren ({len(paths)})",
+            "Paden helpen bij het plaatsen van onderdelen. Zij veranderen de inhoud niet.")
         return f'''
-          {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
+          {header}
           <section class="review-lane-fast">
             <form method="post" action="/review/headings/batch-confirm">
               <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
               <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
               {_snapshot_revision_input(snapshot_revision)}
               <div class="review-batch-tools">
-                <span>Selecteer alleen koppen die je hebt gecontroleerd.</span>
+                <span>Selecteer alleen paden die je hebt gecontroleerd.</span>
                 <button class="btn-secondary" type="button" data-select-review-batch>Selecteer alles</button>
                 <button class="btn-secondary" type="button" data-clear-review-batch>Selectie wissen</button>
               </div>
-              <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
-              <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
+              <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in paths)}</ol>
+              <button class="btn-primary" type="submit">Bevestig geselecteerde paden als structuur</button>
             </form>
           </section>
         '''

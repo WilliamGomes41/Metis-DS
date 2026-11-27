@@ -321,8 +321,8 @@ def test_list_status_and_workboard_are_set_based_at_pilot_scale() -> None:
         assert set(summaries) == set(snapshots)
 
         opened = summaries[snapshots[0]]
-        assert opened["heading_total"] == 1
-        assert opened["heading_pending"] == 1
+        assert opened["heading_total"] == 0
+        assert opened["heading_pending"] == 0
         assert opened["individual_total"] == 50
         assert opened["individual_pending"] == 50
         # Governance 'approved' without an exact binding does not close a duty.

@@ -117,3 +117,17 @@ def test_graph_override_and_independent_wait_are_preserved() -> None:
     html = _workboard_card(item)
     assert 'data-personal-state="waiting"' in html
     assert 'data-personal-review-action' not in html
+
+
+@pytest.mark.pure_function
+@pytest.mark.parametrize(('klasse', 'expected'), [('richtlijn', 0), ('beslisboom', 2)])
+def test_legacy_summary_counts_structure_work_only_for_tree_paths(klasse, expected):
+    from src.review.review_workboard_v1 import review_workboard_items
+    envelope = {**_item()['envelope'], 'class': klasse}
+    sid = envelope['snapshot_id']
+    item, = review_workboard_items(None, account={'account_id': 'reviewer'},
+        summaries={sid: {'envelope': envelope, 'heading_pending': 2}},
+        lifecycle_statuses={sid: _item()['lifecycle_status']})
+    assert item['review_duties'] == item['first_review_duties'] == expected
+    assert item['structure_review_duties'] == item['actionable_structure_duties'] == expected
+    assert item['next_task'] == ('structure' if expected else '')

@@ -30,18 +30,13 @@ def test_build_app_serves_login(tmp_path: Path, monkeypatch, production_environm
     assert "Aanmelden" in response.text
 
 
-def test_build_app_exposes_no_writable_review_repair_route(tmp_path: Path, monkeypatch, production_environment) -> None:
+def test_build_app_has_no_legacy_review_repair_route(tmp_path: Path, monkeypatch, production_environment) -> None:
     monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_USERNAME", raising=False)
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_PASSWORD", raising=False)
 
-    repair_methods = [
-        set(getattr(route, "methods", None) or ())
-        for route in build_app().router.routes
-        if str(getattr(route, "path", "")).startswith("/review/repair")
-    ]
-    assert repair_methods, "read-only /review/repair recovery page must stay installed"
-    assert all(methods <= {"GET", "HEAD"} for methods in repair_methods)
+    assert not any(route.path == "/review/repair" for route in build_app().router.routes)
+
 
 
 

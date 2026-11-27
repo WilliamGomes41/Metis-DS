@@ -772,3 +772,41 @@ def test_source_policy_is_pinned_and_legacy_seals_keep_their_original_output(pro
     invalid = {**seal, 'source_accountability_version':'unknown-policy'}
     with pytest.raises(ValueError, match='annotation_source_policy_invalid'):
         build_objects(invalid, entries, fragments=fragments)
+
+
+@pytest.mark.parametrize('heading_use', ['source', 'context'])
+def test_confirmed_heading_and_explicit_source_use_after_build(tmp_path, production_console, production_app, heading_use):
+    from fastapi.testclient import TestClient
+    from src.publication.publication_readiness_v1 import source_passage_closure
+    from src.vorming.source_accountability_v1 import is_source_record
+
+    console, actor, sid, claim = saved_source(production_console, tmp_path, for_build=False,
+        heading='<h1>Werkwijze</h1><p>Uitgever Metis.</p>')
+    scope = dict(actor_id=actor, snapshot_id=sid)
+    view = annotation.overview(console, **scope)
+    metadata = command(view, ranges=[anchor(view, 'Uitgever')], status='ready')
+    metadata['selection'].update(object_type=None, disposition={'role': 'metadata', 'reason': 'document_metadata'})
+    annotation.save(console, actor_id=actor, **metadata)
+    view = annotation.overview(console, **scope)
+    if heading_use == 'context':
+        claim.update(expected_generation=view['generation'], expected_revision=1, command_id=str(uuid4()))
+        claim['selection']['ranges'].append(anchor(view, 'Werkwijze', role='context'))
+        annotation.save(console, actor_id=actor, **claim)
+    else:
+        heading = command(view, ranges=[anchor(view, 'Werkwijze')], status='ready')
+        heading['selection'].update(object_type=None, disposition={'role': 'structure', 'reason': 'document_structure'})
+        annotation.save(console, actor_id=actor, **heading)
+
+    execute_build(console, actor, sid)
+    objects = console.snapshot_objects(sid, include_blocked=True)
+    record, = [obj for obj in objects if is_source_record(obj)]
+    assert record['content']['clean_text'] == 'Uitgever Metis.'
+    assert not any(obj['content']['clean_text'] == 'Werkwijze' for obj in objects)
+    assert record['object_id'] in source_passage_closure(objects)['unresolved_source_passage_ids']
+    with TestClient(production_app(console), base_url='https://testserver') as client:
+        assert client.post('/login', data={'username': 'reviewer', 'password': 'human-build-secret'}).status_code == 200
+        for task in ('inventory', 'disposition'):
+            page = client.get('/review', params={'document': sid, 'task': task}, follow_redirects=False)
+            assert page.status_code == 200 and record['object_id'] in page.text and 'Uitgever Metis.' in page.text
+        assert client.get('/review', params={'document': sid, 'task': 'structure'}, follow_redirects=False).status_code == 404
+    assert console.snapshot_objects(sid, include_blocked=True) == objects

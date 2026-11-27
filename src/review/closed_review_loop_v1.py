@@ -711,7 +711,6 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             "<h1>Signalen uit Review</h1>"
             "<p class='lead'>Append-only evidence van review en herstel. "
             "Deze pagina wijzigt geen kennisobjecten.</p>"
-            "<p><a class='btn-secondary' href='/review/repair'>Open herstelwerk in Review</a></p>"
             + ("".join(rows) or "<p class='muted'>Nog geen signalen.</p>"),
             "settings", title="Reviewsignalen — Inzicht — Metis",
         )

@@ -60,7 +60,7 @@ def _fresh_current_validation_statuses(
     }
 
 
-def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
+def test_guideline_headings_stay_out_of_review_before_and_after_historical_confirmation(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
     production_console,
@@ -105,7 +105,7 @@ def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
     assert headings
 
     before = console.review_workboard_summaries(str(reviewer["account_id"]))[snapshot_id]
-    assert before["heading_pending"] == len(headings)
+    assert before["heading_pending"] == before["actionable_structure_duties"] == 0
 
     console.batch_confirm_headings(
         actor_id=reviewer["account_id"],
