@@ -30,11 +30,21 @@ def _is_structural(obj):
     return "heading" in {obj.get("object_type"), obj.get("proposed_object_type"), obj.get("confirmed_object_type")}
 
 
-def _passage_types(rows, common, immutable):
+def _context_ids(graph):
+    """Context-only fragments support the routes; they never get a route type themselves."""
+    return {node["object_id"] for node in (graph or {}).get("nodes") or [] if node.get("mode") == "context"}
+
+
+def has_route_type(obj, graph):
+    """Whether the decision-graph review offers a route type for this passage."""
+    return not _is_structural(obj) and obj["object_id"] not in _context_ids(graph)
+
+
+def _passage_types(rows, common, immutable, context_ids=frozenset()):
     from src.operations_console_app import _object_type_label
     items = []
     for obj in rows:
-        if _is_structural(obj):
+        if _is_structural(obj) or obj["object_id"] in context_ids:
             continue
         current = obj.get("confirmed_object_type")
         proposed = obj.get("proposed_object_type") or obj["object_type"]
@@ -68,7 +78,8 @@ def _change_passage_type(console, actor_id, document, object_id, selected, revis
     target = next((row for row in rows if row["object_id"] == object_id), None)
     if target is None or target["object_type"] == "document":
         raise ConsoleError("unknown_object")
-    if _is_structural(target):
+    graph = console._tree_envelope(document, envelope=console._envelope(document)).get("decision_graph")
+    if _is_structural(target) or object_id in _context_ids(graph):
         raise ConsoleError("decision_review_action_invalid")
     if is_admission_blocked(target, review_path="boom"):
         raise ConsoleError("blocked_candidate_not_reviewable")
@@ -152,7 +163,7 @@ def render_graph(console, actor, document, *, editing=False):
     immutable = console.snapshot_is_published(document)
     if immutable:
         co_review = ""
-    classifications = "" if editing else _passage_types(rows, common, immutable)
+    classifications = "" if editing else _passage_types(rows, common, immutable, _context_ids(graph))
     graph_form = (f'<form method="post" action="/review/decision-graph">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
         + ''.join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
         '<button class="btn-primary" name="action" value="graph">Verbindingen opslaan</button></form>') if editing and not immutable else ''
