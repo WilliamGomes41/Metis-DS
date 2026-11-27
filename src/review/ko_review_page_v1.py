@@ -183,24 +183,6 @@ def _context_evidence(obj, objects, snapshot_id, revision, shown):
     return ''.join(rows), bool(unseen or context['issues'])
 
 
-def _continuation_proposal(obj, snapshot_id, revision, task):
-    from src.vorming.admission_gate_v1 import admission_of
-    proposal = admission_of(obj).get('expand_merge') or {}
-    merged = str(proposal.get('merged_text') or '').strip()
-    current = str((obj.get('content') or {}).get('clean_text') or '')
-    if proposal.get('kind') != 'sentence_continuation' or not merged or ' '.join(merged.split()) == ' '.join(current.split()):
-        return ''
-    parts = list(proposal.get('parts') or [])
-    missing = str(parts[1] if len(parts) > 1 else '').strip()
-    owner = '/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'],
-        'task': 'continuation', 'return_task': task, 'review_revision': revision})
-    return ('<aside class="ko-notice source-continuation-proposal" aria-label="Voorstel om afgebroken zin te herstellen">'
-        '<h3>Voorstel: afgebroken zin aanvullen</h3><p><strong>Ontbrekende brontekst:</strong> ' + escape(missing)
-        + '</p><p><strong>Herstelde passage:</strong> ' + escape(merged)
-        + '</p><p>Na aanvullen ontstaat een nieuwe versie. Die moet opnieuw worden beoordeeld.</p>'
-        '<a href="' + escape(owner, quote=True) + '">Bronaanvulling herstellen in Vorming</a></aside>')
-
-
 def _rejection_event(console, obj):
     """The ledger event that rejected this exact version, if any."""
     if (obj.get('governance') or {}).get('validation_status') != 'rejected':
@@ -429,7 +411,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             '<p class="ko-claim" data-full-knowledge-passage data-reviewed-version="' + escape(descriptor.object_version, quote=True) + '">'
             + escape(descriptor.text) + '</p><p class="ko-type">' + escape(_object_type_label(descriptor.object_type))
             + (' · voorgesteld type' if annotation and not obj.get('confirmed_object_type') else '') + '</p>'
-            + ('' if choose_semantics else semantics) + _continuation_proposal(obj, sid, inputs.revision, task) + _summary_table(rows)
+            + ('' if choose_semantics else semantics) + _summary_table(rows)
             + '<details class="ko-evidence"' + (' open' if context_open else '') + '><summary>Bekijk gekoppelde onderbouwing, broncontext en bronbewijs</summary>'
             + context_html + _additional_relations(descriptor) + _source_bound_fields_html(obj) + '</details>'
             + '<form method="post" action="' + ('/review/second-review' if second else '/review')

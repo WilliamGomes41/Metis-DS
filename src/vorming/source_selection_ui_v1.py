@@ -313,54 +313,6 @@ def _blockage_html(report, esc):
 
 
 @source_reconstruction_scope(reuse_existing=True)
-def render_continuation(console, account, document, object, *, return_task='', saved=False, review_revision=''):
-    """Present the existing literal repair command over its bounded read."""
-    from src import operations_console_app as ui
-    from src.review.review_passage_read_v1 import read_review_passage
-    inputs = read_review_passage(console, account, document, object)
-    obj = next((row for row in inputs.objects if row['object_id'] == object), None)
-    if obj is None:
-        raise ConsoleError('unknown_object')
-    proposal = ui.admission_of(obj).get('expand_merge') or {}
-    merged = str(proposal.get('merged_text') or '').strip()
-    current = str((obj.get('content') or {}).get('clean_text') or '')
-    adds_text = (' '.join(merged.split()) not in
-                 {' '.join(current.split()), ' '.join(ui.review_card_sentence(obj).split())})
-    available = proposal.get('kind') == 'sentence_continuation' and bool(merged) and adds_text
-    panel = '<h2>Afgebroken zin aanvullen</h2><p><b>Huidige passage:</b> ' + ui._esc(current) + '</p>'
-    if available:
-        parts = list(proposal.get('parts') or [])
-        missing = str(parts[1] if len(parts) > 1 else '').strip()
-        panel += ('<aside class="source-continuation-proposal">'
-            '<p><b>Ontbrekende brontekst:</b> ' + ui._esc(missing) + '</p>'
-            '<p><b>Herstelde passage:</b> ' + ui._esc(merged) + '</p>'
-            '<p>Na aanvullen ontstaat een nieuwe versie. Die versie is nog niet goedgekeurd '
-            'en moet opnieuw worden beoordeeld.</p></aside>')
-        if inputs.source_available and not console.snapshot_is_published(document):
-            panel += ('<form method="post" action="/review/context/accept">'
-                '<input type="hidden" name="snapshot_id" value="' + ui._esc(document) + '">'
-                '<input type="hidden" name="object_id" value="' + ui._esc(object) + '">'
-                '<input type="hidden" name="return_task" value="' + ui._esc(ui.normalize_review_task(return_task)) + '">'
-                + ui._snapshot_revision_input(inputs.revision) +
-                ('<input type="hidden" name="review_revision" value="' + ui._esc(review_revision) + '">' if review_revision else '') +
-                '<button class="btn-primary" type="submit">Passage aanvullen met brontekst</button></form>')
-        else:
-            panel += '<p class="banner warn">Bronaanvulling is hier alleen te lezen.</p>'
-    else:
-        panel += '<p>Er is geen actueel voorstel voor letterlijke bronaanvulling. Beoordeel de huidige passage in Review.</p>'
-    back = '/review?' + urlencode({'document': document, 'object': object,
-        'task': ui.normalize_review_task(return_task), **({'review_revision': review_revision} if review_revision else {})})
-    overview = '/source-selection?' + urlencode({'document': document})
-    notice = ('<p class="banner ok" role="status">De bronaanvulling is opgeslagen. '
-              'Beoordeel de huidige versie opnieuw in Review.</p>' if saved else '')
-    return ui._page(ui._nav(account, 'selection') +
-        '<section class="room review-room" data-formation-continuation><h1>Vorming</h1>'
-        '<p><a href="' + ui._esc(overview) + '">Voortgang en vormingsproblemen</a> · '
-        '<a href="' + ui._esc(back) + '">Deze passage beoordelen in Review</a></p>' + notice +
-        panel + ui._broncontext_html(obj, document, object, inputs.source_available) + '</section>')
-
-
-@source_reconstruction_scope(reuse_existing=True)
 def render_context(console, account, document, object, *, context_target='', context_mode='',
                    context_page=0, context_q='', context_saved=False,
                    context_draft=None, context_error='', review_revision=''):
@@ -785,11 +737,10 @@ def install(app, console, require, page, nav, esc):
                       object: str = '', context_target: str = '', context_mode: str = '',
                       context_page: int = 0, context_q: str = '', context_saved: str = '',
                       task: str = '',
-                      return_task: str = '', continuation_saved: str = '',
                       repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = '', review_revision: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
-        if task == 'structure':
+        if task in {'structure', 'continuation'}:
             raise HTTPException(status_code=404)
         if document and not selected_document:
             from src.vorming.human_annotation_v1 import owns_source
@@ -825,9 +776,6 @@ def install(app, console, require, page, nav, esc):
             diagnosis = '/inzicht/document?' + urlencode(dict(document=document))
             return page(nav(actor, 'selection') + '<section class="room"><h1>Vorming</h1><h2>Passages herstellen</h2>' + panel +
                 '<p><a href="' + esc(diagnosis) + '">Documentdiagnose en bewijs bekijken</a></p></section>')
-        if task == 'continuation' and object:
-            return render_continuation(console, actor, document, object,
-                return_task=return_task, saved=continuation_saved == 'yes', review_revision=review_revision)
         if object:
             return render_context(console, actor, document, object, context_target=context_target,
                 context_mode=context_mode, context_page=context_page, context_q=context_q,

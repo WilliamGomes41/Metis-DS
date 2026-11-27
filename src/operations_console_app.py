@@ -1022,7 +1022,6 @@ def _review_validation_script() -> str:
         const enable = () => { button.disabled = false; };
         form.addEventListener('input', enable); form.addEventListener('change', enable);
         form.addEventListener('submit', (event) => {
-          // Source continuation is a separate existing command, not a review decision.
           if (event.submitter && event.submitter.hasAttribute('formaction')) return;
           const missing = errors();
           if (missing.length) { event.preventDefault(); showErrors(missing); }
@@ -3069,33 +3068,6 @@ def _render_review_card(
     read_inputs=None,
 ) -> str:
     heading = review_card_sentence(obj)
-    obj_text = (obj.get("content") or {}).get("clean_text") or ""
-    heading_norm = " ".join(heading.split())
-    body_norm = " ".join(str(obj_text).split())
-    object_text_html = ""
-    expand_merge = admission_of(obj).get("expand_merge") or {}
-    merged_text = str(expand_merge.get("merged_text") or "").strip()
-    merged_norm = " ".join(merged_text.split())
-    merge_adds_text = bool(
-        merged_norm
-        and merged_norm != heading_norm
-        and merged_norm != body_norm
-    )
-    if (
-        expand_merge.get("kind") == "sentence_continuation"
-        and merge_adds_text
-    ):
-        parts = list(expand_merge.get("parts") or [])
-        missing = str(parts[1] if len(parts) > 1 else "").strip()
-        object_text_html += f'''
-          <aside class="source-continuation-proposal" aria-label="Voorstel om afgebroken zin te herstellen">
-            <h4>Voorstel: afgebroken zin aanvullen</h4>
-            <p><b>Ontbrekende brontekst:</b> {_esc(missing)}</p>
-            <p><b>Herstelde passage:</b> {_esc(merged_text)}</p>
-            <p class="field-help">Na aanvullen ontstaat een nieuwe versie. Die versie is nog niet goedgekeurd en moet opnieuw worden beoordeeld.</p>
-            <a class="btn-secondary" href="{_esc('/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'], 'task': 'continuation', 'return_task': normalize_review_task(task)}))}">Bronaanvulling herstellen in Vorming</a>
-          </aside>
-        '''
     proposed = proposed_type_of(obj)
     confirmable = str(obj.get("confirmed_object_type") or confirmable_proposed_type(obj))
     confirmed = obj.get("confirmed_object_type") or ""
@@ -3191,7 +3163,6 @@ def _render_review_card(
                         reason_html=_ko_state_reasons_html(derived))}
                     {knowledge_connections_html(obj, snapshot_objects, include_proposals=True)}
                     {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
-                    {object_text_html}
                     <details><summary>Verbonden passages en hun bron</summary>{_review_context_block(
                         obj,
                         snapshot_objects,
@@ -5817,31 +5788,6 @@ def create_console_app(
                 ), status_code=409 if exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT else 400)
         location = '/source-selection?' + urlencode({'document': snapshot_id, 'object': return_id, **({'review_revision': review_revision} if review_revision else {})})
         return RedirectResponse(location + "&context_saved=yes#passage-context", status_code=303)
-
-    @app.post("/review/context/accept")
-    def review_context_accept(
-        request: Request,
-        snapshot_id: str = Form(...),
-        object_id: str = Form(...),
-        snapshot_revision: str = Form(""),
-        return_task: str = Form(""),
-        review_revision: str = Form(""),
-    ) -> RedirectResponse:
-        account = _require(request)
-        from src.review.review_passage_read_v1 import resolve_review_revision
-        snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
-        state.accept_source_continuation(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            expected_revision=snapshot_revision.strip() or None,
-        )
-        safe_task = normalize_review_task(return_task)
-        return RedirectResponse(
-            '/source-selection?' + urlencode({'document': snapshot_id, 'object': object_id,
-                'task': 'continuation', 'return_task': safe_task, 'continuation_saved': 'yes', **({'review_revision': review_revision} if review_revision else {})}),
-            status_code=303,
-        )
 
     @app.post("/review/headings/batch-confirm")
     def review_headings_batch_confirm(

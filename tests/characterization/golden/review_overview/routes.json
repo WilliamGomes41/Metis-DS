@@ -485,12 +485,6 @@
       ]
     ],
     [
-      "/review/context/accept",
-      [
-        "POST"
-      ]
-    ],
-    [
       "/review/decision-graph",
       [
         "GET"

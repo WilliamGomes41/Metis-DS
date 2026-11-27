@@ -61,7 +61,7 @@ def test_mutation_routes_have_one_installed_owner(tmp_path, production_console):
                 '/tree/processing-recovery', '/inzicht/document/pagina-verantwoorden',
                 '/review', '/review/normal-risk/batch-confirm', '/review/second-review',
                 '/review/decision-graph', '/review/decision-passage',
-                '/review/context/accept', '/review/relations')
+                '/review/relations')
     inventory = {}
     for command in commands:
         owners = [route for route in app.routes if getattr(route, 'path', None) == command
