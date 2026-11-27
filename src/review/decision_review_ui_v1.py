@@ -4,15 +4,17 @@ from __future__ import annotations
 import asyncio
 import html
 import uuid
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from typing import Any
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from src.review.beslisboom_path_v1 import CLOSED_BOOM_TYPES
+from src.vorming.admission_gate_v1 import is_admission_blocked
 from src.vorming.decision_graph_v1 import CONTRACT
 from src.vorming.decision_tree_route_v1 import has_recorded_route
-from src.operations_console_v1 import ConsoleError
+from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 
 
 def esc(value: Any) -> str:
@@ -23,6 +25,73 @@ def options(values, selected=""):
     return "".join(f'<option value="{esc(k)}" {"selected" if k == selected else ""}>{esc(v)}</option>' for k, v in values)
 
 
+def _is_structural(obj):
+    """Headings keep their structural classification; they never become a route type."""
+    return "heading" in {obj.get("object_type"), obj.get("proposed_object_type"), obj.get("confirmed_object_type")}
+
+
+def _context_ids(graph):
+    """Context-only fragments support the routes; they never get a route type themselves."""
+    return {node["object_id"] for node in (graph or {}).get("nodes") or [] if node.get("mode") == "context"}
+
+
+def has_route_type(obj, graph):
+    """Whether the decision-graph review offers a route type for this passage."""
+    return not _is_structural(obj) and obj["object_id"] not in _context_ids(graph)
+
+
+def _passage_types(rows, common, immutable, context_ids=frozenset()):
+    from src.operations_console_app import _object_type_label
+    items = []
+    for obj in rows:
+        if _is_structural(obj) or obj["object_id"] in context_ids:
+            continue
+        current = obj.get("confirmed_object_type")
+        proposed = obj.get("proposed_object_type") or obj["object_type"]
+        label = _object_type_label(current or proposed)
+        status = ("Bevestigd type" if current else "Voorgesteld type") + " · " + label
+        form = ""
+        if not immutable and not is_admission_blocked(obj, review_path="boom"):
+            choices = [(value, _object_type_label(value)) for value in CLOSED_BOOM_TYPES if value != current]
+            form = (
+                '<details><summary>Passagetype aanpassen</summary><form method="post" action="/review/decision-graph">'
+                + common + f'<input type="hidden" name="object_id" value="{esc(obj["object_id"])}">'
+                + '<label>Passagetype<select required name="confirmed_object_type">'
+                + '<option value="" selected disabled>Kies een type</option>' + options(choices)
+                + '</select></label><label>Reden van de wijziging<input name="reason" required></label>'
+                + '<button class="btn-secondary" name="action" value="classification">Type opslaan voor herbeoordeling</button></form></details>'
+            )
+        items.append(
+            f'<li id="passage-{esc(obj["object_id"])}"><p>{esc(obj["content"]["clean_text"])}</p>'
+            + esc(status) + form + '</li>'
+        )
+    return '<section id="passagetypen"><h2>Passagetypen</h2><ul>' + ''.join(items) + '</ul></section>' if items else ''
+
+
+def _change_passage_type(console, actor_id, document, object_id, selected, revision, reason):
+    from src.review.deterministic_review_repair_v1 import REPAIR_CLASSIFICATION
+    if not revision or selected not in CLOSED_BOOM_TYPES:
+        raise ConsoleError("decision_review_action_invalid")
+    rows, current_revision = console.snapshot_objects_and_revision(document)
+    if revision != current_revision:
+        raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
+    target = next((row for row in rows if row["object_id"] == object_id), None)
+    if target is None or target["object_type"] == "document":
+        raise ConsoleError("unknown_object")
+    graph = console._tree_envelope(document, envelope=console._envelope(document)).get("decision_graph")
+    if _is_structural(target) or object_id in _context_ids(graph):
+        raise ConsoleError("decision_review_action_invalid")
+    if is_admission_blocked(target, review_path="boom"):
+        raise ConsoleError("blocked_candidate_not_reviewable")
+    if selected == target.get("confirmed_object_type"):
+        raise ConsoleError("classification_repair_requires_change")
+    console.submit_review_resolution(
+        actor_id=actor_id, snapshot_id=document, object_id=object_id, expected_revision=revision,
+        suitability="ja", comment=reason, repair_kind=REPAIR_CLASSIFICATION,
+        confirmed_object_type=selected, type_action="type_wijzigen", documentpositie_action="dit_klopt",
+    )
+
+
 def render_graph(console, actor, document, *, editing=False):
     """Separate the existing graph editor from interpretation confirmation."""
     env = console._envelope(document)
@@ -31,7 +100,8 @@ def render_graph(console, actor, document, *, editing=False):
     if 'decision_graph' not in env:
         raise ConsoleError('decision_graph_not_available')
     env=console._tree_envelope(document,envelope=env)
-    rows = [o for o in console.snapshot_objects(document) if o["object_type"] != "document"]
+    objects, revision = console.snapshot_objects_and_revision(document)
+    rows = [o for o in objects if o["object_type"] != "document"]
     graph = env["decision_graph"]
     nodes = {n["object_id"]: n for n in graph["nodes"]}
     names = [(o["object_id"], o["content"]["clean_text"][:150]) for o in rows]
@@ -74,7 +144,6 @@ def render_graph(console, actor, document, *, editing=False):
                      f'<label>Soort verbinding<select name="kind">{options([("continue", "Onvoorwaardelijk vervolg"), ("answer", "Antwoord")], edge.get("kind"))}</select></label>'
                      f'<label>Letterlijk antwoord<select name="label">{options(text_evidence, label_id)}</select></label>'
                      f'<label>Lijnbewijs<select name="evidence-{i}" multiple>{"".join(options([(k, v)], k if k in evidence else "") for k,v in graphic_evidence)}</select></label></fieldset>')
-    revision = console.objects_revision(document)
     common = f'<input type="hidden" name="document" value="{esc(document)}"><input type="hidden" name="expected_revision" value="{esc(revision)}">'
     co_review = ""
     if not editing and actor["account_id"] != env["review_policy"]["primary"]:
@@ -87,13 +156,14 @@ def render_graph(console, actor, document, *, editing=False):
     proposal_note = (f'<p>{len(unresolved)} verbindingen of rollen zijn niet uit de bron te binden en blijven open. '
                      'Voorgestelde verbindingen zijn nog niet bevestigd; controleer ook verbindingen die ontbreken.</p>'
                      if has_recorded_route(env) else '')
-    original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
+    original = '/review/brondocument?' + urlencode(dict(document=document, object=rows[0]['object_id'])) if rows else ""
     from src.operations_console_app import _task_links, _nav, _page
     owner = '/source-selection?' + urlencode(dict(document=document, task='graph'))
     review = '/review/decision-graph?' + urlencode(dict(document=document))
     immutable = console.snapshot_is_published(document)
     if immutable:
         co_review = ""
+    classifications = "" if editing else _passage_types(rows, common, immutable, _context_ids(graph))
     graph_form = (f'<form method="post" action="/review/decision-graph">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
         + ''.join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
         '<button class="btn-primary" name="action" value="graph">Verbindingen opslaan</button></form>') if editing and not immutable else ''
@@ -109,7 +179,7 @@ def render_graph(console, actor, document, *, editing=False):
     return _page(_nav(actor, 'selection' if editing else 'review') + '<section class="room" data-graph-workplace="' + ('formation' if editing else 'review') + '">'
         + heading + _task_links('review') + links + proposal_note
         + ('<p>Deze gepubliceerde werkversie is alleen te lezen.</p>' if immutable else '')
-        + evidence_view + graph_form + confirm + co_review + '</section>')
+        + evidence_view + classifications + graph_form + confirm + co_review + '</section>')
 
 
 def install_decision_review_routes(app, console, require, page):
@@ -209,6 +279,12 @@ def install_decision_review_routes(app, console, require, page):
                        expected_revision=str(form.get("expected_revision") or ""))
         if form.get("action") == "confirm":
             console.confirm_decision_graph(**command)
+        elif form.get("action") == "classification":
+            object_id = str(form.get("object_id") or "")
+            await asyncio.to_thread(_change_passage_type, console, actor["account_id"], sid,
+                object_id, str(form.get("confirmed_object_type") or ""), command["expected_revision"], command["reason"])
+            location = "/review/decision-graph?" + urlencode({"document": sid}) + "#passage-" + quote(object_id, safe="")
+            return RedirectResponse(location, status_code=303)
         elif form.get("action") == "graph":
             env=console._tree_envelope(sid,envelope=env)
             current = {o["object_id"]: o for o in console.snapshot_objects(sid)}

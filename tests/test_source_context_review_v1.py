@@ -120,13 +120,9 @@ def test_context_http_projection_and_command(tmp_path, *, production_app, produc
     state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
     client = TestClient(production_app(state), headers={"Origin": "https://testserver"})
     assert client.post('/login', data={'username': reviewer['username'], 'password': 'bert-secret'}, follow_redirects=False).status_code == 303
-    before = client.get('/source-selection', params={'document': command['snapshot_id'], 'object': source['object_id']})
-    assert 'Bij welke passage hoort dit label?' in before.text
-    result = client.post('/review/source-context', data={'snapshot_id': command['snapshot_id'],
-        'source_object_id': source['object_id'], 'role': 'label', 'target_object_ids': [target['object_id']],
-        'reason': command['reason'], 'command_id': command['command_id'], 'snapshot_revision': command['expected_revision'],
-        'source_checked': '1'}, follow_redirects=False)
-    assert result.status_code == 303, result.text
+    assert client.get('/source-selection', params={'document': command['snapshot_id'], 'object': source['object_id']}).status_code == 404
+    assert client.post('/review/source-context', data=command).status_code == 404
+    state.confirm_source_context(**command)
     after = client.get('/review', params={'document': command['snapshot_id'], 'object': target['object_id']})
     assert 'Context die bij deze passage is vastgelegd' in after.text
     assert 'DOEN' in after.text

@@ -32,26 +32,12 @@ const assert = require('node:assert/strict');
       page.getByRole('link', {name: 'Open volledige bron', exact: true}).click()]);
     await page.goBack();
     assert.deepEqual(await state(), before, 'Opening source and detail must not write');
-    await page.locator('[data-heading-owner] a').focus();
-    await Promise.all([page.waitForURL(url => url.pathname === '/source-selection'), page.keyboard.press('Enter')]);
-    const form = page.locator('form[action="/review/headings/batch-confirm"]');
-    assert.equal(await form.count(), 1);
-    for (const input of await form.locator('input[name=object_ids]').all()) {
-      assert.equal(await input.isChecked(), false, 'No implicit heading selection');
+    assert.equal(await page.locator('a[href*="task=structure"]').count(), 0);
+    for (const path of ['/source-selection', '/review']) {
+      const retired = await page.goto(base + path + '?' + new URLSearchParams({document: m.snapshot_id, task: 'structure'}));
+      assert.equal(retired.status(), 404);
     }
-    await form.locator(`input[name=object_ids][value="${m.heading_ids[index]}"]`).check();
-    assert.equal(await form.locator('input[name=object_ids]:checked').count(), 1);
-    await proof('formation-heading-selection', width);
-    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), form.locator('button[type=submit]').click()]);
-    assert.equal(new URL(page.url()).pathname, '/source-selection');
-    assert.equal(new URL(page.url()).searchParams.get('task'), 'structure');
-    await page.reload();
-    const after = await state();
-    assert.deepEqual(after.approved, m.heading_ids.slice(0, index + 1).sort());
-    assert.ok(after.unselected_unchanged && after.source_unchanged);
-    assert.equal(await page.locator(`input[name=object_ids][value="${m.heading_ids[index]}"]`).count(), 0);
-    await proof('formation-heading-saved', width);
-    console.log('Heading confirmation with unchanged source and unselected objects', width, 'PASSED');
+    assert.deepEqual(await state(), before);
   }
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });

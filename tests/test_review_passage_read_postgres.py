@@ -374,13 +374,14 @@ def test_context_picker_pages_preserve_access_without_loading_all_payloads(revie
         return original(snapshot_id, ids)
 
     monkeypatch.setattr(console.workflow_document_store, 'review_object_histories', selected)
-    page = client.get('/source-selection', params={'document': sid, 'object': obj['object_id']})
-    assert page.status_code == 200 and len(set(loaded)) <= 26
-    assert '59 teksten' in page.text and 'Volgende' in page.text
-    assert 'Begrip 59 is' not in page.text
+    from src.review.review_passage_read_v1 import read_review_passage
+    account = {'account_id': console._envelope(sid)['named_reviewers'][0], 'roles': ['reviewer']}
+    first = read_review_passage(console, account, sid, obj['object_id'], include_choices=True)
+    assert first.choice_total == 59 and len(set(loaded)) <= 26
+    assert not any('Begrip 59 is' in c.text for c in first.context_choices)
     loaded.clear()
-    last = client.get('/source-selection', params={'document': sid, 'object': obj['object_id'], 'context_page': 3})
-    assert last.status_code == 200 and 'Begrip 59 is' in last.text
+    last = read_review_passage(console, account, sid, obj['object_id'], include_choices=True, choice_page=3)
+    assert any('Begrip 59 is' in c.text for c in last.context_choices)
     assert len(set(loaded)) <= 26
     choices, total = console.workflow_document_store.review_choice_ids(
         sid, obj['object_id'], query='', page=999)
@@ -481,14 +482,6 @@ def test_linked_context_outside_picker_page_keeps_full_projection(review_client,
     selected = source_accountability(package.objects, bindings=package.bindings, fragments=package.fragments)
     for oid in [source['object_id'], *(o['object_id'] for o in targets)]:
         assert selected[oid] == full[oid]
-    if many_targets:
-        from tests.test_source_context_review_ui_v1 import _link_form, _payload
-        page = _client.get('/source-selection', params={'document': sid, 'object': source['object_id']})
-        assert page.status_code == 200
-        # The 25-row display picker must not silently uncheck an existing
-        # target outside that page when the user opens this source's form.
-        draft = _payload(_link_form(page))
-        assert set(draft['target_object_ids']) == {o['object_id'] for o in targets}
 
 
 def test_unknown_snapshot_and_database_failure_remain_distinct(review_client, monkeypatch):
@@ -587,8 +580,7 @@ def test_picker_keeps_already_used_context_source_available_for_another_passage(
         source_object_id=source['object_id'], role='context', target_object_ids=[target['object_id']],
         reason='Context geldt voor meerdere passages.', command_id='reusable-context',
         expected_revision=console.objects_revision(sid))
-    response = client.get('/source-selection', params={'document': sid, 'object': focal['object_id'],
-        'context_q': source['content']['clean_text']})
-    assert response.status_code == 200
-    assert 'Kies deze tekst als context' in response.text
-    assert source['object_id'] in response.text and source['content']['clean_text'] in response.text
+    from src.review.review_passage_read_v1 import read_review_passage
+    package = read_review_passage(console, {'account_id': reviewer, 'roles': ['reviewer']},
+        sid, focal['object_id'], include_choices=True, choice_query=source['content']['clean_text'])
+    assert source['object_id'] in {choice.object_id for choice in package.context_choices}

@@ -4,7 +4,6 @@
 """
 from copy import deepcopy
 from collections import Counter
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -97,55 +96,17 @@ def test_repair_return_preserves_origin_without_transferring_approval(tmp_path, 
     actors, docs = prepare(console); doc = docs[0]; sid = doc['snapshot_id']; oid = doc['batch'][0]
     client = login(console, production_app, actors['a'])
     review = client.get('/review', params=dict(document=sid, object=oid, task='contextual'))
-    import re, html
-    link = next(html.unescape(h) for h in re.findall(r'href="([^"]+)"', review.text) if 'task=repair' in h and 'review_revision=' in h)
-    params = parse_qs(urlsplit(link).query)
-    origin = params['review_revision'][0]
-    owner = client.get(link + '&repair_kind=classification')
-    data = form_data(owner); assert data['review_revision'] == origin
+    origin = form_data(review, '/review')['snapshot_revision']
+    data = dict(snapshot_id=sid, object_id=oid, snapshot_revision=origin, suitability='ja',
+                repair_kind='classification', documentpositie_action='dit_klopt')
     old = console._current_object(sid, oid)
     data.update(comment='Controleerbaar type behouden.', type_action='type_wijzigen', confirmed_object_type='explanation')
     result = client.post('/review/resolve', data=data, follow_redirects=False)
     assert result.status_code == 303, result.text
-    saved = client.get(result.headers['location'])
-    back = next(html.unescape(h) for h in re.findall(r'href="([^"]+)"', saved.text) if h.startswith('/review?') and 'review_revision=' in h)
-    assert parse_qs(urlsplit(back).query)['review_revision'] == [origin]
-    returned = client.get(back)
+    returned = client.get('/review', params=dict(document=sid, object=oid, review_revision=origin))
     assert returned.status_code == 200 and 'data-review-return-changed' in returned.text
     current = console._current_object(sid, oid)
     assert current['object_id'] == old['object_id'] and current['object_version'] != old['object_version']
     assert current['governance']['validation_status'] == 'needs_review'
     assert not [r for r in console.object_review_bindings(sid) if r['object_id'] == oid and r['valid']]
     assert form_data(returned, '/review')['snapshot_revision'] != origin
-
-
-def test_context_picker_preserves_review_origin_through_source_and_post(tmp_path, production_console, production_app):
-    import html, re
-    from tests.semantic_fixture_support import bind_fixture_selections
-    from tests.test_source_context_review_v1 import _system
-    from tests.test_source_context_review_ui_v1 import _client, _link_form, _payload
-    state, _, _, source, target, command = _system(tmp_path,
-        console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
-    sid = command['snapshot_id']; oid = target['object_id']
-    client = _client(state, production_app=production_app)
-    review = client.get('/review', params=dict(document=sid, object=oid))
-    link = next(html.unescape(h) for h in re.findall(r'href="([^"]+)"', review.text)
-                if h.startswith('/source-selection?') and '#passage-context' in h)
-    origin = parse_qs(urlsplit(link).query)['review_revision'][0]
-    owner = client.get(link)
-    pick = next(html.unescape(h) for h in re.findall(r'href="([^"]+)"', owner.text)
-                if f'object={source["object_id"]}' in h and f'context_target={oid}' in h)
-    assert parse_qs(urlsplit(pick).query)['review_revision'] == [origin]
-    pair = client.get(pick)
-    back = next(html.unescape(h) for h in re.findall(r'href="([^"]+)"', pair.text) if h.startswith('/review?'))
-    assert parse_qs(urlsplit(back).query)['object'] == [oid]
-    assert 'data-review-return-changed' not in client.get(back).text
-    data = _payload(_link_form(pair))
-    assert data['review_revision'] == origin and data['return_object_id'] == oid
-    saved = client.post('/review/source-context', data=data, follow_redirects=False)
-    assert saved.status_code == 303, saved.text
-    page = client.get(saved.headers['location'])
-    back = next(html.unescape(h) for h in re.findall(r'href="([^"]+)"', page.text) if h.startswith('/review?'))
-    assert parse_qs(urlsplit(back).query)['object'] == [oid]
-    assert parse_qs(urlsplit(back).query)['review_revision'] == [origin]
-    assert 'data-review-return-changed' in client.get(back).text

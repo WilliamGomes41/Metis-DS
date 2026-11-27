@@ -116,10 +116,12 @@ def collect(console, *, actor_id, snapshot_id):
                     'reason': reason, 'spans': spans, 'object_id': oid, 'page': page}
         pid = stable_json_hash(identity)
         actions = []
-        if obj:
-            actions.append({'label': 'Brongebruik bepalen of herstellen' if is_source_record(obj) else 'Kandidaat herstellen',
-                'url': _url('/source-selection', snapshot_id, object=oid,
-                            task='disposition' if is_source_record(obj) else 'repair')})
+        if obj and is_source_record(obj):
+            actions.append({'label': 'Brongebruik verantwoorden',
+                            'url': _url('/source-selection', snapshot_id, task='disposition')})
+        elif obj:
+            actions.append({'label': 'Bekijk deze passage in Review',
+                            'url': _url('/review', snapshot_id, object=oid, task='inventory')})
         else:
             # Source dispositions use the current materialised source register,
             # not a human-review task manufactured from a provider rejection.
@@ -129,7 +131,7 @@ def collect(console, *, actor_id, snapshot_id):
                     and max(a.get('start', 0), b.get('start', 0)) < min(a.get('end', 0), b.get('end', 0))
                     for a in spans for b in source_spans):
                     actions.append({'label': 'Bronbereik bekijken en behandelen',
-                        'url': _url('/source-selection', snapshot_id, object=source['object_id'], task='disposition')})
+                        'url': _url('/source-selection', snapshot_id, task='disposition')})
         if page is not None:
             actions.append({'label': 'Pagina-afhandeling in Vorming',
                             'url': _url('/source-selection', snapshot_id) + '#paginas'})

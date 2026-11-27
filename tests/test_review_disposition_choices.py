@@ -80,13 +80,13 @@ def test_three_questions_are_named_native_groups(review_system):
 CONFLICT_COPY = {
     ("mist_context", "goedkeuren"):
         "Je koos ‘Nee, ik mis uitleg eromheen’ met het besluit ‘Goedkeuren’. Die combinatie kan niet. "
-        "Bij ‘Nee, ik mis uitleg eromheen’ kun je kiezen uit ‘Correctie specificeren’, ‘Afwijzen’ of "
+        "Bij ‘Nee, ik mis uitleg eromheen’ kun je kiezen uit ‘Afwijzen’ of "
         "‘Later beoordelen’. Je beoordeling is niet opgeslagen. Ga terug naar de passage en kies een "
         "besluit dat past.",
     ("samenvoegen", "goedkeuren"):
         "Je koos ‘Nee, deze hoort samen met een andere passage’ met het besluit ‘Goedkeuren’. Die "
         "combinatie kan niet. Bij ‘Nee, deze hoort samen met een andere passage’ kun je kiezen uit "
-        "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’. Je beoordeling is niet "
+        "‘Afwijzen’ of ‘Later beoordelen’. Je beoordeling is niet "
         "opgeslagen. Ga terug naar de passage en kies een besluit dat past.",
     ("geen_kenniseenheid", "goedkeuren"):
         "Je koos ‘Geen zelfstandig stukje kennis’ met het besluit ‘Goedkeuren’. Die combinatie kan "
@@ -122,7 +122,7 @@ def test_help_text_never_names_an_approval_the_form_cannot_offer(approval):
     html = decision_choices_html("obj-1", "", approval=approval)
     scope = re.search(r'<span data-decision-scope="ja">([^<]*)</span>', html).group(1)
     assert scope == ("Bij ‘Ja, als zelfstandig stukje kennis’ kun je kiezen uit "
-                     "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.")
+                     "‘Afwijzen’ of ‘Later beoordelen’.")
 
 
 def test_help_text_names_approval_when_it_can_be_selected():
@@ -131,7 +131,7 @@ def test_help_text_names_approval_when_it_can_be_selected():
     html = decision_choices_html("obj-1", "", approval="")
     scope = re.search(r'<span data-decision-scope="ja">([^<]*)</span>', html).group(1)
     assert scope == ("Bij ‘Ja, als zelfstandig stukje kennis’ kun je kiezen uit ‘Goedkeuren’, "
-                     "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.")
+                     "‘Afwijzen’ of ‘Later beoordelen’.")
 
 
 def test_follow_up_repairs_are_separate_from_compact_confirmation(review_system):
@@ -141,8 +141,8 @@ def test_follow_up_repairs_are_separate_from_compact_confirmation(review_system)
     assert form
     for field in ('confirmed_object_type', 'documentpositie_action', 'recommendation_strength_level', 'relation_choice', 'eindoordeel'):
         assert 'name="' + field + '"' not in form.group()
-    assert 'Correctie nodig' in form.group() and '/source-selection?' in form.group()
-    assert 'class="ko-adjustment"' in form.group()
+    assert 'task=repair' not in form.group()
+    assert 'class="ko-adjustment"' not in form.group()
 
 
 def _current(console, sid, oid):

@@ -114,7 +114,7 @@ def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_
     assert not any(tag == "select" and a.get("name") in {"confirmed_object_type", "parent_choice"}
                    for tag, a in surface.tags)
     assert not any(a.get("name") == "proposed_correction" for _, a in surface.tags)
-    assert any(a.get("href", "").startswith("/source-selection?") for _, a in surface.tags)
+    assert not any("task=repair" in a.get("href", "") for _, a in surface.tags)
     assert all('checked' not in a for a in radios)
     assert len([a for tag, a in surface.tags if tag == 'button' and a.get('value') == 'approve']) == 1
     assert '<summary>Broncontext' not in page.text

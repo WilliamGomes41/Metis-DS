@@ -242,19 +242,7 @@ def test_source_repair_keeps_revision_patch_hash_and_records_exact_selection(tmp
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
 def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_path, backend, request, *, production_app, production_console):
-    from html.parser import HTMLParser
     from tests.test_deterministic_review_repair_v1 import _review_payload
-
-    class Inputs(HTMLParser):
-        def __init__(self, text):
-            super().__init__()
-            self.inputs = []
-            self.feed(text)
-
-        def handle_starttag(self, tag, attrs):
-            if tag == "input":
-                self.inputs.append(dict(attrs))
-
     from tests.test_review_batch_atomic_postgres import _console
     config = request.getfixturevalue("workflow_postgres") if backend == "postgres" else None
     runtime = _console(tmp_path, config) if config else None
@@ -269,16 +257,16 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     before = console.snapshot_objects(sid)
     card = client.get(f'/review?document={sid}&object={obj["object_id"]}')
     assert card.status_code == 200
-    assert "Correctie nodig" in card.text
+    assert "task=repair" not in card.text
     import re
     approval = re.search(r'<button[^>]+value="approve"[^>]*>', card.text)
     assert approval and "disabled" in approval.group()
     assert 'action="/review/resolve"' not in card.text
     owner = client.get(f'/source-selection?document={sid}&object={obj["object_id"]}&task=repair')
-    assert owner.status_code == 200 and 'action="/review/resolve"' in owner.text
+    assert owner.status_code == 404
     assert console.snapshot_objects(sid) == before
     inventory = client.get(f'/review?document={sid}&task=repair')
-    assert "Passages herstellen" in inventory.text
+    assert inventory.status_code == 404
 
     approval_payload = _review_payload(console, sid, target)
     approval_payload.update(suitability="ja", eindoordeel="goedkeuren", applicable="yes",
@@ -288,10 +276,10 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     assert "blocked_candidate_not_reviewable" in rejected.text
     assert console.snapshot_objects(sid) == before
     specification = client.post("/review", data=_review_payload(console, sid, target))
-    assert specification.status_code == 200
-    assert "Er is nog niets gewijzigd" in specification.text
+    assert specification.status_code == 400
+    assert "structured_repair_required" in specification.text
     assert console.snapshot_objects(sid) == before
-    payload = {row["name"]: row.get("value", "") for row in Inputs(specification.text).inputs if row.get("type") == "hidden"}
+    payload = {**_review_payload(console, sid, target), "repair_kind": "source_units"}
     fragments = {str(ref.get("raw_object_id") or "") for ref in obj["provenance"]["source_fragments"]}
     payload["comment"] = "Context ontbreekt."
     payload["source_unit_ids"] = [unit["unit_id"] for unit in console.source_units(snapshot_id=sid, object_id=obj["object_id"]) if unit["fragment_id"] in fragments]

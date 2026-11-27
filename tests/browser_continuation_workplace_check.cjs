@@ -23,38 +23,13 @@ const assert = require('node:assert/strict');
     const review = base + '/review?' + new URLSearchParams({document: d.snapshot_id, object: d.object_id});
     await page.goto(review);
     assert.equal(await page.locator('[formaction="/review/context/accept"], form[action="/review/context/accept"]').count(), 0);
-    assert.equal(await page.getByText('Ontbrekende brontekst:', {exact: true}).count(), 1);
+    assert.equal(await page.getByRole('link', {name: 'Bronaanvulling herstellen in Vorming'}).count(), 0);
     await proof('review-continuation', width);
-    await page.getByRole('link', {name: 'Bronaanvulling herstellen in Vorming', exact: true}).focus();
-    await Promise.all([page.waitForURL(url => url.pathname === '/source-selection'), page.keyboard.press('Enter')]);
-    const form = page.locator('form[action="/review/context/accept"]');
-    assert.equal(await form.count(), 1);
-    await Promise.all([page.waitForURL(url => url.pathname === '/review/bronpassage'),
-      page.getByRole('link', {name: 'Open oorspronkelijke bron', exact: true}).click()]);
-    await page.goBack();
-    assert.deepEqual(await state(), before, 'Owner and source GETs must not write');
-    await proof('formation-continuation', width);
-    await form.locator('button[type=submit]').focus();
-    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), page.keyboard.press('Enter')]);
-    assert.equal(new URL(page.url()).pathname, '/source-selection');
-    assert.equal(new URL(page.url()).searchParams.get('object'), d.object_id);
-    assert.equal(await page.getByRole('status').getByText('De bronaanvulling is opgeslagen.', {exact: false}).count(), 1);
-    assert.equal(await form.count(), 0);
-    const after = await state();
-    assert.equal(after[index].object_id, d.object_id);
-    assert.notEqual(after[index].version, before[index].version);
-    assert.equal(after[index].status, 'needs_review');
-    assert.equal(after[index].history_count, 2);
-    assert.ok(after[index].merged && after[index].others_unchanged && after[index].source_unchanged);
-    assert.deepEqual(after[1-index], before[1-index]);
-    await page.reload();
-    assert.deepEqual(await state(), after, 'Refresh must not repeat the command');
-    await proof('formation-continuation-saved', width);
-    await page.getByRole('link', {name: 'Deze passage beoordelen in Review', exact: true}).click();
-    assert.equal(new URL(page.url()).searchParams.get('object'), d.object_id);
-    assert.equal(new URL(page.url()).pathname, '/review');
-    assert.deepEqual(await state(), after);
-    console.log('Literal continuation with unchanged source and neighbors', width, 'PASSED');
+    const retired = await page.goto(base + '/source-selection?' + new URLSearchParams({
+      document: d.snapshot_id, object: d.object_id, task: 'continuation'
+    }));
+    assert.equal(retired.status(), 404);
+    assert.deepEqual(await state(), before);
   }
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });

@@ -674,7 +674,6 @@ def _scenario_heading_batch(request, tmp_path, monkeypatch):
     from tests.test_review_batch_atomic_postgres import _console as native
     a08.test_success_duplicates_repeat_and_stale(
         lambda root: native(root, config), tmp_path,
-        production_app=request.getfixturevalue("production_app"),
         production_console=request.getfixturevalue("production_console"))
     return config
 

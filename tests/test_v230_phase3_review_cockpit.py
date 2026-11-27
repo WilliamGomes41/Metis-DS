@@ -388,8 +388,8 @@ def test_source_position_does_not_invent_a_missing_current_parent(tmp_path: Path
     assert 'data-current-parent' not in question
     source = re.search(r'<details class="ko-document-context"[^>]*>.*?</details>', card, re.S).group()
     assert CURRENT_HEADING in _visible_text(source)
-    assert 'Andere plek kiezen' in question
-    assert '/source-selection?' in question
+    assert 'Andere plek kiezen' not in question
+    assert '/source-selection?' not in question
     assert 'data-parent-choice-list' not in card
     assert 'name="parent_choice"' not in card
 
@@ -401,9 +401,7 @@ def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path, *, prod
     obj = objects[0]
     before = deepcopy(console.snapshot_objects(sid))
     owner = client.get('/source-selection', params=dict(document=sid, object=obj['object_id'], task='repair', repair_kind='classification'))
-    assert owner.status_code == 200
-    radios = re.findall(r'<input[^>]*type="radio"[^>]*name="parent_choice"[^>]*>', owner.text)
-    assert radios and not any('checked' in radio for radio in radios)
+    assert owner.status_code == 404
     heading = next(row for row in before if row['object_type'] == 'heading')
     assert client.get('/review', params=dict(document=sid, object=heading['object_id'])).status_code == 200
     assert console.snapshot_objects(sid) == before
@@ -419,7 +417,7 @@ def test_step_e_starts_from_metis_proposal_not_only_unconfirmed(tmp_path: Path, 
     card = _card(html, adviseert['object_id'])
     assert '<p class="ko-type">Aanbeveling</p>' in card
     assert 'name="confirmed_object_type"' not in card
-    assert 'Correctie nodig' in card and '/source-selection?' in card
+    assert 'task=repair' not in card
     assert adviseert.get('confirmed_object_type') != 'recommendation'
 
 
@@ -446,7 +444,7 @@ def test_step_f_eindoordeel_options(tmp_path: Path, *, production_app, productio
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert['object_id'])
     assert 'Goedkeuren en opslaan' in card
-    assert 'Correctie nodig' in card and 'Later beoordelen' in card
+    assert 'task=repair' not in card and 'Later beoordelen' in card
     assert '<summary>Afwijzen</summary>' in card
     assert 'value="reject"' in card and 'Toelichting bij afwijzing' in card
     assert 'Revisie vragen' not in card
@@ -613,12 +611,12 @@ def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path, *, product
         f"/review?document={receipt['snapshot_id']}&task=contextual"
     ).text
     control = client.get(
-        f"/review?document={receipt['snapshot_id']}&task=repair"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     slow = index.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
     assert DJG not in slow
     assert "adviseert de verpleegkundige" in slow
-    assert "review-blocked-audit" in control
+    assert "review-passage-inventory" in control
 
 
 def test_boom_path_is_unchanged_and_publish_stays_blocked(tmp_path: Path, *, production_console) -> None:

@@ -80,7 +80,7 @@ def require_assessment(value: Any) -> dict[str, Any]:
         _refuse('review_assessment_required', 'Beantwoord de drie vragen voordat je goedkeurt.')
     if not parsed.all_yes:
         _refuse('review_assessment_requires_three_yes',
-                'Voor goedkeuren moeten de drie antwoorden Ja zijn. Kies anders Correctie nodig.')
+                'Voor goedkeuren moeten de drie antwoorden Ja zijn.')
     return parsed.as_evidence()
 
 

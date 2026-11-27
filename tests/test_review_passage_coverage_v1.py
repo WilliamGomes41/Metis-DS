@@ -75,7 +75,7 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
     queues = review_followup_queues(objects, review_path="tekst", bindings=[], fragments=_allowed_source())
     assert [r["object_id"] for r in queues["repair"]] == ["blocked"]
     assert [r["object_id"] for r in queues["disposition"]] == ["unknown"]
-    for task in ("repair", "disposition"):
+    for task in ("disposition",):
         html = _render_review_index("snap", objects, "tekst", task=task, bindings=[], fragments=_allowed_source())
         assert set(_inventory_ids(html)) == {r["object_id"] for r in queues[task]}
     dashboard = _render_review_index("snap", objects, "tekst", bindings=[], fragments=_allowed_source())
@@ -104,7 +104,7 @@ def test_open_second_review_is_not_reclassified_as_missing_disposition():
     assert reviewer_route_counts([obj], review_path="tekst", bindings=[binding], reviewer_id="reviewer-b", fragments=_allowed_source())["actionable_second_review_duties"] == 1
 
 
-@pytest.mark.parametrize("gate,task", [(None, "disposition"), ("blocked", "repair")])
+@pytest.mark.parametrize("gate,task", [(None, "disposition"), ("blocked", "inventory")])
 def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(tmp_path, gate, task, *, production_app, production_console):
     console, accounts, receipt, _ = _system(tmp_path, production_console=production_console)
     sid = receipt["snapshot_id"]
@@ -126,12 +126,11 @@ def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(t
     assert target["object_id"] in _inventory_ids(response.text)
     detail = client.get(f"/review?document={sid}&task={task}&object={target['object_id']}")
     assert detail.status_code == 200
-    if task == 'repair':
-        assert 'data-formation-repair' in detail.text and 'action="/review/resolve"' in detail.text
-        assert 'action="/review"' not in detail.text
-    else:
-        assert "De passage kan nu niet worden goedgekeurd" in detail.text
-        assert re.search(r'<button[^>]+value="approve"[^>]+disabled', detail.text)
+    approval = re.search(r'<button[^>]+value="approve"[^>]*>', detail.text)
+    assert approval is None or 'disabled' in approval.group()
+    if task == 'inventory':
+        assert 'data-ko-object-view' in detail.text
+    assert 'task=repair' not in detail.text
     assert "Metis heeft de technische controles uitgevoerd" not in detail.text
     assert console.objects_revision(sid) == before
     assert not source_passage_closure(console.snapshot_objects(sid))["source_passage_review_complete"]
@@ -149,7 +148,7 @@ def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(t
     assert saved.status_code == 303, saved.text
     assert f"task={task}" in saved.headers["location"]
     remaining = client.get(saved.headers["location"])
-    assert target["object_id"] not in _inventory_ids(remaining.text)
+    assert (target["object_id"] in _inventory_ids(remaining.text)) == (task == "inventory")
     inventory = client.get(f"/review?document={sid}&task=inventory")
     assert target["object_id"] in _inventory_ids(inventory.text)
     assert "Gemotiveerd uitgesloten" in inventory.text

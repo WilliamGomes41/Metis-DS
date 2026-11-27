@@ -358,14 +358,15 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path, *, 
     review = client.get(
         f"/review?document={receipt['snapshot_id']}&task=contextual"
     ).text
+    import re
     control = client.get(
-        f"/review?document={receipt['snapshot_id']}&task=repair"
+        f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     slow = review.split('class="review-lane-slow"', 1)[-1]
     assert DJG not in slow
     assert "recente fractuur" not in slow
-    assert "review-blocked-audit" in control
-    blocked = control.split("review-blocked-audit", 1)[-1]
+    assert "review-passage-inventory" in control
+    blocked = ' '.join(re.findall(r'<li[^>]+data-passage-category="repair".*?</li>', control, re.S))
     assert DJG not in blocked
     assert "recente fractuur" in blocked
 

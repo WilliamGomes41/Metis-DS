@@ -329,7 +329,7 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path, *, production_app,
     assert all(review_lane(obj) == "slow" for obj in inhoud)
     client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
-    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=structure").text
+    headings = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=contextual").text
     assert f"{len(koppen)} te controleren" not in dashboard
     assert 'data-workboard-document=' in dashboard
@@ -337,10 +337,10 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path, *, production_app,
     assert "0 te beoordelen" not in dashboard
     assert "Documentindeling controleren" not in dashboard
     assert "Passages afzonderlijk beoordelen" not in dashboard
-    assert "review-lane-fast" in headings
+    assert "review-passage-inventory" in headings
     assert "data-content-review-workplace" in individual
     assert 'class="review-normal-risk"' in individual  # Batch is a presentation within this same task.
-    assert "/review/headings/batch-confirm" in headings
+    assert "/review/headings/batch-confirm" not in headings
     assert "review-task-dashboard" not in dashboard
     assert "unclassified" not in (dashboard + headings + individual).casefold()
     lower = (dashboard + headings + individual).lower()
@@ -363,7 +363,7 @@ def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Pat
     client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("structure", "contextual", "batch", "repair")
+        for task in ("inventory", "contextual", "batch", "repair")
     )
     css = CSS.read_text(encoding="utf-8")
     titles = _index_link_titles(html)
@@ -377,7 +377,12 @@ def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Pat
     presented = [obj for obj in objects if review_lane(obj) == "fast" or obj in slow_review_duty(objects)]
     for obj in presented:
         snippet = _text_of(obj)
-        assert any(snippet[:40] in title or title[:40] in snippet for title in titles)
+        if obj["object_type"] == "heading":
+            detail = client.get("/review", params={"document": receipt["snapshot_id"], "object": obj["object_id"]})
+            assert detail.status_code == 200 and snippet[:40] in detail.text
+            assert 'task=structure' not in detail.text
+        else:
+            assert any(snippet[:40] in title or title[:40] in snippet for title in titles)
         assert review_row_title(obj) == snippet or review_row_title(obj).startswith(snippet[:40])
         assert review_row_title(obj) != obj["object_id"]
         assert review_row_status(obj) in {"wacht", "geclassificeerd", "bevestigd"}
@@ -594,7 +599,7 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path, *
     client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("structure", "contextual", "batch", "repair")
+        for task in ("inventory", "contextual", "batch", "repair")
     )
     for obj in objects:
         assert _text_of(obj)[:40] in html or obj["object_id"] in html

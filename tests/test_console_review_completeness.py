@@ -309,7 +309,7 @@ def test_type_select_does_not_silently_submit_heading(tmp_path: Path, *, product
     assert "Type wijzigen" not in html
     assert 'name="confirmed_object_type" value="heading"' in html
     assert 'data-type-chooser' not in html
-    assert "Passage herstellen in Vorming" in html
+    assert "Passage herstellen in Vorming" not in html and "task=repair" not in html
     assert 'data-submit-review' in html
 
 
@@ -385,7 +385,7 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
     assert 'data-type-chooser' not in html
     assert 'data-heading-owner' in html
     assert 'name="eindoordeel" value="goedkeuren"' not in html
-    assert 'value="goedkeuren_na_correctie"' in html
+    assert 'value="goedkeuren_na_correctie"' not in html
     assert 'value="afwijzen"' in html
 
     with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):

@@ -238,14 +238,13 @@ def test_queue_navigation_only_updates_complete_queue_links(monkeypatch):
         'q': ['zorg & huid'], 'page': ['3'], 'theme': ['huid']}
 
 
-def test_structure_task_navigates_without_rendering_or_writing(monkeypatch):
+def test_prose_structure_task_is_absent_without_rendering_or_writing(monkeypatch):
     console = Console(documents=[('two', document('Two'))])
     before = deepcopy(console.documents)
     monkeypatch.setattr('src.review.review_workboard_v1._render_review_room',
                         lambda *a, **kw: (_ for _ in ()).throw(AssertionError('old editor rendered')))
     response = client(console).get('/review?document=two&task=structure', follow_redirects=False)
-    assert response.status_code == 303
-    assert response.headers['location'] == '/source-selection?document=two&task=structure'
+    assert response.status_code == 404
     assert console.documents == before
 
 

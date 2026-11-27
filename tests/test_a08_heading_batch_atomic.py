@@ -9,6 +9,7 @@
 """
 from copy import deepcopy
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
@@ -113,13 +114,13 @@ print(json.dumps(_state(console, sid)))
     return json.loads(completed.stdout)
 
 
-def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatch, *, production_app, production_console):
+def test_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatch, *, production_console):
     console, accounts, sid, ids = _setup(tmp_path, production_console=production_console)
-    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     failures = _observe_command_failures(console, monkeypatch, sid)
     _fail_native_write(console, sid, 'publish_authorizations', object_id=ids[1])
-    assert _post(client, sid, ids, before[3]).status_code >= 400
+    with pytest.raises((ConsoleError, psycopg.Error, RuntimeError)):
+        _confirm(console, accounts, sid, ids, before[3])
     assert len(failures) == 1 and 'a08_native_write_failure' in str(failures[0])
     restarted = _console(tmp_path, production_console=production_console)
     assert _state(restarted, sid) == before
@@ -159,17 +160,16 @@ def test_postgres_local_review_storage_is_refused(workflow_postgres, tmp_path):
     _assert_tier_d_refused(workflow_postgres, tmp_path)
 
 
-def _post(client, sid, ids, revision):
-    return client.post("/review/headings/batch-confirm", data={
-        "snapshot_id": sid, "object_ids": ids, "snapshot_revision": revision,
-    }, follow_redirects=False)
+def _confirm(console, accounts, sid, ids, revision):
+    """Exercise the retained transaction for historical heading objects."""
+    return console.batch_confirm_headings(actor_id=accounts["reviewer"]["account_id"],
+        snapshot_id=sid, object_ids=ids, expected_revision=revision)
 
 
 @pytest.mark.parametrize("position", [1, 2])
 @pytest.mark.parametrize("write", ["objects", "bindings", "envelope", "audit"])
-def test_write_failure_preserves_complete_state(storage, tmp_path, monkeypatch, position, write, *, production_app, production_console):
+def test_write_failure_preserves_complete_state(storage, tmp_path, monkeypatch, position, write, *, production_console):
     console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
-    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     failures = _observe_command_failures(console, monkeypatch, sid)
     table = {'objects':'document_objects', 'bindings':'publish_authorizations',
@@ -179,12 +179,13 @@ def test_write_failure_preserves_complete_state(storage, tmp_path, monkeypatch, 
     _fail_native_write(console, sid, table,
         object_id=None if table == 'documents' else ids[position-1],
         timing='BEFORE' if table == 'documents' and position == 1 else 'AFTER')
-    assert _post(client, sid, ids, before[3]).status_code >= 400
+    with pytest.raises((ConsoleError, psycopg.Error, RuntimeError)):
+        _confirm(console, accounts, sid, ids, before[3])
     assert len(failures) == 1 and 'a08_native_write_failure' in str(failures[0])
     assert _state(storage(tmp_path), sid) == before
 
 
-def test_late_conflict_discards_own_first_member(storage, tmp_path, monkeypatch, *, production_app, production_console):
+def test_late_conflict_discards_own_first_member(storage, tmp_path, monkeypatch, *, production_console):
     console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     before = _state(console, sid)
     original = console.review_object
@@ -198,23 +199,24 @@ def test_late_conflict_discards_own_first_member(storage, tmp_path, monkeypatch,
         return original(**command)
 
     monkeypatch.setattr(console, "review_object", conflict_second)
-    assert _post(_client(console, production_app=production_app), sid, ids, before[3]).status_code == 409
+    with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+        _confirm(console, accounts, sid, ids, before[3])
     assert _state(storage(tmp_path), sid) == before
 
 
-def test_success_duplicates_repeat_and_stale(storage, tmp_path, *, production_app, production_console):
+def test_success_duplicates_repeat_and_stale(storage, tmp_path, *, production_console):
     console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
-    client = _client(console, production_app=production_app)
     revision = console.objects_revision(sid)
-    assert _post(client, sid, ids + ids, revision).status_code == 303
+    _confirm(console, accounts, sid, ids + ids, revision)
     restarted = storage(tmp_path)
     committed = _state(restarted, sid)
     current = restarted.snapshot_objects(sid)
     assert all(row["governance"]["validation_status"] == "approved" for row in current if row["object_id"] in ids)
     assert len([e for e in committed[4] if e.get("object_id") in ids]) == 2
-    assert _post(client, sid, ids, revision).status_code == 409
+    with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+        _confirm(console, accounts, sid, ids, revision)
     assert _state(storage(tmp_path), sid) == committed
-    assert _post(client, sid, ids, committed[3]).status_code == 303
+    _confirm(console, accounts, sid, ids, committed[3])
     assert _state(storage(tmp_path), sid) == committed
 
 
@@ -275,7 +277,7 @@ def test_direct_command_success_and_late_failure(storage, tmp_path, monkeypatch,
     assert console.objects_revision(sid) != before[3]
 
 
-def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatch, *, production_app, production_console):
+def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatch, *, production_console):
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import contextmanager
     from threading import Event
@@ -284,7 +286,6 @@ def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatc
     # Independent runtimes also prove the native row lock, not just flock.
     second_root = tmp_path / "worker2" if hasattr(first, "workflow_review_store") else tmp_path
     second = storage(second_root)
-    clients = [_client(first, production_app=production_app), _client(second, production_app=production_app)]
     revision = first.objects_revision(sid)
     first_has_written, second_has_entered = Event(), Event()
     original_review = first.review_object
@@ -310,15 +311,17 @@ def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatc
         return lock_authorizations(connection)
     monkeypatch.setattr(second.workflow_review_store, '_lock_authorizations', observe_authorization)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        winner = pool.submit(_post, clients[0], sid, ids, revision)
+        winner = pool.submit(_confirm, first, accounts, sid, ids, revision)
         assert first_has_written.wait(10)
-        loser = pool.submit(_post, clients[1], sid, ids, revision)
-        assert winner.result(timeout=20).status_code == 303
-        assert loser.result(timeout=20).status_code == 409
+        loser = pool.submit(_confirm, second, accounts, sid, ids, revision)
+        assert [row["object_id"] for row in winner.result(timeout=20)] == ids
+        with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+            loser.result(timeout=20)
     committed = _state(storage(tmp_path), sid)
     assert all(row["governance"]["validation_status"] == "approved" for row in storage(tmp_path).snapshot_objects(sid) if row["object_id"] in ids)
     assert len([e for e in committed[4] if e.get("object_id") in ids]) == 2
-    assert _post(clients[1], sid, ids, revision).status_code == 409
+    with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+        _confirm(second, accounts, sid, ids, revision)
     assert _state(storage(second_root), sid) == committed
 
 
@@ -327,12 +330,11 @@ def test_native_final_commit_failure_without_review_authority_is_refused(workflo
 
 
 @pytest.mark.parametrize("refresh_failure", [False, True])
-def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, refresh_failure, *, production_app, production_console):
+def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, refresh_failure, *, production_console):
     import psycopg
     from tests.test_review_batch_atomic_postgres import _console as native
     factory = lambda root: native(root, workflow_postgres)
     console, accounts, sid, ids = _setup(tmp_path, factory, production_console=production_console)
-    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     failures = _observe_command_failures(console, monkeypatch, sid)
     applied, refreshes = [], []
@@ -350,7 +352,8 @@ def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tm
     with psycopg.connect(workflow_postgres.dsn, autocommit=True) as connection:
         connection.execute("CREATE FUNCTION workflow.a08_commit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'a08_deferred_commit_failure'; END $$")
         connection.execute('CREATE CONSTRAINT TRIGGER a08_commit_failure AFTER UPDATE ON workflow.documents DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.a08_commit_failure()')
-    assert _post(client, sid, ids, before[3]).status_code == 500
+    with pytest.raises((ConsoleError, psycopg.Error, RuntimeError)):
+        _confirm(console, accounts, sid, ids, before[3])
     assert applied == [sid]  # Actual SQL completed before deferred COMMIT failed.
     assert len(failures) == 1 and 'a08_deferred_commit_failure' in str(failures[0])
     assert not refreshes  # No process-map refresh can obscure native rollback.
@@ -455,14 +458,12 @@ def test_native_post_commit_refresh_failure_without_review_authority_is_refused(
 @pytest.mark.parametrize("refresh", [
     "_reload_store_locked", "refresh_objects_expected_revision", "_refresh_review_runtime",
 ])
-@pytest.mark.parametrize("entry", ["http", "direct"])
-def test_native_post_commit_refresh_failure_preserves_success(workflow_postgres, tmp_path, monkeypatch, refresh, entry, *, production_app, production_console):
+def test_native_post_commit_refresh_failure_preserves_success(workflow_postgres, tmp_path, monkeypatch, refresh, *, production_console):
     from contextlib import contextmanager
     from src.review import review_command_v1 as commands
     from tests.test_review_batch_atomic_postgres import _console as native
     factory = lambda root: native(root, workflow_postgres)
     console, accounts, sid, ids = _setup(tmp_path, factory, production_console=production_console)
-    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     committed, injected = [], []
     transaction = commands.workflow_transaction
@@ -477,12 +478,7 @@ def test_native_post_commit_refresh_failure_preserves_success(workflow_postgres,
     with monkeypatch.context() as patch:
         patch.setattr(commands, 'workflow_transaction', observe_native_commit)
         patch.setattr(console, refresh, forbidden_refresh)
-        if entry == 'http':
-            outcome = _post(client, sid, ids, before[3]).status_code
-        else:
-            rows = console.batch_confirm_headings(actor_id=accounts['reviewer']['account_id'],
-                snapshot_id=sid, object_ids=ids, expected_revision=before[3])
-            outcome = [row['object_id'] for row in rows]
+        rows = _confirm(console, accounts, sid, ids, before[3])
     assert committed == [True] and injected == []
     fresh = factory(tmp_path)
     after = _state(fresh, sid)
@@ -490,12 +486,12 @@ def test_native_post_commit_refresh_failure_preserves_success(workflow_postgres,
                for row in fresh.snapshot_objects(sid) if row['object_id'] in ids)
     assert len([event for event in after[4] if event.get('object_id') in ids]) == 2
     assert after[3] != before[3] and after[5] > before[5]
-    if entry == 'http':
-        import json
-        assert _new_process_state(tmp_path, sid, 'postgres') == json.loads(json.dumps(after))
-    assert outcome == (303 if entry == 'http' else ids)
-    assert _post(client, sid, ids, before[3]).status_code == 409
-    assert _post(client, sid, ids, after[3]).status_code == 303
+    import json
+    assert _new_process_state(tmp_path, sid, 'postgres') == json.loads(json.dumps(after))
+    assert [row['object_id'] for row in rows] == ids
+    with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+        _confirm(console, accounts, sid, ids, before[3])
+    _confirm(console, accounts, sid, ids, after[3])
     assert _state(factory(tmp_path), sid) == after
 
 
@@ -596,9 +592,8 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     assert len([event for event in after[4] if event.get("object_id") in ids + [content_id]]) == 1
 
 
-def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monkeypatch, *, production_app, production_console):
+def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monkeypatch, *, production_console):
     console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
-    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     original = console.workflow_document_store.apply_review_changes
@@ -608,7 +603,8 @@ def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monk
         calls.append(True)
         raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
     monkeypatch.setattr(console.workflow_document_store, 'apply_review_changes', conflict_after_sql)
-    assert _post(client, sid, ids, before[3]).status_code == 409
+    with pytest.raises(ConsoleError, match=SNAPSHOT_OBJECT_WRITE_CONFLICT):
+        _confirm(console, accounts, sid, ids, before[3])
     assert calls == [True]  # Both members reached SQL; none may survive refusal.
     assert _state(storage(tmp_path), sid) == before
 
@@ -625,7 +621,7 @@ def test_stale_account_roles_are_rechecked(tmp_path, *, production_console):
 
 
 @pytest.mark.parametrize("rejection", ["role", "unsuitable"])
-def test_http_rejection_does_not_write(storage, tmp_path, rejection, *, production_app, production_console):
+def test_retired_prose_heading_command_does_not_write(storage, tmp_path, rejection, *, production_app, production_console):
     console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     client = _client(console, production_app=production_app)
     if rejection == "role":
@@ -633,8 +629,9 @@ def test_http_rejection_does_not_write(storage, tmp_path, rejection, *, producti
     else:
         ids.append(next(row["object_id"] for row in console.snapshot_objects(sid) if row.get("object_type") != "heading"))
     before = _state(console, sid)
-    response = _post(client, sid, ids, before[3])
-    assert response.status_code in {400, 403}
+    response = client.post("/review/headings/batch-confirm", data={
+        "snapshot_id": sid, "object_ids": ids, "snapshot_revision": before[3]}, follow_redirects=False)
+    assert response.status_code == 404
     assert _state(storage(tmp_path), sid) == before
 
 
@@ -665,18 +662,18 @@ def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_p
 
 @pytest.mark.parametrize("table", ["documents", "document_objects", "publish_authorizations", "review_events"])
 @pytest.mark.parametrize("member", [0, 1])
-def test_native_sql_write_failure_rolls_back_batch(workflow_postgres, tmp_path, monkeypatch, table, member, *, production_app, production_console):
+def test_native_sql_write_failure_rolls_back_batch(workflow_postgres, tmp_path, monkeypatch, table, member, *, production_console):
     import psycopg
     from tests.test_review_batch_atomic_postgres import _console as native
     factory = lambda root: native(root, workflow_postgres)
     console, accounts, sid, ids = _setup(tmp_path, factory, production_console=production_console)
-    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     failures = _observe_command_failures(console, monkeypatch, sid)
     _fail_native_write(console, sid, table,
         object_id=None if table == 'documents' else ids[member],
         timing='BEFORE' if table == 'documents' and member == 0 else 'AFTER')
-    assert _post(client, sid, ids, before[3]).status_code >= 400
+    with pytest.raises((ConsoleError, psycopg.Error, RuntimeError)):
+        _confirm(console, accounts, sid, ids, before[3])
     assert len(failures) == 1 and isinstance(failures[0], psycopg.errors.RaiseException)
     assert 'a08_native_write_failure' in str(failures[0])
     assert _state(factory(tmp_path), sid) == before

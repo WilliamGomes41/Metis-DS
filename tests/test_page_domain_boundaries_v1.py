@@ -33,10 +33,10 @@ def test_diagnosis_opens_each_actual_passage_and_no_get_changes_native_work(tmp_
     assert {parse_qs(urlsplit(url).query)['object'][0] for url in links} == set(expected)
     for url in links:
         query = parse_qs(urlsplit(url).query)
-        assert urlsplit(url).path == '/source-selection' and query['document'] == [sid]
+        assert urlsplit(url).path == '/review' and query['document'] == [sid] and query['task'] == ['inventory']
         owner = browser.get(url)
         assert owner.status_code == 200, owner.text
-        assert '<h1>Vorming</h1>' in owner.text
+        assert 'action="/review/resolve"' not in owner.text
         from html import escape
         assert escape(expected[query['object'][0]]) in owner.text
     assert state() == before
@@ -72,7 +72,7 @@ def test_unknown_reason_and_missing_identity_are_evidence_not_invented_editor_id
     html = _diagnosis_actions_html(processing_diagnostics(objects), 'source & snapshot', objects)
     links = Links(html).hrefs
     assert len(links) == 1
-    assert parse_qs(urlsplit(links[0]).query) == {'document': ['source & snapshot'], 'object': ['actual'], 'task': ['repair']}
+    assert parse_qs(urlsplit(links[0]).query) == {'document': ['source & snapshot'], 'object': ['actual'], 'task': ['inventory']}
     assert 'blocked-1' not in html
 
 
@@ -124,8 +124,16 @@ def test_publication_source_blocker_opens_its_blocked_candidates(tmp_path, *, pr
                        console.object_review_bindings(sid), read_events(console._ledger_path)))
     owner = reviewer.get(href)
     assert owner.status_code == 200
-    owner_links = [parse_qs(urlsplit(url).query) for url in Links(owner.text).hrefs]
-    assert blocked <= {q['object'][0] for q in owner_links if q.get('document') == [sid] and q.get('object')}
+    passages = {}
+    for link in Links(owner.text).hrefs:
+        url = urlsplit(link)
+        params = parse_qs(url.query)
+        if url.path == '/review' and params.get('document') == [sid] and params.get('task') == ['inventory'] and params.get('object'):
+            passages[params['object'][0]] = link
+    assert blocked <= passages.keys()
+    for oid in blocked:
+        passage = reviewer.get(passages[oid], follow_redirects=False)
+        assert passage.status_code == 200 and oid in passage.text
     assert (console.snapshot_objects(sid), console.objects_revision(sid),
             console.object_review_bindings(sid), read_events(console._ledger_path)) == before
 

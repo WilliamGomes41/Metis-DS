@@ -225,7 +225,6 @@ def _diagnosis_steps_html(processing: dict, blocking_code: str, progress: dict, 
 
 def _diagnosis_actions_html(diagnostics: dict | None, document: str, objects: list[dict]) -> str:
     from src.vorming.processing_diagnostics_v1 import processing_diagnostic_rows
-    from src.vorming.source_accountability_v1 import is_source_record
 
     families = _diagnosis_families(diagnostics)
     if not families:
@@ -235,9 +234,7 @@ def _diagnosis_actions_html(diagnostics: dict | None, document: str, objects: li
     actual = {str(obj['object_id']): obj for obj in objects if obj.get('object_id')}
     links = {family: [] for family, _ in families}
     for row in processing_diagnostic_rows(actual.values()):
-        obj = actual[row['object_id']]
-        owner = '/source-selection?' + urlencode(dict(document=document, object=row['object_id'],
-            task='disposition' if is_source_record(obj) else 'repair'))
+        owner = '/review?' + urlencode(dict(document=document, object=row['object_id'], task='inventory'))
         link = f'<li><a href="{escape(owner, quote=True)}">{escape(row["candidate_text"] or "Passage bekijken")}</a></li>'
         for family in row['families'] or ['unclassified']:
             links[family].append(link)
@@ -246,7 +243,7 @@ def _diagnosis_actions_html(diagnostics: dict | None, document: str, objects: li
         f'<td data-label="Actie">{escape(_DIAGNOSIS_FAMILY_COPY.get(family, (family,))[0])}</td>'
         f'<td data-label="Passages" class="num">{int(values["candidate_count"])}</td>'
         f'<td data-label="Punten" class="num">{int(values["issue_occurrence_count"])}</td>'
-        '<td>' + ('<details><summary>Passages openen in Vorming</summary><ul>'
+        '<td>' + ('<details><summary>Passages bekijken in Review</summary><ul>'
                   + ''.join(links[family]) + '</ul></details>' if links[family]
                   else 'Geen herleidbare passage; onderzoek het diagnosebewijs.') + '</td></tr>'
         for index, (family, values) in enumerate(families, start=1))
@@ -652,7 +649,6 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                           if processing_access else "")
         publication_export = (f'<li><a href="/inzicht/document/publicatiebewijs?{query}">Publicatiebewijs (JSON)</a></li>'
                               if "publisher" in roles else "")
-        repair = f'/source-selection?{query}&amp;task=repair'
         diagnostics = None
         admission_blocked = False
         if processing_access:
@@ -669,8 +665,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             passages = (_diagnosis_findings_html(diagnostics) + _diagnosis_coverage_html(objects)
                 + f'<details><summary>Reviewinteracties</summary><p>{int(burden["review_interactions"])} gemeten menselijke interacties voor '
                   f'{int(burden["object_decisions"])} objectbesluiten. Historische besluiten zonder meting: '
-                  f'{int(burden["legacy_unmeasured_decisions"])}.</p></details>'
-                + f'<p><a class="btn-secondary" href="{repair}">Passages corrigeren in Vorming</a></p>')
+                  f'{int(burden["legacy_unmeasured_decisions"])}.</p></details>')
             passage_exports = f'''<li>Bronpassages: <a href="/inzicht/document/passages?{query}&amp;format=csv">CSV</a> ·
               <a href="/inzicht/document/passages?{query}&amp;format=json">JSON</a></li>
               <li><a href="/inzicht/document/diagnostiek?{query}">Diagnostiek (JSON)</a></li>
@@ -688,7 +683,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                           ("Controlepunten", int(diagnostics["issue_occurrence_count"]))]
             facts.append(("Opgeslagen pogingen", len(attempts)))
             facts_html = "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(str(value))}</dd></div>" for name, value in facts)
-            review_button = (f'<p class="diagnosis-buttons"><a class="btn-primary" href="{repair}">Passages corrigeren in Vorming</a>'
+            review_button = ('<p class="diagnosis-buttons">'
                              '<a class="btn-secondary" href="#acties">Bekijk wat er moet gebeuren</a></p>' if reviewer else "")
             attempt_rows = "".join(
                 f'<dt>{escape(name)}</dt><dd><code>{escape(str(diagnostic[key]))}</code></dd>'

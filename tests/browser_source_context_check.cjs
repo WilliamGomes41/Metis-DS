@@ -36,57 +36,18 @@ const assert = require('node:assert/strict');
       await page.keyboard.press('Enter');
     }
   }
-  async function submit(form) {
-    await form.locator('textarea[name=reason]').fill('Gecontroleerd in de oorspronkelijke bron.');
-    await form.locator('input[name=source_checked]').check();
-    await Promise.all([page.waitForURL(url => url.searchParams.get('context_saved') === 'yes'), form.locator('button[type=submit]').click()]);
-  }
-  for (const [width, height] of [[1440, 1000], [390, 844]]) {
-    await page.setViewportSize({width, height});
+  const state = async () => (await (await fetch(base + '/browser-context-state')).json());
+  const before = await state();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height: 1000});
     await page.goto(base + m.target);
-    await proof('passage', width);
+    await openContextEvidence();
+    assert.ok(await page.locator('[data-confirmed-source-context]').isVisible());
+    assert.match(await page.locator('[data-confirmed-source-context]').innerText(), /DOEN/);
     assert.equal(await page.locator('form[action="/review/source-context"]').count(), 0);
-    assert.equal(await page.locator('[data-context-picker]').count(), 0);
-    await openContextEvidence();
-    await page.getByRole('link', {name: 'Broncontext vastleggen of aanpassen in Vorming'}).focus();
-    await Promise.all([
-      page.waitForURL(url => url.pathname === '/source-selection'),
-      page.keyboard.press('Enter'),
-    ]);
-    assert.equal(new URL(page.url()).pathname, '/source-selection');
-    assert.equal(await page.locator('[data-review-form], [data-ko-assessment-form]').count(), 0);
-    await page.locator('[data-context-picker] > summary').click();
-    const choice = page.locator('[data-context-picker] .context-choice').filter({has: page.locator(`a[href*="object=${m.source_id}"]`)}).first();
-    const group = choice.locator('xpath=..');
-    if (!await group.evaluate(el => el.open)) await group.locator(':scope > summary').click();
-    await choice.locator('a').filter({hasText: 'Kies deze tekst als context'}).click();
-    const form = page.locator('[data-source-context-form]');
-    assert.equal(await form.locator('input[name=role]:checked').count(), 0);
-    assert.equal(await form.locator(`input[name=target_object_ids][value="${m.target_id}"]`).isChecked(), true);
-    const before = await (await page.request.get(base + '/browser-context-state')).json();
-    assert.equal(before.links.length, 0);
-    await proof('contextkeuze', width);
-    await form.locator('input[name=role][value=label]').check();
-    await submit(form);
-    assert.equal(new URL(page.url()).searchParams.get('object'), m.target_id);
-    const saved = await (await page.request.get(base + '/browser-context-state')).json();
-    assert.equal(saved.role.role, 'label');
-    assert.equal(saved.links[0].text, 'DOEN');
-    assert.equal(saved.target_status, 'needs_review');
-    await proof('vastgelegde-context', width);
-    await openContextEvidence();
-    await page.getByRole('link', {name: 'Koppeling aanpassen of verwijderen'}).click();
-    const exclude = page.locator('[data-context-action=excluded]');
-    await exclude.locator('summary').click();
-    assert.equal(await exclude.locator('input[name=target_object_ids]').count(), 0);
-    await submit(exclude.locator('form'));
-    assert.equal((await (await page.request.get(base + '/browser-context-state')).json()).links.length, 0);
-    await page.goto(base + m.source);
-    const reset = page.locator('[data-context-action=reset]');
-    await reset.locator('summary').click();
-    await submit(reset.locator('form'));
-    assert.deepEqual((await (await page.request.get(base + '/browser-context-state')).json()).role, {});
-    console.log('Passage-first context workflow', width, 'PASSED');
+    await proof('passage', width);
+    assert.equal((await page.goto(base + m.source)).status(), 404);
+    assert.deepEqual(await state(), before);
   }
   await browser.close();
 })().catch(error => { console.error(error); process.exit(1); });

@@ -138,7 +138,7 @@ def test_expand_shorten_context_restart_and_stale_replay(repair_setup, *, produc
     before = deepcopy(fresh()._load_objects(sid, remember=False))
     conflict = repair(fresh(), sid, expanded, units, revision=stale, production_app=production_app)
     assert conflict.status_code == 400
-    assert 'tussentijds gewijzigd' in conflict.text
+    assert 'data-error-code="snapshot_object_write_conflict"' in conflict.text
     assert fresh()._load_objects(sid, remember=False) == before
     assert repair(fresh(), sid, expanded, units[:1], production_app=production_app).status_code == 303
     shortened = assert_complete(fresh(), sid, obj['object_id'])

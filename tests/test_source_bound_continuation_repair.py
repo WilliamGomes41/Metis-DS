@@ -17,6 +17,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from src.operations_console_v1 import ConsoleError
 from fastapi.testclient import TestClient
 
 from src.vorming.admission_gate_v1 import (
@@ -229,56 +230,28 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     page = client.get(f"/review?document={snapshot_id}&object={object_id}")
     assert page.status_code == 200
-    assert "Voorstel: afgebroken zin aanvullen" in page.text
-    assert "Ontbrekende brontekst:" in page.text
-    assert CONTINUATION in page.text
-    assert '/review/context/accept' not in page.text
-    assert 'Bronaanvulling herstellen in Vorming' in page.text
-    assert "Ontbrekende brontekst:" in page.text
-    assert "Herstelde passage:" in page.text
-
-    from tests.test_source_context_review_ui_v1 import Forms
-    from urllib.parse import urlencode
-    owner_url = '/source-selection?' + urlencode(dict(document=snapshot_id, object=object_id,
-        task='continuation', return_task='contextual'))
+    assert "Voorstel: afgebroken zin aanvullen" not in page.text
     before = deepcopy(console.snapshot_objects(snapshot_id, include_blocked=True))
     events = deepcopy(console.workflow_review_store.read_events())
     bindings = deepcopy(console.object_review_bindings(snapshot_id))
-    # The owner must use the existing bounded reader, never a full snapshot fallback.
-    import src.review.review_passage_read_v1 as reader
-    original_read = reader.read_review_passage
-    reads = []
+    owner = client.get('/source-selection', params={'document': snapshot_id, 'object': object_id,
+                                                   'task': 'continuation'}, follow_redirects=False)
+    assert owner.status_code == 404
+    command = dict(snapshot_id=snapshot_id, object_id=object_id, expected_revision=console.objects_revision(snapshot_id))
+    refused = client.post('/review/context/accept', data={'snapshot_id': snapshot_id, 'object_id': object_id,
+                          'snapshot_revision': command['expected_revision']}, follow_redirects=False)
+    assert refused.status_code == 404
+    outsider = console.create_account(username='not.named', password='outsider-secret', roles=('reviewer',))
+    for actor in (researcher, outsider):
+        with pytest.raises(ConsoleError):
+            console.accept_source_continuation(actor_id=actor['account_id'], **command)
     with monkeypatch.context() as patch:
-        patch.setattr(reader, 'read_review_passage', lambda *args, **kwargs:
-            (reads.append((args, kwargs)) or original_read(*args, **kwargs)))
-        patch.setattr(console, 'snapshot_objects', lambda *a, **kw: pytest.fail('unbounded owner read'))
-        patch.setattr(console, 'snapshot_objects_and_revision', lambda *a, **kw: pytest.fail('unbounded owner read'))
-        owner = client.get(owner_url)
-    assert owner.status_code == 200 and len(reads) == 1
-    assert 'data-formation-continuation' in owner.text
-    assert 'data-source-context-form' not in owner.text
-    forms = [form for form in Forms(owner.text).forms if form['attrs'].get('action') == '/review/context/accept']
-    assert len(forms) == 1
-    data = {field['name']: field.get('value', '') for field in forms[0]['inputs']}
-    assert data['snapshot_revision'].startswith('review-generation-v1:')
-    assert data['snapshot_id'] == snapshot_id and data['object_id'] == object_id
+        patch.setattr(console, 'snapshot_is_published', lambda sid: True)
+        with pytest.raises(ConsoleError):
+            console.accept_source_continuation(actor_id=reviewer['account_id'], **command)
     assert console.snapshot_objects(snapshot_id, include_blocked=True) == before
     assert console.workflow_review_store.read_events() == events
     assert console.object_review_bindings(snapshot_id) == bindings
-
-    outsider = TestClient(production_app(console))
-    outsider.post('/login', data={'username': 'researcher.anne', 'password': 'anne-secret'})
-    assert outsider.get(owner_url).status_code in {400, 403}
-    assert outsider.post('/review/context/accept', data=data).status_code == 403
-    console.create_account(username='not.named', password='outsider-secret', roles=('reviewer',), display_name='Niet benoemd')
-    outsider.post('/login', data={'username': 'not.named', 'password': 'outsider-secret'})
-    assert outsider.get(owner_url).status_code == 400
-    assert outsider.post('/review/context/accept', data=data).status_code == 400
-    with monkeypatch.context() as patch:
-        patch.setattr(console, 'snapshot_is_published', lambda sid: True)
-        assert '/review/context/accept' not in client.get(owner_url).text
-        assert client.post('/review/context/accept', data=data).status_code == 400
-    assert console.snapshot_objects(snapshot_id, include_blocked=True) == before
 
     stale_revision = console.objects_revision(snapshot_id)
     rows = console._load_objects(snapshot_id)
@@ -287,35 +260,13 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     stamp_canonical_hashes(continuation)
     from tests.semantic_fixture_support import install_fixture_history
     install_fixture_history(console, snapshot_id, rows)
-    stale = client.post(
-        "/review/context/accept",
-        data={
-            "snapshot_id": snapshot_id,
-            "object_id": object_id,
-            "snapshot_revision": stale_revision,
-        },
-        follow_redirects=False,
-    )
-    assert stale.status_code == 400
-    assert "snapshot_object_write_conflict" in stale.text
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        console.accept_source_continuation(actor_id=reviewer['account_id'], **{**command, 'expected_revision': stale_revision})
     unchanged = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     assert unchanged["object_version"] == target["object_version"]
 
-    owner = client.get(owner_url)
-    form = next(form for form in Forms(owner.text).forms if form['attrs'].get('action') == '/review/context/accept')
-    data = {field['name']: field.get('value', '') for field in form['inputs']}
-
-    response = client.post(
-        "/review/context/accept",
-        data=data,
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
-    assert response.headers['location'].startswith('/source-selection?')
-    saved = client.get(response.headers['location'])
-    assert saved.status_code == 200 and 'De bronaanvulling is opgeslagen.' in saved.text
-    assert '/review/context/accept' not in saved.text
-    assert 'task=contextual' in saved.text
+    command['expected_revision'] = console.objects_revision(snapshot_id)
+    console.accept_source_continuation(actor_id=reviewer['account_id'], **command)
     revised = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     assert revised["object_version"] != target["object_version"]
     assert revised["content"]["clean_text"] == MERGED
@@ -330,9 +281,8 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert revised["provenance"]["previous_object_version"] == target["object_version"]
     assert len(history) == 2
     after = deepcopy(console.snapshot_objects(snapshot_id, include_blocked=True))
-    replay = client.post('/review/context/accept', data=data)
-    assert replay.status_code == 400 and 'snapshot_object_write_conflict' in replay.text
-    client.get(response.headers['location'])
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        console.accept_source_continuation(actor_id=reviewer['account_id'], **command)
     assert console.snapshot_objects(snapshot_id, include_blocked=True) == after
     assert len([row for row in console.snapshot_objects(snapshot_id, include_blocked=True) if row['object_id'] == object_id]) == 2
 

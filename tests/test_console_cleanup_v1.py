@@ -90,8 +90,9 @@ def test_review_action_is_visible_and_only_own_human_decisions_start_review(tmp_
         "snapshot_id": snapshot, "snapshot_revision": revision,
         "object_ids": [heading["object_id"]],
     }, follow_redirects=False)
-    assert response.status_code == 303
-    # A heading confirmation in Vorming does not prove a personal content decision.
+    assert response.status_code == 404
+    assert console.objects_revision(snapshot) == revision
+    # A retired heading command cannot start a personal review.
     assert ">Beginnen</a>" in client.get("/review").text
 
 
@@ -123,12 +124,8 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, 
     assert "Documentdiagnose" in technical.text
     assert "Reviewinteracties" in technical.text
     redirect = client.get("/review", params={"document": snapshot, "task": "repair"}, follow_redirects=False)
-    assert redirect.status_code == 303
-    assert redirect.headers['location'].startswith('/source-selection?')
-    owner = client.get(redirect.headers['location'])
-    assert owner.status_code == 200 and "Vorming" in owner.text
-    assert "Passages corrigeren" in owner.text
-    assert "Diagnostiek en brondekking" not in owner.text
+    assert redirect.status_code == 404
+    assert "location" not in redirect.headers
     _login(client, "publisher.carla")
     assert client.get("/inzicht?tab=documenten").status_code == 200
     publisher_diagnosis = client.get("/inzicht/document", params={"document": snapshot})
@@ -141,7 +138,7 @@ def test_task_back_link_keeps_selected_document_and_search(tmp_path, *, producti
     client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
     response = client.get("/review", params={"document": first["snapshot_id"],
-                          "task": "structure", "q": "Document A", "page": 2})
+                          "task": "contextual", "q": "Document A", "page": 2})
     assert response.status_code == 200
     back = [attrs["href"] for tag, attrs in Tags(response.text).tags
             if tag == "a" and "q=Document+A" in attrs.get("href", "")]

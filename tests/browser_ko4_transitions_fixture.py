@@ -74,6 +74,8 @@ def _seed():
                 relation_review_ack=True, assessment=YES, evidence_not_applicable=True)
         documents[slug] = {'snapshot_id': sid, 'object_id': focal['object_id'],
             'support_object_id': by_text[SUPPORT]['object_id'] if slug == 'link' else None,
+            'correction_unit': next(row['unit_id'] for row in console.source_units(snapshot_id=sid, object_id=focal['object_id'])
+                                    if row['text'] == CORRECTION) if slug == 'not-applicable' else None,
             'correction_text': CORRECTION if slug == 'not-applicable' else None}
     value = {'documents': documents,
         'people': {name: {'username': person['username'], 'account_id': person['account_id']}

@@ -17,7 +17,6 @@ from fastapi.testclient import TestClient
 from src.review.revision_workflow import revise_object
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
 from tests.test_source_context_review_v1 import _system
-from tests.test_source_context_review_ui_v1 import _link_form, _payload
 from tests.test_workflow_postgres_concurrency import _envelope, _authorization
 
 
@@ -64,11 +63,11 @@ def test_source_command_cost_is_independent_of_retained_history_and_other_docume
                            follow_redirects=False).status_code == 303
 
         def decide(label):
-            page = client.get('/source-selection', params={'document': sid,
-                'object': source['object_id'], 'context_target': target['object_id']})
+            page = client.get('/review', params={'document': sid, 'object': target['object_id']})
             assert page.status_code == 200
-            payload = _payload(_link_form(page))
-            assert payload['snapshot_revision'].startswith('review-generation-v1:')
+            import re
+            revision = re.search(r'name="snapshot_revision" value="([^"]+)"', page.text)[1]
+            assert revision.startswith('review-generation-v1:')
             with monkeypatch.context() as guard:
                 def forbidden(*args, **kwargs):
                     raise AssertionError('source command used an unbounded or extract path')
@@ -83,9 +82,8 @@ def test_source_command_cost_is_independent_of_retained_history_and_other_docume
                 guard.setattr(reviews, 'read_bindings', scoped)
                 holds.clear()
                 started = monotonic()
-                result = client.post('/review/source-context', data=payload, follow_redirects=False)
+                state.confirm_source_context(**{**command, 'command_id': label, 'expected_revision': revision})
                 elapsed = monotonic() - started
-            assert result.status_code == 303, result.text
             assert len(holds) == 1
             timings.append({'workload': label, 'post_seconds': elapsed, 'outer_lock_seconds': holds[0]})
             assert elapsed <= 3, timings

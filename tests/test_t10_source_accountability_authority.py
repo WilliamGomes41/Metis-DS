@@ -147,7 +147,7 @@ def test_projection_wrappers_ui_and_t9_duties_share_one_snapshot():
     for name, action in (("repair", "technical_repair"), ("disposition", "source_disposition")):
         assert {o["object_id"] for o in queues[name]} == {oid for oid, r in projection.items() if r["human_action"] == action}
     assert source_passage_closure(rows, projection=projection) == source_closure(projection)
-    page = _render_review_index("snapshot", rows, "richtlijn", bindings=[], fragments=fragments, task="repair")
+    page = _render_review_index("snapshot", rows, "richtlijn", bindings=[], fragments=fragments, task="inventory")
     assert f'data-source-record="{source["object_id"]}"' in page
     assert "Technisch herstel nodig" in page
     assert rows == before
@@ -226,7 +226,8 @@ def test_corrupt_source_detail_requests_repair_not_a_human_disposition():
     rows = context_story()
     source = _linked(rows)
     source["metadata"][KEY]["binding_hash"] = "bad"
-    page = _source_context_panel(source, rows, "snapshot", "revision")
+    from src.vorming.source_containers_v1 import source_accountability
+    page = _source_context_panel(source, rows, "snapshot", projection=source_accountability(rows))
     assert "data-source-repair" in page
     assert 'action="/review/source-context"' not in page
 
@@ -295,9 +296,9 @@ def test_machine_context_target_repair_has_inventory_priority_over_review_duty()
     target["metadata"]["source_bound_context"]["entries"][0]["text"] = "corrupt"
     state = source_accountability(rows, bindings=[], fragments=fragments)
     assert state[target["object_id"]]["human_action"] == "technical_repair"
-    page = _render_review_index("snapshot", rows, "richtlijn", bindings=[], fragments=fragments, task="repair")
+    page = _render_review_index("snapshot", rows, "richtlijn", bindings=[], fragments=fragments, task="inventory")
     assert f'data-passage-id="{target["object_id"]}" data-passage-category="repair"' in page
-    panel = _source_context_panel(target, rows, "snapshot", "revision", projection=state)
+    panel = _source_context_panel(target, rows, "snapshot", projection=state)
     assert "data-source-repair" in panel and '<form' not in panel
 
 
@@ -324,16 +325,16 @@ def test_admission_blocked_keeps_existing_correction_card(tmp_path, *, productio
     current = next(o for o in rows if o["object_id"] == target["object_id"])
     current["metadata"]["admission"]["gate_result"] = "blocked"
     projection = source_accountability(rows, bindings=[], fragments=console.review_source_fragments(sid))
-    panel = _source_context_panel(current, rows, sid, console.objects_revision(sid), projection=projection)
+    panel = _source_context_panel(current, rows, sid, projection=projection)
     assert "data-source-repair" not in panel
-    assert not _source_context_card(console, sid, current, panel, context_target="", context_mode="", task="repair")
+    assert not _source_context_card(console, sid, current, panel, context_target="", context_mode="", task="inventory")
     card = _render_review_card(console, sid, current, rows, "richtlijn", {}, "")
-    assert "Correctie specificeren" in card
+    assert "task=repair" not in card
 
     from src.operations_console_app import _render_review_room
     page = _render_review_room(console, reviewer, document=sid, object=current["object_id"],
-        task="repair", snapshot=(rows, console.objects_revision(sid)))
-    assert "Correctie specificeren" in page
+        task="inventory", snapshot=(rows, console.objects_revision(sid)))
+    assert "task=repair" not in page
 
 
 @pytest.mark.parametrize("retained", ["valid", "missing", "corrupt"])
