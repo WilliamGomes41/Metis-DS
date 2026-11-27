@@ -267,12 +267,14 @@ def test_review_default_document_dashboard_uses_projection_without_snapshot_read
 
 def test_review_task_detail_keeps_one_bounded_selected_snapshot_read(hotpath):
     h=hotpath
-    review=h.client.get('/review',params={'document':h.snapshots[1],'task':'structure'})
+    review=h.client.get('/review',params={'document':h.snapshots[1],'task':'batch'})
     assert review.status_code==200 and 'Unpublished fixture' in review.text
     assert h.calls['statuses']==1 and h.calls['current_window']==1,dict(h.calls)
     assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
     assert set(h.single_reads)=={h.snapshots[1]},h.single_reads
     assert len(h.single_reads)==1,h.single_reads
+    # Guideline headings are confirmed in Vorming; Review has no structure task for them (#1180).
+    assert h.client.get('/review',params={'document':h.snapshots[1],'task':'structure'}).status_code==404
 
 
 def test_status_middleware_slow_sync_read_does_not_block_event_loop(hotpath,monkeypatch):

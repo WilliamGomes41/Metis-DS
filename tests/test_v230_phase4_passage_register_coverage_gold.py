@@ -624,7 +624,7 @@ def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path, *, production_
     ).text
     card = _card(html, adviseert["object_id"])
     assert "Staat dit op de juiste plek?" in card
-    assert "Andere plek kiezen" in card and "/source-selection?" in card
+    assert "Andere plek kiezen" not in card and "task=repair" not in card
     assert "Open volledige bron" in card
     assert "Is dit toepasbaar?" in card and "Is dit compleet?" in card
     assert re.search(r'<button[^>]+value="approve"[^>]+disabled', card)

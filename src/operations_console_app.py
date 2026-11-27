@@ -2578,7 +2578,8 @@ def _review_inventory(
                 + ('<span class="source-state-badge">Afgehandeld</span>' if state == "handled" else '') +
                 f'<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
-                + ('</li>' if source_only else f'<a href="/source-selection?document={_esc(snapshot_id)}&amp;task=disposition">Brongebruik verantwoorden</a></li>')))
+                + f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Bekijk bronpassage</a>'
+                + ('</li>' if source_only else f' · <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=disposition">Brongebruik verantwoorden</a></li>')))
             continue
         if is_source_record(obj):
             evidence = evidence_of(obj)
