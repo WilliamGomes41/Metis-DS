@@ -616,7 +616,14 @@ def test_upload_entry_follows_source_class(production_console, tmp_path, klasse,
             drain(client, client.app)
             attempt, = console._processing_history_envelope(sid)['processing_attempts']
             assert attempt['dispatch']['version'] == 'source-dispatch-v1' and attempt['state'] == 'succeeded'
-            assert client.get('/source-selection', params={'document':sid, 'task':'graph'}).status_code == 200
+            from tests.test_insight_diagnostics_navigation_v1 import Links
+            card = client.get(response.headers['location'])
+            graph = f'/source-selection?document={sid}&task=graph'
+            assert graph in Links(card.text).hrefs
+            graph_page = client.get(graph)
+            review = f'/review/decision-graph?document={sid}'
+            assert graph_page.status_code == 200 and review in Links(graph_page.text).hrefs
+            assert '<h1>Beslisroutes beoordelen</h1>' in client.get(review).text
         else:
             before = console.workflow_document_store.get_envelope(sid)
             for _ in range(2):
