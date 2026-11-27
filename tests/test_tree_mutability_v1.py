@@ -49,10 +49,10 @@ def test_closed_document_has_no_mutation_forms_and_stale_posts_fail(tmp_path, st
     for path, fields in (
         ("/tree/move", {"new_family": "Ander onderwerp"}),
         ("/tree/promote", {"new_class": "artikel", "confirm": "1"}),
-        ("/tree/reprocess", {}),
     ):
         response = client.post(path, data={"snapshot_id": sid, **fields}, follow_redirects=False)
         assert response.status_code in {400, 409}
+    assert client.post("/tree/reprocess", data={"snapshot_id": sid}, follow_redirects=False).status_code == 404
     assert (console._envelope(sid), console.snapshot_objects(sid, include_blocked=True)) == before
     restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_is_published(sid)

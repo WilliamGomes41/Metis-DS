@@ -63,8 +63,9 @@ def test_incompatible_resume_rejected_before_work(partial, changed_mode, changed
                 "document": sid, "command_id": command["command_id"],
                 "expected_revision": command["expected_revision"],
             }, follow_redirects=False)
-            assert result.status_code == 400, "INCOMPATIBLE_RESUME_ACCEPTED"
-            assert "processing_resume_configuration_incompatible" in result.text
+            assert result.status_code == 404
+            with pytest.raises(ConsoleError, match="processing_resume_configuration_incompatible"):
+                restarted.reserve_source_selection(**command)
             drain(client, app)
     else:
         with pytest.raises(ConsoleError, match="processing_resume_configuration_incompatible"):
@@ -76,7 +77,7 @@ def test_incompatible_resume_rejected_before_work(partial, changed_mode, changed
     assert not restarted.publication_readiness(sid)["publish_allowed"]
 
 
-def test_compatible_http_resume_preserves_checkpoint_and_only_sends_open_range(partial):
+def test_compatible_kernel_resume_preserves_checkpoint_and_only_sends_open_range(partial):
     console, sid, actor, _, calls, mode, make, bind = partial
     before = deepcopy(console.snapshot_objects(sid))
     retained = next(o for o in before if o["content"]["clean_text"] == FIRST)
@@ -91,9 +92,13 @@ def test_compatible_http_resume_preserves_checkpoint_and_only_sends_open_range(p
                            follow_redirects=False).status_code == 303
         command = {"document": sid, "command_id": "compatible-resume",
                    "expected_revision": restarted.objects_revision(sid)}
-        assert client.post("/source-selection/start", data=command, follow_redirects=False).status_code == 303
-        drain(client, app)
-        assert client.post("/source-selection/start", data=command, follow_redirects=False).status_code == 303
+        assert client.post("/source-selection/start", data=command, follow_redirects=False).status_code == 404
+        args = dict(actor_id=actor, snapshot_id=sid, command_id=command["command_id"], expected_revision=command["expected_revision"])
+        attempt, fresh = restarted.reserve_source_selection(**args)
+        assert fresh
+        restarted.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+        duplicate, fresh = restarted.reserve_source_selection(**args)
+        assert not fresh and duplicate["attempt_id"] == attempt["attempt_id"]
     assert len(calls) == prior_calls + 1
     payload = json.loads(calls[-1]["input"][1]["content"])
     assert [b["text"] for b in payload["source_blocks"]] == [SECOND]

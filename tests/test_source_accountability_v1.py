@@ -151,59 +151,20 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
             assert review.status_code == 200
             assert not any(f['attrs'].get('action') == '/review/source-exclusions' for f in Forms(review.text).forms)
             assert 'name="source_object_ids"' not in review.text
-            assert 'Bronregels gemotiveerd uitsluiten in Vorming' in review.text
+            assert 'Bronregels gemotiveerd uitsluiten in Vorming' not in review.text
         calls.clear()
         client.get('/review', params={'document': sid, 'task': 'inventory'})
         assert calls.get('native_object_reads') == 1
         calls.clear()
         owner = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
-        assert owner.status_code == 200 and '<h1>Vorming</h1>' in owner.text
-        assert calls.get('snapshot_objects_and_revision', 0) == 0
-        # Review now captures below the old snapshot helper. Count actual native
-        # payload reads on both routes rather than comparing unlike API calls.
+        assert owner.status_code == 404
         assert calls.get('native_object_reads', 0) == 0
+        data = dict(snapshot_id=sid, source_object_ids=command['source_object_ids'],
+                    reason=command['reason'], command_id=command['command_id'],
+                    snapshot_revision=state.objects_revision(sid), source_checked='1')
+        assert client.post('/review/source-exclusions', data=data, follow_redirects=False).status_code == 404
         assert state.snapshot_objects(sid) == before
         assert state.workflow_review_store.read_events() == events
-        form = next(f for f in Forms(owner.text).forms if f['attrs'].get('action') == '/review/source-exclusions')
-        selected = [f['value'] for f in form['inputs'] if f.get('name') == 'source_object_ids']
-        assert set(selected) == set(command['source_object_ids'])
-        data = {f['name']: f.get('value', '') for f in form['inputs'] if f.get('type') == 'hidden'}
-        data.update(source_object_ids=selected, reason=command['reason'])
-        assert data['snapshot_revision'].startswith('review-generation-v1:')
-        with monkeypatch.context() as published:
-            published.setattr(state, 'snapshot_is_published', lambda _: True)
-            frozen = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
-            assert frozen.status_code == 200
-            assert not any(f['attrs'].get('action') == '/review/source-exclusions' for f in Forms(frozen.text).forms)
-            assert 'name="source_object_ids"' not in frozen.text
-        stale = client.post('/review/source-exclusions', data={**data, 'snapshot_revision': 'stale', 'source_checked': '1'})
-        # This endpoint retains the existing generic ConsoleError mapping (400).
-        # The kernel must still report the actual revision conflict, without writes.
-        assert stale.status_code == 400
-        assert 'Het document is tussentijds gewijzigd.' in stale.text
-        assert state.snapshot_objects(sid) == before
-        assert state.workflow_review_store.read_events() == events
-        outsider = TestClient(client.app, base_url='https://testserver')
-        assert outsider.post('/login', data={'username': 'author', 'password': 'long-test-password'}, follow_redirects=False).status_code == 303
-        assert outsider.get('/source-selection', params={'document': sid, 'task': 'disposition'}).status_code == 403
-        assert outsider.post('/review/source-exclusions', data={**data, 'source_checked': '1'}).status_code == 403
-        assert client.post("/review/source-exclusions", data=data).status_code == 400
-        assert state.snapshot_objects(command["snapshot_id"]) == before
-        assert state.workflow_review_store.read_events() == events
-        response = client.post("/review/source-exclusions", data={**data, "source_checked": "1"}, follow_redirects=False)
-        assert response.status_code == 303, response.text
-        assert response.headers['location'].startswith('/source-selection?') and 'task=disposition' in response.headers['location']
-        refresh = client.get(response.headers['location'])
-        assert refresh.status_code == 200 and 'action="/review/source-exclusions"' not in refresh.text
-        assert 'data-source-category="reviewed"><b>2</b>' in refresh.text
-        current = state.snapshot_objects(sid)
-        assert all(row['metadata']['passage_register']['status'] == 'excluded_with_reason'
-                   for row in current if row['object_id'] in selected)
-        assert all(row in current for row in before if row['object_id'] not in selected)
-        assert client.post('/review/source-exclusions', data={**data, 'source_checked': '1'}, follow_redirects=False).status_code == 409
-        assert state.snapshot_objects(sid) == current
-        restarted = production_console(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime', processing_binder=lambda console: None)
-        assert restarted.snapshot_objects(sid) == current
 
 
 def test_native_source_batch_commit_failure_stale_worker_and_restart(recovery_postgres, tmp_path, *, production_console):

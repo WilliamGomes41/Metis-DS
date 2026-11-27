@@ -190,7 +190,7 @@ def test_open_document_keeps_full_formation_warning(tmp_path, production_console
         login(client, 'reviewer')
         page = client.get('/review', params={'document': sid, 'task': task})
     assert page.status_code == 200
-    assert 'data-formation-incomplete' in page.text and 'Vormingsproblemen behandelen' in page.text
+    assert 'data-formation-incomplete' in page.text and f'href="/inzicht/document?document={sid}">Bekijk documentdiagnose' in page.text
     assert calls == [1] and not comparisons
     assert (console.snapshot_objects(sid), console._envelope(sid)) == before
 

@@ -216,7 +216,7 @@ def test_passage_notice_does_not_mix_a_new_document_generation_into_captured_inp
             inputs = replace(inputs, envelope={**inputs.envelope, 'version': 'earlier-version'})
         changed_reads.setattr(store, 'get_envelope', lambda snapshot_id: deepcopy(changed))
         changed_reads.setattr(console, 'processing_status', status)
-        notice = _review_formation_notice(console, sid, inputs)
+        notice = _review_formation_notice(console, sid, inputs, review_path="richtlijn")
         assert console._document_reads().envelopes[sid] is captured_header
     assert 'data-document-assessment="not_evaluated"' in notice
     assert captured == [], 'A stale/new full-source tuple is never used for passage closure'
@@ -265,7 +265,7 @@ def test_passage_capture_keeps_bindings_stable_when_writer_commits(tmp_path, pro
     with console.document_read_operation():
         inputs = read_review_passage(console, actor, sid, obj['object_id'])
         assert not any(row.get('test_after_capture') for row in inputs.bindings)
-        assert 'data-document-assessment="not_evaluated"' in _review_formation_notice(console, sid, inputs)
+        assert 'data-document-assessment="not_evaluated"' in _review_formation_notice(console, sid, inputs, review_path="richtlijn")
     with console.document_read_operation():
         fresh = read_review_passage(console, actor, sid, obj['object_id'])
     found = [row for row in fresh.bindings if row.get('test_after_capture')]

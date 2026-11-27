@@ -157,28 +157,13 @@ def test_http_group_form_shows_open_members_and_confirms_them(tmp_path, *, produ
         assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
                            follow_redirects=False).status_code == 303
         page = client.get("/source-selection", params={"document": sid, "task": "disposition"})
-        form = next(f for f in Forms(page.text).forms if f["attrs"].get("action") == "/review/source-group")
-        shown = [i["value"] for i in form["inputs"] if i.get("name") == "shown_object_ids"]
-        assert set(shown) == {first["object_id"], second["object_id"]}
-        data = {i["name"]: i.get("value", "") for i in form["inputs"]
-                if i.get("type") == "hidden" and i["name"] not in {"shown_object_ids", "section_path"}}
-        data.update(shown_object_ids=shown, source_object_ids=[first["object_id"]],
-                    section_path=[i["value"] for i in form["inputs"] if i.get("name") == "section_path"],
-                    reason="Geen op te nemen kennis.")
+        assert page.status_code == 404
+        command = _command(state, sid, _reviewer, ids=[first['object_id'], second['object_id']])
+        data = {**command, 'source_checked':'1', 'snapshot_revision':command['expected_revision']}
         before = state.snapshot_objects(sid)
-        assert client.post("/review/source-group", data=data).status_code == 400  # No check, no write.
+        for route in ('/review/source-group', '/review/source-group/reset'):
+            assert client.post(route, data=data, follow_redirects=False).status_code == 404
         assert state.snapshot_objects(sid) == before
-        done = client.post("/review/source-group", data={**data, "source_checked": "1"}, follow_redirects=False)
-        assert done.status_code == 303
-        after = client.get(done.headers["location"])
-        reset = next(f for f in Forms(after.text).forms if f["attrs"].get("action") == "/review/source-group/reset")
-        assert {i.get("value") for i in reset["inputs"] if i.get("name") == "group_command_id"} == {data["command_id"]}
-        remaining = next(f for f in Forms(after.text).forms if f["attrs"].get("action") == "/review/source-group")
-        assert [i["value"] for i in remaining["inputs"] if i.get("name") == "shown_object_ids"] == [second["object_id"]]
-    with TestClient(production_app(state), base_url="https://testserver") as outsider:
-        assert outsider.post("/login", data={"username": "author", "password": "long-test-password"},
-                             follow_redirects=False).status_code == 303
-        assert outsider.post("/review/source-group", data={**data, "source_checked": "1"}).status_code == 403
 
 
 def test_single_and_group_commands_write_the_same_source_state(tmp_path, *, production_console):
@@ -280,8 +265,6 @@ def test_one_section_with_two_proposed_reasons_gets_two_groups_and_reset_stays_w
     with TestClient(production_app(state), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
                            follow_redirects=False).status_code == 303
-        page = client.get("/source-selection", params={"document": sid, "task": "disposition"}).text
-    resets = [f for f in Forms(page).forms if f["attrs"].get("action") == "/review/source-group/reset"]
-    assert len(resets) == 1  # Only beside the excluded group, not beside the still-open one.
-    opened = [f for f in Forms(page).forms if f["attrs"].get("action") == "/review/source-group"]
-    assert [i["value"] for f in opened for i in f["inputs"] if i.get("name") == "group_reason"] == ["uncertain_source_role"]
+        assert client.get("/source-selection", params={"document":sid,"task":"disposition"}).status_code == 404
+    remaining = source_group_candidates(state.snapshot_objects(sid))
+    assert [key[1] for key in remaining] == ['uncertain_source_role']

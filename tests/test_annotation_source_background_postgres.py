@@ -499,7 +499,7 @@ def test_formed_replay_keeps_existing_card_and_rejects_direct_prepare(production
         client.post('/login', data={'username': console._account(author)['username'], 'password': 'fixture-only'})
         card = client.get('/source-selection', params={'selected_document': sid})
         assert card.status_code == 200
-        assert 'Bekijk diagnose in Inzicht' in card.text and 'Bekijk status bouwopdrachten' not in card.text
+        assert 'Nieuwe bronversie inleveren' in card.text and 'Bekijk diagnose in Inzicht' not in card.text
         with pytest.raises(ConsoleError, match='annotation_existing_work_requires_takeover'):
             reserve(console, actor_id=author, snapshot_id=sid, command_id='invalid-takeover', expected_revision=revision)
     assert console.objects_revision(sid) == revision
@@ -530,8 +530,7 @@ def test_decision_tree_retains_its_card_and_cannot_start_annotation(production_c
 
 
 
-def test_stopped_automatic_attempt_keeps_its_processing_card(production_console, tmp_path):
-    """Besluit projectlead (26-11-2026, #1172): automatic processing keeps status and recovery."""
+def test_stopped_automatic_attempt_allows_annotation_without_reserving_again(production_console, tmp_path):
     from src.operations_console_v1 import ConsoleError
     from src.vorming.source_processing_dispatch_v1 import claim
 
@@ -547,7 +546,7 @@ def test_stopped_automatic_attempt_keeps_its_processing_card(production_console,
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username':'source-worker','password':'fixture-only'})
         rows = client.get('/source-selection/progress', params={'snapshot': sid}).json()['rows']
-        assert all('manual_detail' not in row for row in rows)
+        assert rows == []
         card = client.get('/source-selection', params={'selected_document': sid})
-        assert 'Bekijk status bouwopdrachten' not in card.text
+        assert 'Bekijk status bouwopdrachten' in card.text and '>Annoteren</button>' in card.text
         assert f'data-source-document="{sid}"' in card.text

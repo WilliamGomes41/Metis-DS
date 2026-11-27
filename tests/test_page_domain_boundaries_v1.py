@@ -77,8 +77,8 @@ def test_unknown_reason_and_missing_identity_are_evidence_not_invented_editor_id
 
 
 @pytest.mark.parametrize(('code', 'path', 'task'), [
-    ('source_passage_review_incomplete', '/source-selection', None),
-    ('source_formation_incomplete', '/source-selection', None),
+    ('source_passage_review_incomplete', '/inzicht/document', None),
+    ('source_formation_incomplete', '/inzicht/document', None),
     ('pre_review_processing_incomplete', '/source-selection', None),
     ('review_work_incomplete', '/review', None),
     ('four_eyes_required', '/review', None),
@@ -90,6 +90,9 @@ def test_publication_explains_blocker_and_opens_its_existing_owner(code, path, t
     assert url.path == path
     assert parse_qs(url.query) == {'document': ['snapshot & exact'], **({'task': [task]} if task else {})}
     assert view['code'] == code
+    if code in {'source_passage_review_incomplete', 'source_formation_incomplete'}:
+        tree = _blocker_view(code, 'snapshot & exact', decision_tree=True)
+        assert urlsplit(tree['recovery_href']).path == '/source-selection'
 
 
 def test_unknown_publication_gate_does_not_invent_a_human_task():

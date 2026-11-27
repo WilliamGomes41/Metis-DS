@@ -139,7 +139,7 @@ def test_actual_authenticated_routes_report_owner_phases(review_client,events):
     console,client,sid=review_client
     observed=client  # Production already installs the diagnostics middleware.
     before=json.dumps(console.snapshot_objects(sid),sort_keys=True)
-    for route,phase in [('/source-selection','selection_projection'),('/review','review_render')]:
+    for route,phase in [('/source-selection','document_list'),('/review','review_render')]:
         response=observed.get(route,params={'document':sid})
         assert response.status_code==200
         finished=[r for r in events if r['event']=='request_finished' and r['route']==route][-1]

@@ -126,7 +126,7 @@ def test_extraction_record_survives_freezing():
     assert freeze_extraction(None) is None
 
 
-def test_source_selection_detail_reads_source_once(formation_document, production_app):
+def test_guideline_card_does_not_reconstruct_automatic_source(formation_document, production_app):
     from fastapi.testclient import TestClient
     console, _, sid = formation_document
     client = TestClient(production_app(console), base_url="https://testserver")
@@ -138,9 +138,8 @@ def test_source_selection_detail_reads_source_once(formation_document, productio
     assert response.status_code == 200
     finished = [row for row in seen if row.get("event") == "request_finished"][-1]
     counters = finished["counters"]
-    assert counters.get("source_reconstruction_built", 0) <= 2, counters
     assert counters.get("source_input_compared", 0) <= 2, counters
-    assert counters.get("source_reconstruction_reused", 0) >= SELECTED, counters
+    assert counters.get("source_reconstruction_built", 0) == 0, counters
 
 
 @pytest.mark.parametrize("route", ["docling-retained-pdf", "decision-boom", "legacy-html"])

@@ -580,16 +580,20 @@ def test_structural_dependency_does_not_revoke_an_unchanged_claim_review(product
     assert [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id] == first_binding
 
 
-@pytest.mark.parametrize('klasse,target', [('beslisboom','/source-selection'), ('richtlijn','/annotations')])
+@pytest.mark.parametrize('klasse,target', [('beslisboom','/source-selection'), *[(klasse, '/annotations') for klasse in ('richtlijn', 'handreiking', 'artikel', 'transcript', 'podcast')]])
 def test_upload_entry_follows_source_class(production_console, tmp_path, klasse, target):
     import fitz
     from starlette.testclient import TestClient
     from tests.production_support import application_for
-    console = production_console(root=tmp_path)
+    from tests.semantic_fixture_support import bind_fixture_selections
+    console = production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     console.create_account(username='tree-author', password='tree-author-secret', roles=('researcher','reviewer'))
     with fitz.open() as pdf:
         pdf.new_page().insert_text((72,72), 'Brontekst voor menselijke annotatie.')
         data = pdf.tobytes()
+    if klasse == 'beslisboom':
+        from tests.test_decision_graph_chain import source_pdf
+        data = source_pdf()
     with TestClient(application_for(console)) as client:
         client.post('/login', data={'username':'tree-author', 'password':'tree-author-secret'})
         response = client.post('/ingest', data={'ingest_kind':'new','title':'Bron',
@@ -603,6 +607,34 @@ def test_upload_entry_follows_source_class(production_console, tmp_path, klasse,
         assert page.status_code == 200
         assert ('action="/source-selection/start"' in page.text) == (klasse == 'beslisboom')
         assert ('Bron openen voor annotatie' in page.text) == (klasse != 'beslisboom')
+        from urllib.parse import parse_qs, urlsplit
+        sid = parse_qs(urlsplit(response.headers['location']).query)['document'][0]
+        command = {'document':sid, 'expected_revision':console.objects_revision(sid), 'command_id':'direct-start'}
+        if klasse == 'beslisboom':
+            from tests.test_availability_repair import drain
+            assert client.post('/source-selection/start', data=command, follow_redirects=False).status_code == 303
+            drain(client, client.app)
+            attempt, = console._processing_history_envelope(sid)['processing_attempts']
+            assert attempt['dispatch']['version'] == 'source-dispatch-v1' and attempt['state'] == 'succeeded'
+            from tests.test_insight_diagnostics_navigation_v1 import Links
+            card = client.get(response.headers['location'])
+            graph = f'/source-selection?document={sid}&task=graph'
+            assert graph in Links(card.text).hrefs
+            graph_page = client.get(graph)
+            review = f'/review/decision-graph?document={sid}'
+            assert graph_page.status_code == 200 and review in Links(graph_page.text).hrefs
+            assert '<h1>Beslisroutes beoordelen</h1>' in client.get(review).text
+        else:
+            before = console.workflow_document_store.get_envelope(sid)
+            for _ in range(2):
+                assert client.post('/source-selection/start', data=command, follow_redirects=False).status_code == 404
+            assert client.get('/source-selection', params={'document':sid,'task':'disposition'}).status_code == 404
+            assert client.get('/source-selection/progress', params={'snapshot':sid}).json() == {'rows':[]}
+            assert console.workflow_document_store.get_envelope(sid) == before
+            assert not console.snapshot_objects(sid)
+            with console.workflow_document_store._connect() as con:
+                assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s', (sid,)).fetchone()['n'] == 0
+
 
 
 def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(production_console, tmp_path):

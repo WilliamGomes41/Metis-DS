@@ -14,8 +14,9 @@ def blocked_source(console, author, reviewer, name, *, pages=False):
         data = pdf.tobytes()
     sid = console.receive_source(actor_id=author, filename=name + '.pdf', data=data,
         content_type='application/pdf', ingest_kind='new', title=name, version='1',
-        date='2026-10-26', live_url='', class_='richtlijn', family=name,
-        named_reviewers=[author, reviewer], command_id='receive-' + name)['snapshot_id']
+        date='2026-10-26', live_url='', class_='beslisboom', family=name,
+        named_reviewers=[], review_policy={'contract': 'explicit-review-v1', 'revision': 1,
+            'primary': author, 'assignments': [{'reviewer_id': reviewer, 'participation': 'optional'}]}, command_id='receive-' + name)['snapshot_id']
     limits = ModelCallLimits(max_attempts=1)
     console._model_call_limits_reader = lambda: limits
     with console._reprocessing_transaction(sid):

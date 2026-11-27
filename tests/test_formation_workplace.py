@@ -72,7 +72,7 @@ def test_annotation_entry_and_legacy_navigation_do_not_start_work(tmp_path, prod
     assert durable(console, sid) == before and not calls
 
 
-def test_partial_resume_uses_rendered_command_after_restart(tmp_path, production_console, monkeypatch):
+def test_historical_partial_formation_cannot_resume_through_the_card_after_restart(tmp_path, production_console, monkeypatch):
     console, sid, author, _, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'initial')
     before = durable(console, sid)
@@ -85,26 +85,14 @@ def test_partial_resume_uses_rendered_command_after_restart(tmp_path, production
         login(client)
         page = client.get('/source-selection', params={'document': sid})
         assert page.status_code == 200 and page.url.path == '/source-selection'
-        assert SECOND in page.text and 'Bekijk en behandel dit bronstuk' in page.text
-        assert 'Hervatten</button>' in page.text and 'Naar Review' in page.text
-        forms = StartForm(page.text).forms
-        assert len(forms) == 1 and durable(console, sid) == before and len(calls) == 3
-        form = forms[0]
-        stale = client.post('/source-selection/start', data={**form, 'expected_revision': 'stale'}, follow_redirects=False)
-        assert stale.status_code == 400 and durable(console, sid) == before
-        mode['broken'] = False
-        posted = client.post('/source-selection/start', data=form, follow_redirects=False)
-        assert posted.status_code == 303 and posted.headers['location'] == f'/source-selection?document={sid}'
-        drain(client, app)
-        assert len(calls) == 4 and [b['text'] for b in calls[-1]['source_blocks']] == [SECOND]
-        again = client.post('/source-selection/start', data=form, follow_redirects=False)
-        assert again.status_code == 303 and len(calls) == 4
-        refreshed = client.get(posted.headers['location'])
-        assert refreshed.status_code == 200 and 'Geen open vormingsproblemen' in refreshed.text
-        assert not StartForm(refreshed.text).forms
-        current = console.snapshot_objects(sid)
-        assert next(o for o in current if o['object_id'] == first['object_id']) == first
-        assert console.object_review_bindings(sid) == before[2]
+        assert 'Bekijk status bouwopdrachten' in page.text
+        assert not StartForm(page.text).forms
+        assert 'Vormingsproblemen' not in page.text
+        for revision in ('stale', console.objects_revision(sid)):
+            refused = client.post('/source-selection/start', data={'document':sid, 'expected_revision':revision,
+                                  'command_id':'old-retry'}, follow_redirects=False)
+            assert refused.status_code == 404
+        assert durable(console, sid) == before and len(calls) == 3
         assert not console.publication_readiness(sid)['publish_allowed']
 
 

@@ -162,11 +162,9 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     sid = envelope["snapshot_id"]
     selected = client.post("/source-selection/start", data={"document": sid, "command_id": "filename-selection",
                           "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
-    assert selected.status_code == 303
-    async def wait():
-        import asyncio
-        await asyncio.gather(*tuple(client.app.state.source_selection_workers))
-    client.portal.call(wait)
+    assert selected.status_code == 404
+    from tests.test_review_formation_problems import execute
+    execute(console, sid, envelope['uploader_account_id'], 'legacy-labels')
     # Production routes require the assigned reviewer, not the uploader.
     client.cookies.clear()
     assert client.post("/login", data={"username": "reviewer", "password": REVIEWER_PASSWORD}).status_code == 200

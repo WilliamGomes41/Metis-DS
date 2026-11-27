@@ -19,12 +19,16 @@ def test_excluded_rows_and_fully_handled_groups_are_marked_handled(tmp_path, *, 
     with TestClient(production_app(state), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
                            follow_redirects=False).status_code == 303
-        html = client.get(f"/source-selection?document={sid}&task=disposition").text
+        assert client.get(f"/source-selection?document={sid}&task=disposition").status_code == 404
     # The markers do not widen access: a user not named on the document is still refused.
     with TestClient(production_app(state), base_url="https://testserver") as outsider:
         assert outsider.post("/login", data={"username": "author", "password": "long-test-password"},
                              follow_redirects=False).status_code == 303
-        assert outsider.get(f"/source-selection?document={sid}&task=disposition").status_code == 403
+        assert outsider.get(f"/source-selection?document={sid}&task=disposition").status_code == 404
+    from src.operations_console_app import _review_inventory
+    html = _review_inventory(sid, state.snapshot_objects(sid), review_path='richtlijn', bindings=None,
+                             reviewer_id=reviewer, task='inventory', snapshot_revision=state.objects_revision(sid),
+                             source_only=True, edit_exclusions=True)
     for oid in ids:
         assert f'data-source-record="{oid}" data-source-state="handled"><span class="source-state-badge">Afgehandeld</span>' in html
     open_ids = [r["object_id"] for r in state.snapshot_objects(sid) if r["object_id"] not in ids]

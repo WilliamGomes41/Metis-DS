@@ -131,13 +131,13 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
     _persist(console, durable)
     original_title = durable['envelope']['title']
     entered, release = Event(), Event()
-    original = ui.projection
+    original = ui.comparable_observations
     def blocked(*args, **kwargs):
         if not entered.is_set():
             entered.set()
             assert release.wait(5)
         return original(*args, **kwargs)
-    monkeypatch.setattr(ui,'projection',blocked)
+    monkeypatch.setattr(ui,'comparable_observations',blocked)
     with ThreadPoolExecutor() as pool:
         first = pool.submit(client.get, '/source-selection', params={'document':sid})
         try:
@@ -153,7 +153,7 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
     assert 'Concurrent new title' not in earlier.text
     def fail(*args, **kwargs):
         raise ConsoleError('workflow_document_unavailable')
-    monkeypatch.setattr(ui,'projection',fail)
+    monkeypatch.setattr(ui,'comparable_observations',fail)
     endpoint = next(r for r in client.app.routes if getattr(r,'path',None)=='/source-selection')
     scoped = endpoint.dependant.call
     cleaned = []
@@ -166,7 +166,7 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
     endpoint.dependant.call = observed
     try:
         assert client.get('/source-selection', params={'document': sid}).status_code >= 400
-        monkeypatch.setattr(ui,'projection',original)
+        monkeypatch.setattr(ui,'comparable_observations',original)
         assert client.get('/source-selection', params={'document': sid}).status_code == 200
     finally:
         endpoint.dependant.call = scoped
@@ -210,8 +210,11 @@ def test_no_start_form_skips_revision_and_stale_start_is_rejected(postgres_selec
     response = client.post('/source-selection/start', data={
         'document':sid, 'command_id':'stale-read-proof', 'expected_revision':expected_revision},
         follow_redirects=False)
-    assert response.status_code == 400
-    assert errors == ["snapshot_object_write_conflict"], errors
+    assert response.status_code == 404
+    assert errors == []
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        command(actor_id=durable["envelope"]["named_reviewers"][0], snapshot_id=sid,
+                command_id="stale-read-proof", expected_revision=expected_revision)
     assert durable == before
     assert _durable(console, sid) == before
 
