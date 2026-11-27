@@ -9,6 +9,7 @@ from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 from secrets import token_urlsafe
 
@@ -69,6 +70,31 @@ def _client(console: OperationsConsole, username: str='researcher.anne', *, prod
     client = _fresh_client(console, production_app=production_app)
     client.post("/login", data={"username": username, "password": TEST_PASSWORD})
     return client
+
+
+class _VisibleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() in {"script", "style"}:
+            self._skip += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style"} and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip:
+            self.parts.append(data)
+
+
+def _visible_text(html: str) -> str:
+    parser = _VisibleTextParser()
+    parser.feed(html)
+    return " ".join(parser.parts)
 
 
 def _h1s(html: str) -> list[str]:
