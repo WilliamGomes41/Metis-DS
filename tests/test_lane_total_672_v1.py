@@ -61,12 +61,12 @@ def test_superseded_candidate_is_not_finished_but_approved_and_rejected_still_co
         assert _lane_total(variant, review_path="richtlijn", lane="batch", open_rows=[]) == base + delta, status
 
 
-def test_finished_heading_still_counts_in_structure_lane(tmp_path, *, production_console):
+def test_approved_guideline_heading_is_excluded_from_structure_total(tmp_path, *, production_console):
     console, sid, _ = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     heading = next(row for row in rows if row.get("object_type") == "heading")
     variant = [row for row in rows if row is not heading] + [_with_status(heading, "approved")]
-    assert _lane_total(variant, review_path="richtlijn", lane="structure", open_rows=[]) == 1
+    assert _lane_total(variant, review_path="richtlijn", lane="structure", open_rows=[]) == 0
 
 
 LANES = ("structure", "contextual", "batch")
