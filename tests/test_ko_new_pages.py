@@ -232,7 +232,8 @@ def test_standalone_bon_avoids_global_prefetch_but_keeps_exact_authorization(tmp
     assert result.text.count('data-answer="yes"') == 3
     assert canonical_reads == [sid]
     console.create_account(username='foreign-reviewer', password='fixture-only', roles=('reviewer',))
-    client.post('/login', data={'username': 'foreign-reviewer', 'password': 'fixture-only'})
+    login = client.post('/login', data={'username': 'foreign-reviewer', 'password': 'fixture-only'}, follow_redirects=False)
+    assert login.status_code == 303
 
     def no_private_event_read(*args, **kwargs):
         raise AssertionError('A reviewer outside this document cannot read its event')
