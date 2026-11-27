@@ -1,11 +1,6 @@
 """Synchronous exception-handler work must not block the event loop (#974).
 
-Production runs one worker. A ``POST /review`` revise decision raises
-``StructuredRepairRequired``; its handler rendered the repair page on the
-event loop, so a slow render starved every other request until the worker
-timed out. These tests serve the production app with a real uvicorn server
-(one event loop), slow the synchronous handler work down, and prove that a
-concurrent cheap request is still answered while the handler runs.
+The remaining error page must keep the ASGI loop responsive and include request evidence.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -119,24 +114,6 @@ def _concurrent(base, send_slow, entered):
     return outcome["response"], elapsed
 
 
-def test_structured_repair_render_does_not_block_other_requests(tmp_path, production_app, production_console, monkeypatch):
-    from src.review import deterministic_review_repair_v1 as repair
-    console, sid, obj = _console(tmp_path, production_console)
-    app = production_app(console)
-    entered = threading.Event()
-    monkeypatch.setattr(repair, "render_repair", _slowed(repair.render_repair, entered))
-    with _serve(app) as base, httpx.Client(base_url=base, timeout=30) as client:
-        login = client.post("/login", data={"username": "bert", "password": "bert-secret"})
-        # The session cookie is Secure; replay it explicitly over the plain-HTTP test server.
-        client.cookies.set("console_session", login.cookies["console_session"])
-        payload = _revise_payload(console, sid, obj)
-        response, elapsed = _concurrent(base, lambda: client.post("/review", data=payload), entered)
-    assert response.status_code == 200, response.text[:300]
-    assert "Correctie specificeren" in response.text
-    assert "Er is nog niets gewijzigd" in response.text
-    assert elapsed < RESPONSIVE, f"GET /login waited {elapsed:.2f}s behind the repair render"
-
-
 def test_console_error_page_does_not_block_other_requests(tmp_path, production_app, production_console, monkeypatch):
     from src import operations_console_app as console_app
     console, _sid, _obj = _console(tmp_path, production_console)
@@ -150,20 +127,14 @@ def test_console_error_page_does_not_block_other_requests(tmp_path, production_a
     assert elapsed < RESPONSIVE, f"GET /login waited {elapsed:.2f}s behind the error page"
 
 
-def test_console_error_raised_by_repair_handler_is_rendered_as_before(tmp_path, production_app, production_console):
-    """The repair handler refuses another actor's submission through the ConsoleError page."""
+def test_incomplete_repair_returns_a_correlated_readonly_error(tmp_path, production_app, production_console):
+    """An incomplete correction reports a request ID without reopening the retired editor."""
     from fastapi.testclient import TestClient
     from src.operations_console_app import ERROR_COPY
     from src.request_diagnostics_v1 import _LOGGER
-    from src.review.deterministic_review_repair_v1 import StructuredRepairRequired
     console, sid, obj = _console(tmp_path, production_console)
     app = production_app(console)
 
-    def foreign_submission():
-        raise StructuredRepairRequired({"actor_id": "someone-else", "snapshot_id": sid,
-                                        "object_id": obj["object_id"]})
-
-    app.add_api_route("/test-974/foreign-repair", foreign_submission, methods=["POST"])
     client = TestClient(app)
     client.post("/login", data={"username": "bert", "password": "bert-secret"})
     seen = []
@@ -177,17 +148,17 @@ def test_console_error_raised_by_repair_handler_is_rendered_as_before(tmp_path, 
     handler = Capture()
     _LOGGER.addHandler(handler)
     try:
-        response = client.post("/test-974/foreign-repair")
+        response = client.post("/review", data=_revise_payload(console, sid, obj))
     finally:
         _LOGGER.removeHandler(handler)
-    assert response.status_code == 403
+    assert response.status_code == 400
     banner = re.search(r'data-error-code="([^"]*)" data-request-id="([^"]*)">([^<]*)<', response.text)
     assert banner is not None, response.text[:500]
     code, request_id, message = banner.groups()
-    assert code == "correction_role_required"
-    assert message == ERROR_COPY["correction_role_required"]
+    assert code == "structured_repair_required"
+    assert message == ERROR_COPY["structured_repair_required"]
     finished = [e for e in seen if e.get("event") == "request_finished"]
     assert finished, "request_finished diagnostic missing"
     assert re.fullmatch(r"[0-9a-f]{32}", request_id)
     assert finished[-1]["request_id"] == request_id
-    assert finished[-1]["error"] == {"type": "ConsoleError", "code": "correction_role_required", "handled": True}
+    assert finished[-1]["error"] == {"type": "ConsoleError", "code": "structured_repair_required", "handled": True}

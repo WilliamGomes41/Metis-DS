@@ -283,7 +283,7 @@ def test_real_uncertain_content_keeps_an_individual_review_route(review_system):
     assert response.status_code == 200
     for action in ("reject", "later"):
         assert f'name="review_action" value="{action}"' in response.text
-    assert "Correctie nodig" in response.text and "/source-selection?" in response.text
+    assert "task=repair" not in response.text and 'data-ko-assessment-form' in response.text
 
 
 def test_http_atomic_batch_and_serialized_writer_report_current_work_truthfully(

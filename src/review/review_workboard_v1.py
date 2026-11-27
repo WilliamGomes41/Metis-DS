@@ -55,10 +55,6 @@ _TASK_COPY = {
         "Tweede beoordeling",
         "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie",
     ),
-    "repair": (
-        "Passages corrigeren",
-        "Controleer passages die Metis nog niet veilig als inhoudelijke review kan aanbieden",
-    ),
     "disposition": (
         "Bronpassages afhandelen",
         "Bepaal wat met de nog open bronpassages moet gebeuren",
@@ -147,8 +143,6 @@ def _work_item_from_counts(
     next_task = next((task for task, pending in task_counts if pending), "")
     if not next_task and closure_gap_count:
         next_task = "disposition"
-    if not next_task and blocked_count:
-        next_task = "repair"
 
     meaningful_status = str(lifecycle_status["presentation_status"])
     if lifecycle_status["workflow_status"] == "closed":
@@ -171,9 +165,8 @@ def _work_item_from_counts(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    workplace = '/source-selection' if next_task == 'repair' else '/review'
     next_href = (
-        f"{workplace}?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
+        f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
         if next_task
         else ""
     )
@@ -727,9 +720,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         theme: str = "",
         context_target: str = "",
         context_mode: str = "",
-        context_saved: str = "",
-        context_page: int = 0,
-        context_q: str = "",
         queue_page: int = 1,
         review_revision: str = "",
         after: str = "",
@@ -738,13 +728,11 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         receipt_object: str = "",
     ) -> str:
         chosen_task = requested_review_task(task)
+        if context_target or context_mode == 'source':
+            raise HTTPException(status_code=404)
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
-        if document and (chosen_task == 'repair' or context_target or context_mode == 'source'):
-            from src.vorming.human_annotation_v1 import owns_source
-            if owns_source(console, document):
-                raise HTTPException(status_code=404)
         if chosen_task == 'structure' and (not document or _review_path_of(console._envelope(document)) != 'boom'):
             raise HTTPException(status_code=404)
         if document and receipt_interaction and receipt_object:
@@ -757,18 +745,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             raise ConsoleError("invalid_review_filter")
         if not document and (work == "all" or "reviewer" not in account["roles"]):
             return overview(console, account, theme=theme, q=q, page=page)
-        if document and object.strip() and (context_target or context_mode == 'source'):
-            # Historical editor bookmarks only navigate; context commands live
-            # on Vorming and still enforce their original kernel permissions.
-            if account['account_id'] not in console._envelope(document)['named_reviewers']:
-                return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
-            params = {'document': document, 'object': object.strip(),
-                      'context_target': context_target, 'context_mode': context_mode,
-                      'context_page': context_page, 'context_q': context_q}
-            if review_revision:
-                params['review_revision'] = review_revision
-            return RedirectResponse('/source-selection?' + urlencode(params) + '#passage-context',
-                                    status_code=303)
         if document and after:
             # Select candidates from current verified card inputs, then open
             # the actual passage with its own authorized raw/source capture.
@@ -793,20 +769,11 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                         reviewer_id=account['account_id'], bindings=navigation.bindings,
                         fragments=navigation.fragments)) and route.get('actionable')
                     and route.get('canonical_task') == chosen_task), '')
-        if document and chosen_task == 'repair':
-            if 'reviewer' not in account.get('roles', []) or account['account_id'] not in console._envelope(document)['named_reviewers']:
-                raise ConsoleError('reviewer_not_named_on_snapshot')
-            params = dict(document=document, object=object, task='repair')
-            for field in ('repair_kind', 'review_revision'):
-                if value := request.query_params.get(field):
-                    params[field] = value
-            return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         read_inputs = None
         if document and object.strip():
             from src.review.review_passage_read_v1 import read_review_passage
             try:
                 read_inputs = read_review_passage(console, account, document, object.strip(),
-                    context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q,
                     include_document_context=True)
             except ConsoleError as exc:
                 if exc.code == 'reviewer_not_named_on_snapshot':
@@ -848,9 +815,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             html.escape(document, quote=True),
             html.escape(object, quote=True),
             task=html.escape(chosen_task, quote=True),
-            context_target=context_target,
             context_mode=context_mode,
-            context_saved=context_saved == "yes",
             read_inputs=read_inputs,
             queue_page=queue_page,
             review_revision=review_revision,

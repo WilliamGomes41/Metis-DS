@@ -212,8 +212,9 @@ def test_cache_move_real_routes_and_new_revision(backend, tmp_path, monkeypatch,
                 "snapshot_revision": before["revision"], "suitability": "mist_context",
                 "eindoordeel": "goedkeuren_na_correctie", "comment": "Bronselectie aanpassen.",
                 "documentpositie_action": "dit_klopt", "type_action": "dit_klopt"})
-            assert response.status_code == 200, response.text
-            assert 'action="/review/resolve"' in response.text
+            assert response.status_code == 400, response.text
+            assert 'data-error-code="structured_repair_required"' in response.text
+            assert 'action="/review/resolve"' not in response.text
         assert console.source_units(snapshot_id=sid, object_id=target["object_id"]) == units
         assert console.source_fragment_catalog(snapshot_id=sid, object_id=target["object_id"]) == catalog
         assert console.open_source_passage(snapshot_id=sid, object_id=target["object_id"], include_document=True)["freeze_bytes"] == data

@@ -31,6 +31,7 @@ EINDOORDEEL_LABELS = {
     "afwijzen": ("Afwijzen", "niet gebruiken als kennisobject"),
     "later_beoordelen": ("Later beoordelen", "nog geen besluit"),
 }
+_FORM_CHOICES = tuple(value for value in EINDOORDEEL_VALUES if value != "goedkeuren_na_correctie")
 _EINDOORDEEL_FOR_DECISION = {decision: value for value, decision in EINDOORDEEL_TO_DECISION.items()}
 
 
@@ -43,7 +44,7 @@ def _either(items: list[str]) -> str:
     return quoted[0] if len(quoted) == 1 else ", ".join(quoted[:-1]) + " of " + quoted[-1]
 
 
-def scope_sentence(suitability: str, offered: tuple[str, ...] = EINDOORDEEL_VALUES) -> str:
+def scope_sentence(suitability: str, offered: tuple[str, ...] = _FORM_CHOICES) -> str:
     """Which judgements fit ``suitability``, limited to those this form can select."""
     names = [EINDOORDEEL_LABELS[value][0] for value in allowed_eindoordelen(suitability) if value in offered]
     return f"Bij {_quoted(SUITABILITY_LABELS[suitability])} kun je kiezen uit {_either(names)}."
@@ -108,14 +109,14 @@ def decision_choices_html(object_id: str, selected: str, *, approval: str | None
     """Final-judgement fieldset; ``approval`` is None when approving is not offered here."""
     scope_id = f"decision-scope-{object_id}"
     # The help text names only judgements a reviewer can select in this state.
-    offered = tuple(value for value in EINDOORDEEL_VALUES
+    offered = tuple(value for value in _FORM_CHOICES
                     if value != "goedkeuren" or (approval is not None and "disabled" not in approval))
     notes = [f'<span data-decision-scope="">Kies eerst hierboven of de passage op zichzelf bruikbaar is. '
              "Daarna zie je welke besluiten daarbij passen.</span>"]
     notes += [f'<span data-decision-scope="{value}">{escape(scope_sentence(value, offered))}</span>'
               for value in SUITABILITY_VALUES]
     options = []
-    for value in EINDOORDEEL_VALUES:
+    for value in _FORM_CHOICES:
         if value == "goedkeuren" and approval is None:
             continue
         name, consequence = EINDOORDEEL_LABELS[value]

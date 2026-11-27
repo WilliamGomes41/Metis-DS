@@ -8,6 +8,7 @@ app = browser_application('context-browser', processing_binder=bind_fixture_sele
 state = app.state.operations_kernel
 state, _, _, source, target, command = _system(state.root, console=state)
 sid = command['snapshot_id']
+state.confirm_source_context(**command)
 
 
 @app.get('/browser-manifest')

@@ -3,32 +3,12 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: kwaliteit slop releasebewijs
 """
-from html.parser import HTMLParser
 import re
 
 from src.operations_console_app import ERROR_COPY
 from tests.production_support import restart_production
 from tests.test_deterministic_review_repair_v1 import _review_payload, _system
 from tests.test_review_command_bounded_http_v1 import physical_state
-
-
-class _RepairFields(HTMLParser):
-    def __init__(self, document):
-        super().__init__()
-        self.active = False
-        self.fields = {}
-        self.feed(document)
-
-    def handle_starttag(self, tag, attrs):
-        values = dict(attrs)
-        if tag == 'form':
-            self.active = values.get('action') == '/review/resolve'
-        if self.active and tag == 'input' and values.get('name'):
-            self.fields[values['name']] = values.get('value', '')
-
-    def handle_endtag(self, tag):
-        if tag == 'form':
-            self.active = False
 
 
 def test_native_repair_handoff_keeps_original_generation_and_stale_guards(
@@ -53,11 +33,10 @@ def test_native_repair_handoff_keeps_original_generation_and_stale_guards(
 
     before = durable(console)
     specification = client.post('/review', data=review, follow_redirects=False)
-    assert specification.status_code == 200
-    assert 'Correctie specificeren' in specification.text
-    assert 'Er is nog niets gewijzigd' in specification.text
+    assert specification.status_code == 400
+    assert 'structured_repair_required' in specification.text
     assert durable(console) == before
-    fields = _RepairFields(specification.text).fields
+    fields = {**review, 'repair_kind': 'source_units'}
     assert fields['snapshot_revision'] == original_generation
     resolve = {**fields, 'source_unit_ids': units, 'comment': 'Gebruik de volledige bronzin.'}
     saved = client.post('/review/resolve', data=resolve, follow_redirects=False)
@@ -75,6 +54,6 @@ def test_native_repair_handoff_keeps_original_generation_and_stale_guards(
     assert 'data-error-code="snapshot_object_write_conflict"' in stale_review.text
     assert durable(console) == winner
     stale_repair = client.post('/review/resolve', data=resolve, follow_redirects=False)
-    assert stale_repair.status_code == 400
+    assert stale_repair.status_code in (400, 409)
     assert ERROR_COPY['snapshot_object_write_conflict'] in stale_repair.text
     assert durable(console) == winner

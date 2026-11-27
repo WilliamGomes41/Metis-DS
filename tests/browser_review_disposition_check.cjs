@@ -34,7 +34,7 @@ const assert = require('node:assert/strict');
       await page.locator('[name=complete][value=adjust]').check();
       if (javaScriptEnabled) {
         assert.equal(await page.locator('[value=approve]').isDisabled(), true);
-        assert.equal(await page.locator('.ko-adjustment').isVisible(), true);
+        assert.equal(await page.locator('.ko-adjustment').count(), 0);
         // Playwright 1.58.2 API requests omit Secure cookies over HTTP on 127.0.0.1.
         const refused = await page.locator('[data-ko-assessment-form]').evaluate(async el => {
           const data = new URLSearchParams(new FormData(el));
@@ -50,10 +50,7 @@ const assert = require('node:assert/strict');
         assert.equal(await page.locator('[name=complete][value=adjust]').isChecked(), true);
       }
       assert.equal(await events(), before, 'adjustment cannot write approval');
-      await Promise.all([page.waitForURL(url => url.pathname === '/source-selection'),
-        page.getByRole('link', {name: 'Correctie nodig', exact: true}).click()]);
-      assert.equal(await events(), before, 'opening repair does not write');
-      if (javaScriptEnabled) await page.screenshot({path: `${out}/correction-${width}.png`, fullPage: true});
+      assert.equal(await page.locator('a[href*="task=repair"]').count(), 0);
       await page.goto(card);
       await Promise.all([page.waitForNavigation(), page.getByRole('button', {name: 'Later beoordelen', exact: true}).click()]);
       assert.ok(!new URL(page.url()).searchParams.has('receipt_interaction'));

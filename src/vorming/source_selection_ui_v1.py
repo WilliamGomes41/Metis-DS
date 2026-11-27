@@ -3,7 +3,6 @@ from src.request_diagnostics_v1 import diagnostic_phase
 
 import asyncio
 import json
-import re
 from html import escape
 import uuid
 from urllib.parse import urlencode
@@ -195,9 +194,7 @@ def _formation_problem_html(group, esc):
         for action in row['actions']:
             actions.setdefault(action['url'], action)
     direct = [a for a in actions.values() if not a['url'].startswith('/inzicht/')]
-    direct.sort(key=lambda a: 'task=repair' not in a['url'])
-    labels = {'Kandidaat herstellen': 'Herstel het voorstel',
-              'Bronbereik bekijken en behandelen': 'Bekijk en behandel dit bronstuk',
+    labels = {'Bronbereik bekijken en behandelen': 'Bekijk en behandel dit bronstuk',
               'Brongebruik bepalen of herstellen': 'Bekijk en behandel dit bronstuk',
               'Diagnose en herstelvoorwaarden': 'Bekijk de herstelvoorwaarden'}
     primary = direct[0] if direct else None
@@ -310,57 +307,6 @@ def _blockage_html(report, esc):
         body += '<li>' + esc(key) + ': ' + esc(value) + '</li>'
     return body + '</ul></details>'
 
-
-
-@source_reconstruction_scope(reuse_existing=True)
-def render_context(console, account, document, object, *, context_target='', context_mode='',
-                   context_page=0, context_q='', context_saved=False,
-                   context_draft=None, context_error='', review_revision=''):
-    """Present the existing bounded context read and command in its one workplace."""
-    from src import operations_console_app as ui
-    from src.review.review_passage_read_v1 import read_review_passage
-    from src.review.beslisboom_path_v1 import review_path_for_klasse
-    # Draft targets are actual required context, not grounds for a full-corpus
-    # fallback. Keep every selected target even when it is outside the page.
-    inputs = read_review_passage(console, account, document, object,
-        context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q,
-        include_choices=True, context_targets=(context_draft or {}).get('target_object_ids') or ())
-    envelope, objects, revision = inputs.envelope, inputs.objects, inputs.revision
-    obj = next((row for row in objects if row['object_id'] == object), None)
-    if obj is None:
-        raise ConsoleError('unknown_object')
-    projection, _ = ui._review_detail_projection(console, account, document, obj,
-        objects, review_path_for_klasse(envelope['class']), inputs)
-    editable = not console.snapshot_is_published(document)
-    panel = ui._source_context_panel(obj, objects, document, revision,
-        context_target=context_target, source_mode=context_mode == 'source',
-        draft=context_draft, error=context_error, projection=projection, editable=editable,
-        context_choices=inputs.context_choices if inputs is not None else None,
-        choices_html=ui._passage_choices_html(document, obj, inputs,
-            context_mode=context_mode, context_target=context_target) if editable else '')
-    saved = ('<p class="banner ok" role="status">Het contextbesluit is opgeslagen. '
-             'Beoordeel de betrokken passages opnieuw.</p>' if context_saved else '')
-    if review_revision:
-        origin = ui._esc(urlencode({'review_revision': review_revision}))
-        panel = re.sub(r'href="(/source-selection\?[^"#]*)(#[^"]*)?"',
-            lambda m: 'href="' + m[1] + '&amp;' + origin + (m[2] or '') + '"', panel)
-        panel = panel.replace('</form>',  '<input type="hidden" name="review_revision" value="' + ui._esc(review_revision) + '"></form>')
-    back = '/review?' + urlencode({'document': document, 'object': context_target or object, **({'review_revision': review_revision} if review_revision else {})})
-    overview = '/source-selection?' + urlencode({'document': document})
-    if inputs is not None:
-        available = inputs.source_available
-    else:
-        try:
-            console.open_source_passage(snapshot_id=document, object_id=object)
-            available = True
-        except ConsoleError:
-            available = False
-    return ui._page(ui._nav(account, 'selection') +
-        '<section class="room review-room" data-formation-context><h1>Vorming</h1>' +
-        '<p><a href="' + ui._esc(overview) + '">Voortgang en vormingsproblemen</a> · '
-        '<a href="' + ui._esc(back) + '">Deze passage beoordelen in Review</a></p>' + saved +
-        '<h2>Broncontext vastleggen</h2>' +
-        ui._broncontext_html(obj, document, object, available) + panel + '</section>')
 
 
 @source_reconstruction_scope(reuse_existing=True)
@@ -734,20 +680,15 @@ def install(app, console, require, page, nav, esc):
 
     @app.get('/source-selection', response_class=HTMLResponse)
     def selection_get(request: Request, document: str = '', selected_document: str = '', offset: int = Query(0, ge=0),
-                      object: str = '', context_target: str = '', context_mode: str = '',
-                      context_page: int = 0, context_q: str = '', context_saved: str = '',
-                      task: str = '',
-                      repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = '', review_revision: str = ''):
+                      object: str = '', task: str = '', graph_saved: str = ''):
+        context_editor = request.query_params.get('context_target') or request.query_params.get('context_mode') == 'source'
+        if object or context_editor or task not in {'', 'graph', 'disposition'}:
+            raise HTTPException(status_code=404)
         with diagnostic_phase("authorization"):
             actor = require(request)
-        if task in {'structure', 'continuation'}:
-            raise HTTPException(status_code=404)
-        old_editor = bool(object or task == 'repair' or context_target or context_mode == 'source')
-        if (document and not selected_document) or old_editor:
+        if document and not selected_document:
             from src.vorming.human_annotation_v1 import owns_source
-            if owns_source(console, document or selected_document):
-                if old_editor:
-                    raise HTTPException(status_code=404)
+            if owns_source(console, document):
                 return RedirectResponse('/annotations?' + urlencode({'document': document}), status_code=303)
         if task == 'graph' and document:
             from src.review.decision_review_ui_v1 import render_graph
@@ -755,28 +696,6 @@ def install(app, console, require, page, nav, esc):
             if graph_saved == 'yes':
                 body = body.replace('<h2>Beslisstructuur vastleggen</h2>', '<h2>Beslisstructuur vastleggen</h2><p class="banner ok" role="status">De beslisstructuur is opgeslagen. Beoordeel de huidige graaf in Review.</p>')
             return body
-        if task == 'repair' and document:
-            if object:
-                from src.review.deterministic_review_repair_v1 import render_repair
-                body = render_repair(console, request, {'snapshot_id': document, 'object_id': object, 'review_revision': review_revision},
-                    repair_kind=repair_kind, saved=repair_saved == 'yes')
-                return body
-            console._require_role(actor['account_id'], 'reviewer')
-            envelope = console._envelope(document)
-            if actor['account_id'] not in envelope['named_reviewers']:
-                raise ConsoleError('reviewer_not_named_on_snapshot')
-            from src import operations_console_app as ui
-            objects = console.snapshot_objects(document)
-            panel = ui._review_inventory(document, objects, review_path=review_path_for_klasse(envelope['class']),
-                bindings=ui._review_bindings(console, document, objects=objects), reviewer_id=actor['account_id'],
-                task='repair', fragments=console.review_source_fragments(document))
-            diagnosis = '/inzicht/document?' + urlencode(dict(document=document))
-            return page(nav(actor, 'selection') + '<section class="room"><h1>Vorming</h1><h2>Passages herstellen</h2>' + panel +
-                '<p><a href="' + esc(diagnosis) + '">Documentdiagnose en bewijs bekijken</a></p></section>')
-        if object:
-            return render_context(console, actor, document, object, context_target=context_target,
-                context_mode=context_mode, context_page=context_page, context_q=context_q,
-                context_saved=context_saved == 'yes', review_revision=review_revision)
         if task == 'disposition' and document:
             return render_source_accountability(console, actor, document)
         # Overview owns compact progress inputs; only the chosen document loads detail.

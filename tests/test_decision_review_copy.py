@@ -31,20 +31,18 @@ def test_decision_review_moves_type_explanations_to_help_without_mutating_eviden
     client = TestClient(production_app(console))
     assert client.get(f"/review?document={sid}", follow_redirects=False).status_code == 401
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    graph = client.get("/review/decision-graph", params={"document": sid})
+    assert graph.status_code == 200
     for obj in before:
         if obj["object_type"] == "document":
             continue
-        html = client.get(f"/review?document={sid}&object={obj['object_id']}").text
-        html = client.get(f"/source-selection?document={sid}&object={obj['object_id']}&task=repair&repair_kind=classification").text
-        assert 'value="path"' in html and "Pad — route of resultaatbundel" in html
-        assert 'value="node"' in html and "Knoop — vraag of beslispunt" in html
-        assert 'value="outcome"' in html and "Uitkomst — afsluitend advies" in html
-        assert "scorelijstitem" not in html and "Een pad is zelf geen advies" not in html
-        assert "Metis stelt voor" not in html
-        assert "Huidige passage:" in html
-        assert "standaard het type Knoop" not in html
-        assert "automatisch gegroepeerd" not in html
-        assert "automatisch afgesplitst" not in html
+        legacy = client.get("/source-selection", params={
+            "document": sid, "object": obj["object_id"], "task": "repair", "repair_kind": "classification"
+        }, follow_redirects=False)
+        assert legacy.status_code == 404
+    for label in ("Pad — route of resultaatbundel", "Knoop — vraag of beslispunt", "Uitkomst — afsluitend advies"):
+        assert label in graph.text
+    assert "scorelijstitem" not in graph.text and "Een pad is zelf geen advies" not in graph.text
     help_page = client.get("/help/review")
     assert help_page.status_code == 200
     assert "scorelijstitem" in help_page.text and "Een pad is zelf geen advies" in help_page.text
@@ -59,3 +57,44 @@ def test_decision_review_moves_type_explanations_to_help_without_mutating_eviden
     assert "Verbindingen opslaan" in graph.text
     assert console.snapshot_objects(sid) == before
     assert console._envelope(sid) == envelope
+
+def test_passage_type_repair_reopens_the_exact_passage(tmp_path, production_app, production_console, monkeypatch):
+    from tests.test_source_context_review_ui_v1 import Forms
+    from tests.test_decision_graph_chain import complete_graph, command, ingest
+
+    console = _console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    sid = ingest(console, accounts)["snapshot_id"]
+    console.update_decision_graph(**command(console, accounts, sid, "routes", graph=complete_graph(console, sid)))
+    client = TestClient(production_app(console), base_url="https://testserver")
+    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    url = "/review/decision-graph"
+    view = client.get(url, params={"document": sid})
+    form = next(form for form in Forms(view.text).forms
+                if any(field.get("name") == "object_id" for field in form["inputs"]))
+    fields = {field["name"]: field["value"] for field in form["inputs"] if field.get("type") == "hidden"}
+    fields.update(action="classification", confirmed_object_type="path", reason="Deze passage beschrijft de route.")
+    before = console._current_object(sid, fields["object_id"])
+    for invalid in ({"confirmed_object_type": "heading"}, {"expected_revision": ""}):
+        assert client.post(url, data={**fields, **invalid}).status_code == 400
+    outsider = TestClient(production_app(console), base_url="https://testserver")
+    outsider.post("/login", data={"username": "publisher.carla", "password": "carla-secret"})
+    assert outsider.post(url, data=fields).status_code in (400, 403)
+    assert console.objects_revision(sid) == fields["expected_revision"]
+    with monkeypatch.context() as patch:
+        patch.setattr(console, "snapshot_is_published", lambda _sid: True)
+        assert 'value="classification"' not in client.get(url, params={"document": sid}).text
+        assert client.post(url, data=fields).status_code == 400
+        assert console.objects_revision(sid) == fields["expected_revision"]
+    result = client.post(url, data=fields, follow_redirects=False)
+    assert result.status_code == 303, result.text
+    assert result.headers["location"] == url + "?document=" + sid + "#passage-" + fields["object_id"]
+    updated = console._current_object(sid, fields["object_id"])
+    assert updated["confirmed_object_type"] == "path"
+    assert updated["object_version"] != before["object_version"]
+    assert updated["governance"]["validation_status"] == "needs_review"
+    assert updated["provenance"]["source_fragments"] == before["provenance"]["source_fragments"]
+    revision = console.objects_revision(sid)
+    assert client.post(url, data=fields).status_code in (400, 409)
+    assert console.objects_revision(sid) == revision
+    assert _console(tmp_path, production_console=production_console)._current_object(sid, fields["object_id"]) == updated

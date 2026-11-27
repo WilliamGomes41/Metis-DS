@@ -563,12 +563,6 @@
       ]
     ],
     [
-      "/review/source-context",
-      [
-        "POST"
-      ]
-    ],
-    [
       "/review/source-exclusions",
       [
         "POST"

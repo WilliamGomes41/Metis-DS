@@ -13,8 +13,10 @@ from tests.test_source_context_review_ui_v1 import Forms
 from tests.semantic_fixture_support import bind_fixture_selections
 
 
-def form_data(page, action='/review/resolve'):
+def form_data(page, action='/review/resolve', *, field=None):
     forms = [f for f in Forms(page.text).forms if f['attrs'].get('action') == action]
+    if field:
+        forms = [f for f in forms if any(i.get('name') == field for i in f['inputs'])]
     assert len(forms) == 1, page.text
     return {field['name']: field.get('value', '') for field in forms[0]['inputs']
             if field.get('type') == 'hidden' or 'checked' in field}
@@ -38,7 +40,7 @@ def classification_system(tmp_path, *, production_app, production_console):
 
 
 @pytest.mark.parametrize('kind', ['source_units', 'merge_objects', 'support_relation', 'classification'])
-def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, kind, *, production_app, production_console):
+def test_existing_repair_command_preserves_history_without_retired_page(tmp_path, monkeypatch, kind, *, production_app, production_console):
     setup = classification_system if kind == 'classification' else _system
     state, client, _, _, sid, objects = setup(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
@@ -54,28 +56,15 @@ def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, 
     assert 'data-heading-chooser' not in review.text
     assert 'name="proposed_correction"' not in review.text
     assert 'action="/review/resolve"' not in review.text
-    assert 'Correctie nodig' in review.text
-    if kind == 'classification':
-        import src.review.review_passage_read_v1 as reader
-        original_read = reader.read_review_passage
-        reads = []
-        with monkeypatch.context() as patch:
-            patch.setattr(reader, 'read_review_passage', lambda *a, **kw:
-                (reads.append(1) or original_read(*a, **kw)))
-            patch.setattr(state, 'snapshot_objects', lambda *a, **kw: pytest.fail('unbounded classification read'))
-            patch.setattr(state, 'snapshot_objects_and_revision', lambda *a, **kw: pytest.fail('unbounded classification read'))
-            owner = client.get(url)
-        assert reads == [1]
-    else:
-        owner = client.get(url)
-    assert owner.status_code == 200 and 'data-formation-repair' in owner.text
-    data = form_data(owner)
-    assert data['repair_kind'] == kind
+    assert 'task=repair' not in review.text
+    assert client.get(url, follow_redirects=False).status_code == 404
     assert state.snapshot_objects(sid, include_blocked=True) == before
     assert state.workflow_review_store.read_events() == events
     assert state._envelope(sid) == envelope
-    old = client.get('/review', params=dict(document=sid, object=oid, task='repair'), follow_redirects=False)
-    assert old.status_code == 303 and old.headers['location'].startswith('/source-selection?')
+    suitability = {'merge_objects': 'samenvoegen', 'support_relation': 'alleen_onderbouwing',
+                   'source_units': 'mist_context', 'classification': 'ja'}[kind]
+    data = dict(snapshot_id=sid, object_id=oid, snapshot_revision=state.objects_revision(sid),
+                suitability=suitability, repair_kind=kind)
     data['comment'] = 'Controleerbare correctie op de bestaande bron.'
     if kind == 'source_units':
         refs = {r['raw_object_id'] for r in obj['provenance']['source_fragments']}
@@ -87,25 +76,24 @@ def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, 
     else:
         data.update(type_action='type_wijzigen', confirmed_object_type='explanation', documentpositie_action='andere_kop',
                     parent_choice=next(o['object_id'] for o in state.snapshot_objects(sid) if '2 Vervolg' in o['content']['clean_text']))
-        assert data['snapshot_revision'].startswith('review-generation-v1:')
     invalid = client.post('/review/resolve', data={**data, 'comment': ' '})
     assert invalid.status_code == 400
-    assert 'Niet opgeslagen' in invalid.text
+    assert 'review_comment_required' in invalid.text
     assert state.snapshot_objects(sid, include_blocked=True) == before
     outsider = TestClient(production_app(state))
     outsider.post('/login', data=dict(username='anne', password='anne-secret'))
-    assert outsider.get(url).status_code == 400
+    assert outsider.get(url).status_code == 404
     assert outsider.post('/review/resolve', data=data).status_code == 403
     with monkeypatch.context() as patch:
         patch.setattr(state, 'snapshot_is_published', lambda sid: True)
         assert 'action="/review/resolve"' not in client.get(url).text
         assert client.post('/review/resolve', data=data).status_code == 400
     stale = client.post('/review/resolve', data={**data, 'snapshot_revision': 'stale'})
-    assert stale.status_code == 400 and 'Niet opgeslagen' in stale.text
+    assert stale.status_code in (400, 409) and 'snapshot_object_write_conflict' in stale.text
     assert state.snapshot_objects(sid, include_blocked=True) == before
     response = client.post('/review/resolve', data=data, follow_redirects=False)
     assert response.status_code == 303, response.text
-    assert parse_qs(urlsplit(response.headers['location']).query)['object'] == [oid]
+    assert parse_qs(urlsplit(response.headers['location']).query)['document'] == [sid]
     revised = state._current_object(sid, oid)
     assert revised['governance']['validation_status'] == 'needs_review'
     assert not any(r['governance']['validation_status'] == 'revise' for r in state.snapshot_objects(sid))
@@ -114,10 +102,10 @@ def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, 
     assert state._envelope(sid)['sha256'] == envelope['sha256']
     after = deepcopy(state.snapshot_objects(sid, include_blocked=True))
     replay = client.post('/review/resolve', data=data)
-    assert replay.status_code == 400
+    assert replay.status_code in (400, 409)
     assert state.snapshot_objects(sid, include_blocked=True) == after
     saved = client.get(response.headers['location'])
-    assert saved.status_code == 200 and 'Het nieuwe voorstel is opgeslagen' in saved.text
+    assert saved.status_code == 200 and 'data-formation-repair' not in saved.text
     assert state.snapshot_objects(sid, include_blocked=True) == after
     restarted = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
@@ -183,13 +171,13 @@ def test_graph_editor_and_confirmation_have_distinct_owners(tmp_path, *, product
     restarted = _console(tmp_path, production_console=production_console)
     assert restarted._envelope(sid)['decision_graph'] == saved['decision_graph']
     review = client.get('/review/decision-graph', params=dict(document=sid))
-    confirm = form_data(review, '/review/decision-graph')
+    confirm = form_data(review, '/review/decision-graph', field='command_id')
     confirm.update(action='confirm', reason='De volledige interpretatie is gecontroleerd.')
     accepted = client.post('/review/decision-graph', data=confirm, follow_redirects=False)
     assert accepted.status_code == 400 and 'decision_graph_passage_review_required' in accepted.text
     assert state._envelope(sid) == saved
 
-def test_source_record_keeps_its_existing_source_context_owner(tmp_path, *, production_app, production_console):
+def test_source_record_does_not_open_retired_repair_editor(tmp_path, *, production_app, production_console):
     from tests.test_source_context_review_v1 import _system as context_system
     from src.vorming.source_accountability_v1 import is_source_record
     state, _, _, source, _, command = context_system(tmp_path,
@@ -200,7 +188,6 @@ def test_source_record_keeps_its_existing_source_context_owner(tmp_path, *, prod
     client = TestClient(production_app(state))
     client.post('/login', data=dict(username='bert', password='bert-secret'))
     page = client.get('/source-selection', params=dict(document=sid, object=source['object_id'], task='repair'))
-    assert page.status_code == 200
+    assert page.status_code == 404
     assert 'action="/review/resolve"' not in page.text
-    assert 'Brongebruik bepalen of bronbewijs herstellen in Vorming' in page.text
     assert state.snapshot_objects(sid) == before

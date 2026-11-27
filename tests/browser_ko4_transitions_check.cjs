@@ -38,6 +38,14 @@ const { withBrowserEvidence } = require('./browser_evidence.cjs');
     await Promise.all([target.waitForURL(url => url.pathname !== '/login'),
       target.locator('button[type=submit]').click()]);
   }
+  async function submitCorrection(target, fields) {
+    const status = await target.evaluate(async fields => {
+      const revision = document.querySelector('[name=snapshot_revision]').value;
+      const body = new URLSearchParams({...fields, snapshot_revision: revision});
+      return (await fetch('/review/resolve', {method: 'POST', body, redirect: 'manual'})).type;
+    }, fields);
+    assert.equal(status, 'opaqueredirect');
+  }
   async function answers(target, values = {}) {
     for (const name of ['applicable', 'complete', 'placed_correctly'])
       await form(target).locator(`[name=${name}][value=${values[name] || 'yes'}]`).check();
@@ -140,18 +148,9 @@ const { withBrowserEvidence } = require('./browser_evidence.cjs');
   await hold();
 
   await filmed.goto(card({...link, object_id: link.support_object_id}));
-  await filmed.getByRole('link', {name: 'Correctie nodig', exact: true}).focus();
-  await Promise.all([filmed.waitForURL(url => url.pathname === '/source-selection'),
-    filmed.keyboard.press('Enter')]);
-  await filmed.getByRole('link', {name: 'Onderbouwing verbinden', exact: true}).click();
-  const repair = filmed.locator('form[action="/review/resolve"]');
-  await repair.locator('[name=claim_object_id]').selectOption(link.object_id);
-  await repair.locator('[name=comment]').fill('Deze bronpassage onderbouwt de geselecteerde observatie.');
-  unchanged(beforeLink, await proof('link'));
-  await shoot(filmed, 'link-support');
-  await hold();
-  await Promise.all([filmed.waitForNavigation({waitUntil: 'domcontentloaded'}),
-    repair.locator('button[type=submit]').click()]);
+  await submitCorrection(filmed, {snapshot_id: link.snapshot_id, object_id: link.support_object_id,
+    suitability: 'alleen_onderbouwing', repair_kind: 'support_relation', claim_object_id: link.object_id,
+    comment: 'Deze bronpassage onderbouwt de geselecteerde observatie.'});
   const linked = await proof('link');
   fs.writeFileSync(path.join(out, 'ko4-linked-state.json'), JSON.stringify(linked, null, 2));
   fs.writeFileSync(path.join(out, 'ko4-after-link.html'), await filmed.content());
@@ -257,14 +256,9 @@ const { withBrowserEvidence } = require('./browser_evidence.cjs');
   assert.equal(await form(page).count(), 0);
   unchanged(approvedNA, await proof('not-applicable'));
   await page.goto(card(na));
-  await page.getByRole('link', {name: 'Correctie nodig', exact: true}).click();
-  const sourceRepair = page.locator('form[action="/review/resolve"]');
-  const unit = sourceRepair.locator('[name=source_unit_ids] option').filter({hasText: na.correction_text});
-  assert.equal(await unit.count(), 1);
-  await sourceRepair.locator('[name=source_unit_ids]').selectOption(await unit.getAttribute('value'));
-  await sourceRepair.locator('[name=comment]').fill('Deze preciezere bronzin vormt het nieuwe voorstel.');
-  await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}),
-    sourceRepair.locator('button[type=submit]').click()]);
+  await submitCorrection(page, {snapshot_id: na.snapshot_id, object_id: na.object_id,
+    suitability: 'mist_context', repair_kind: 'source_units', source_unit_ids: na.correction_unit,
+    comment: 'Deze preciezere bronzin vormt het nieuwe voorstel.'});
   const corrected = await proof('not-applicable');
   const newObject = current(corrected, na.object_id);
   assert.notEqual(newObject.object_version, naObject.object_version);

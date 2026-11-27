@@ -59,6 +59,17 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('[name=action][value=confirm]').count(), 1);
     await proof('review-graph-saved', width);
     assert.deepEqual(await state(), saved);
+    const classification = page.locator('details').filter({has: page.locator('[name=confirmed_object_type]')}).first();
+    await classification.locator('summary').click();
+    await classification.locator('select').selectOption('path');
+    await classification.locator('[name=reason]').fill('Deze passage beschrijft de route.');
+    await proof('review-passage-type', width);
+    await Promise.all([page.waitForNavigation(), classification.getByRole('button').click()]);
+    assert.match(await page.locator('body').innerText(), /Bevestigd type · Pad/);
+    const changed = await state();
+    assert.notEqual(changed[index].revision, saved[index].revision);
+    assert.ok(changed[index].source_unchanged && changed[index].candidate_sources_unchanged);
+    assert.deepEqual(changed[1-index], saved[1-index]);
     console.log('Graph editor and judgement separated over unchanged source', width, 'PASSED');
   }
   await browser.close();

@@ -199,14 +199,14 @@ def test_review_card_uses_clear_labels_and_requires_explicit_answers(tmp_path: P
                   if obj['object_type'] not in {'document', 'heading'})
     page = _review_page(console, receipt['snapshot_id'], target['object_id'], production_app=production_app)
     for label in ('Te beoordelen kennisobject', 'Is dit toepasbaar?', 'Is dit compleet?',
-                  'Staat dit op de juiste plek?', 'Goedkeuren en opslaan', 'Correctie nodig', 'Later beoordelen'):
+                  'Staat dit op de juiste plek?', 'Goedkeuren en opslaan', 'Later beoordelen'):
         assert label in page
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', page)
     for name in ('applicable', 'complete', 'placed_correctly'):
         assert page.count('name="' + name + '"') == 2
     assert 'name="proposed_correction"' not in page
     assert 'data-ko-assessment-form' in page
-    assert '/source-selection?' in page
+    assert 'task=repair' not in page
 
 
 def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path: Path, *, production_app, production_console) -> None:
@@ -266,10 +266,10 @@ def test_blocked_passages_offer_correction_without_technical_diagnostics() -> No
         },
     }
 
-    html = _render_review_index("snap-1", [blocked], "richtlijn", task="repair")
+    html = _render_review_index("snap-1", [blocked], "richtlijn", task="inventory")
 
-    assert "Passages corrigeren (1)" in html
-    assert "task=repair" in html
+    assert 'data-passage-category="repair"' in html
+    assert "object=obj-incomplete&amp;task=inventory" in html
     assert "incomplete_sentence" not in html
     assert "processing-diagnostics" not in html
 
@@ -322,7 +322,7 @@ def test_approve_remains_disabled_when_passage_cannot_open(tmp_path: Path, *, pr
     page = client.get('/review', params={'document': sid, 'object': target['object_id']})
     button = re.search(r'<button[^>]+value="approve"[^>]*>', page.text)
     assert button and 'disabled' in button.group()
-    assert '/source-selection?' in page.text
+    assert 'task=repair' not in page.text
     before = physical_state(console, sid)
     refused = client.post('/review', data=compact_submission(page), follow_redirects=False)
     assert refused.status_code == 400

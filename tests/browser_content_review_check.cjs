@@ -44,17 +44,8 @@ const assert = require('node:assert/strict');
     await page.goto(base+'/review?'+new URLSearchParams({document:d.snapshot_id,object:d.context,task:'contextual'}));
     const review=page.locator('[data-ko-assessment-form]');
     assert.equal(await review.locator('[name=object_id]').inputValue(),d.context);
-    // Carry the pinned review revision to the sole owner and back; no mutation.
-    const repair=page.getByRole('link',{name:'Correctie nodig',exact:true});
-    const origin=new URL(await repair.getAttribute('href'),base).searchParams.get('review_revision');
-    assert.ok(origin);
-    await repair.focus();
-    await Promise.all([page.waitForURL(u=>u.pathname==='/source-selection'),page.keyboard.press('Enter')]);
-    const back=page.getByRole('link',{name:'Deze passage beoordelen in Review',exact:true});
-    assert.equal(new URL(await back.getAttribute('href'),base).searchParams.get('review_revision'),origin);
-    await back.click();
-    assert.equal(new URL(page.url()).searchParams.get('object'),d.context);
-    assert.deepEqual(await state(),committed,'Owner/return does not mutate or transfer approval');
+    assert.equal(await review.locator('a[href*="task=repair"]').count(), 0);
+    assert.deepEqual(await state(), committed);
     for (const question of ['applicable','complete','placed_correctly']) {
       assert.equal(await review.locator(`[name=${question}]:checked`).count(),0);
       await review.locator(`[name=${question}][value=yes]`).check();

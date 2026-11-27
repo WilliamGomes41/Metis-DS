@@ -87,7 +87,7 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
 
 
 @pytest.mark.parametrize("task", ["structure", "contextual", "batch", "inventory", "disposition",
-                                  "waiting", "second_review", "repair", "object"])
+                                  "waiting", "second_review", "object"])
 @pytest.mark.parametrize('review_client', [None, 'raw'], indirect=True)
 def test_http_review_render_reuses_source_and_matches_uncached_read(review_client, monkeypatch, task, request):
     import src.vorming.knowledge_materialisation_v1 as materialisation

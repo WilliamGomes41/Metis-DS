@@ -154,8 +154,8 @@ def test_work_item_reuses_existing_queue_order_and_deep_links() -> None:
     assert item is not None
     assert item["remaining_review_items"] == 0
     assert item["work_state"] == "technical_repair"
-    assert item["next_task"] == "repair"
-    assert item["next_href"].endswith("task=repair")
+    assert item["next_task"] == ""
+    assert item["next_href"] == ""
 
 
 def test_unassigned_document_is_not_a_work_item() -> None:

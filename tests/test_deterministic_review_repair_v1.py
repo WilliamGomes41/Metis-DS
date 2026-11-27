@@ -97,10 +97,9 @@ def test_revise_first_post_is_prewrite_specification_step(tmp_path, *, productio
 
     response = client.post("/review", data=_review_payload(console, sid, obj))
 
-    assert response.status_code == 200
-    assert "Correctie specificeren" in response.text
-    assert "Er is nog niets gewijzigd" in response.text
-    assert 'action="/review/resolve"' in response.text
+    assert response.status_code == 400
+    assert "structured_repair_required" in response.text
+    assert 'action="/review/resolve"' not in response.text
     assert console._load_objects(sid, remember=False) == before_rows
     after_ledger = read_events(console._ledger_path)
     assert after_ledger == before_ledger

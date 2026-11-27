@@ -28,7 +28,7 @@ def test_generic_context_is_visible_and_invalid_context_gets_a_readonly_warning(
     assert 'Context die bij deze passage is vastgelegd' in page.text
     assert '<p class="context-literal">DOEN</p>' in page.text
     assert command['reason'] in page.text
-    assert 'Broncontext vastleggen of aanpassen in Vorming' in page.text
+    assert 'Broncontext vastleggen of aanpassen in Vorming' not in page.text
     assert physical_state(console, sid) == before
     rows = console.snapshot_objects(sid)
     changed = next(row for row in rows if row['object_id'] == target['object_id'])
@@ -36,7 +36,7 @@ def test_generic_context_is_visible_and_invalid_context_gets_a_readonly_warning(
     stamp_canonical_hashes(changed)
     install_fixture_history(console, sid, rows)
     corrupted = physical_state(console, sid)
-    warning, opened = _context_evidence(changed, rows, sid, 'origin', set())
+    warning, opened = _context_evidence(changed, rows, set())
     assert opened
     assert 'Een koppeling verwijst naar gewijzigde of ontbrekende tekst.' in warning
     assert 'deze telt nu niet als geldig contextbewijs' in warning
@@ -51,14 +51,14 @@ def test_already_displayed_context_stays_collapsed_and_missing_source_has_no_pai
     console.confirm_source_context(**command)
     rows = console.snapshot_objects(command['snapshot_id'])
     focal = next(row for row in rows if row['object_id'] == target['object_id'])
-    html, opened = _context_evidence(focal, rows, command['snapshot_id'], 'origin', {'DOEN'})
+    html, opened = _context_evidence(focal, rows, {'DOEN'})
     assert not opened
     assert '<p class="context-literal">DOEN</p>' not in html
-    assert command['reason'] in html and 'Koppeling aanpassen of verwijderen' in html
+    assert command['reason'] in html and 'Koppeling aanpassen of verwijderen' not in html
     missing = [deepcopy(row) for row in rows if row['object_id'] != source['object_id']]
-    html, opened = _context_evidence(focal, missing, command['snapshot_id'], 'origin', set())
+    html, opened = _context_evidence(focal, missing, set())
     assert opened
     assert 'De contextbron ontbreekt.' in html
     assert 'Koppeling aanpassen of verwijderen' not in html
-    assert 'Broncontext vastleggen of aanpassen in Vorming' in html
+    assert 'Broncontext vastleggen of aanpassen in Vorming' not in html
     assert not re.search(r'href="[^"]*context_target=', html)

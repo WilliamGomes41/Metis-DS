@@ -190,10 +190,10 @@ def test_other_blocked_candidates_are_readable_and_remain_accessible():
         {"object_id": f"console-eenzaamheid-p001-f{index:03d}-u01", "object_type": "unclassified", "proposed_object_type": "unclassified", "content": {"clean_text": text}, "metadata": {"admission": {"gate_result": GATE_BLOCKED}}}
         for index, text in enumerate(["Een passage over sociale contacten.", "Een passage over het netwerk van de oudere."], 1)
     ]
-    rendered = _render_review_index("snap-test", objects, "richtlijn", task="repair")
+    rendered = _render_review_index("snap-test", objects, "richtlijn", task="inventory")
     visible = VisibleRows()
     visible.feed(rendered)
-    assert "Passages corrigeren (2)" in rendered
+    assert rendered.count('data-passage-category="repair"') == 2
     assert len(visible.rows) == 2
     for obj, (_, label) in zip(objects, visible.rows):
         assert label == obj["content"]["clean_text"]

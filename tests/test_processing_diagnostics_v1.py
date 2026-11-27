@@ -268,10 +268,10 @@ def test_control_diagnostics_stay_on_the_existing_read_path() -> None:
     ]
     before = deepcopy(objects)
 
-    html = _render_review_index("snap-1", objects, "richtlijn", task="repair")
+    html = _render_review_index("snap-1", objects, "richtlijn", task="inventory")
 
     assert objects == before
     assert 'class="processing-diagnostics"' not in html
-    assert 'object=a&amp;task=repair' in html
-    assert "Passages corrigeren (1)" in html
+    assert 'object=a&amp;task=inventory' in html
+    assert 'data-passage-id="a" data-passage-category="repair"' in html
     assert "source_fidelity_failure" not in html

@@ -330,9 +330,9 @@ def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path, *
     page = client.get(f'/review?document={sid}&task=inventory')
     assert page.status_code == 200
     assert 'Mogelijk bronlabel' in page.text
-    detail = client.get(f'/review?document={sid}&object={target["object_id"]}&task=repair')
+    detail = client.get(f'/review?document={sid}&object={target["object_id"]}&task=inventory')
     assert detail.status_code == 200
-    assert 'Mogelijk bronlabel' in detail.text
+    assert target['content']['clean_text'] in detail.text
     assert 'De koppeling en betekenis zijn hiermee niet bevestigd.' not in detail.text
     response = client.get(f'/inzicht/document/passages?document={sid}&format=csv')
     assert response.status_code == 200
@@ -499,10 +499,10 @@ def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path
     for target in ["/inzicht/veiligheidstests", "/settings/quality/compare", "/settings/technical/exports"]:
         assert f'href="{target}"' not in hub.text
     assert snapshot_id not in hub.text
-    repair = client.get(f"/review?document={snapshot_id}&task=repair")
+    repair = client.get(f"/review?document={snapshot_id}&task=inventory")
     assert "Bekijk bronpassage" in repair.text
     assert "Technische diagnose en exports" not in repair.text
-    assert f'href="/inzicht/document?document={snapshot_id}"' in repair.text
+    assert repair.status_code == 200
     assert 'href="/settings/technical"' not in repair.text
     assert "Signalen per diagnostische familie" not in repair.text
     assert "Exporteer detaildiagnostiek" not in repair.text
