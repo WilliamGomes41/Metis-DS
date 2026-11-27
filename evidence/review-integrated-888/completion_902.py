@@ -108,14 +108,15 @@ def decision_retry(tmp_path, production_console, production_app, monkeypatch, de
         before = durable(console, [sid])
         before_generation = console.workflow_document_store.review_document_input(sid)[1]
         first = client.post('/review', data=data, follow_redirects=False)
-        expected = 200 if decision == 'revise' else 303
+        # The retired correction editor no longer accepts a free 'revise' (#1180).
+        expected = 400 if decision == 'revise' else 303
         assert first.status_code == expected
         winner = durable(console, [sid])
         after_generation = console.workflow_document_store.review_document_input(sid)[1]
         if decision in {'later', 'revise'}:
             assert winner == before
             if decision == 'revise':
-                assert 'Correctie specificeren' in first.text
+                assert 'Voor deze correctie is een nieuwe versie van het kennisobject nodig.' in first.text
         else:
             current = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
             assert current['governance']['validation_status'] == 'rejected'

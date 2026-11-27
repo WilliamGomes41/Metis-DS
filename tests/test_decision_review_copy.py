@@ -99,3 +99,32 @@ def test_passage_type_repair_reopens_the_exact_passage(tmp_path, production_app,
     assert client.post(url, data=fields).status_code in (400, 409)
     assert console.objects_revision(sid) == revision
     assert _console(tmp_path, production_console=production_console)._current_object(sid, fields["object_id"]) == updated
+
+
+def test_structural_heading_never_receives_a_route_type(tmp_path, production_app, production_console):
+    """A heading in a decision tree keeps its structural type; no form and no command (#1180)."""
+    from tests.semantic_fixture_support import install_fixture_history
+    from tests.test_decision_graph_chain import ingest
+
+    console = _console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    sid = ingest(console, accounts)["snapshot_id"]
+    rows = console._load_objects(sid)
+    heading = next(row for row in rows if row["object_type"] != "document")
+    heading.update(object_type="heading", proposed_object_type="heading")
+    install_fixture_history(console, sid, rows)
+    client = TestClient(production_app(console), base_url="https://testserver")
+    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    url = "/review/decision-graph"
+    view = client.get(url, params={"document": sid})
+    assert view.status_code == 200
+    assert f'id="passage-{heading["object_id"]}"' not in view.text
+    before = deepcopy(console._current_object(sid, heading["object_id"]))
+    revision = console.objects_revision(sid)
+    for passage_type in ("node", "path", "outcome"):
+        response = client.post(url, data={"document": sid, "expected_revision": revision, "object_id": heading["object_id"],
+                                          "action": "classification", "confirmed_object_type": passage_type,
+                                          "reason": "Kop als route opslaan."})
+        assert response.status_code == 400
+    assert console.objects_revision(sid) == revision
+    assert console._current_object(sid, heading["object_id"]) == before

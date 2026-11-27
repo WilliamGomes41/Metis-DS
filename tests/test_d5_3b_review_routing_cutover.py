@@ -136,14 +136,13 @@ def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, 
 
 
 def test_review_task_normalization_accepts_canonical_tasks() -> None:
-    for retired in ("headings", "individual", "together", "control", "decisions", "history", "closure"):
+    for retired in ("headings", "individual", "together", "control", "decisions", "history", "closure", "repair"):
         assert normalize_review_task(retired) == ""
     for canonical in (
         "structure",
         "contextual",
         "batch",
         "second_review",
-        "repair",
         "disposition",
     ):
         assert normalize_review_task(canonical) == canonical

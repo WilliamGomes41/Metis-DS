@@ -25,10 +25,17 @@ def options(values, selected=""):
     return "".join(f'<option value="{esc(k)}" {"selected" if k == selected else ""}>{esc(v)}</option>' for k, v in values)
 
 
+def _is_structural(obj):
+    """Headings keep their structural classification; they never become a route type."""
+    return "heading" in {obj.get("object_type"), obj.get("proposed_object_type"), obj.get("confirmed_object_type")}
+
+
 def _passage_types(rows, common, immutable):
     from src.operations_console_app import _object_type_label
     items = []
     for obj in rows:
+        if _is_structural(obj):
+            continue
         current = obj.get("confirmed_object_type")
         proposed = obj.get("proposed_object_type") or obj["object_type"]
         label = _object_type_label(current or proposed)
@@ -61,6 +68,8 @@ def _change_passage_type(console, actor_id, document, object_id, selected, revis
     target = next((row for row in rows if row["object_id"] == object_id), None)
     if target is None or target["object_type"] == "document":
         raise ConsoleError("unknown_object")
+    if _is_structural(target):
+        raise ConsoleError("decision_review_action_invalid")
     if is_admission_blocked(target, review_path="boom"):
         raise ConsoleError("blocked_candidate_not_reviewable")
     if selected == target.get("confirmed_object_type"):
