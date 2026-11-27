@@ -16,3 +16,11 @@ def native_state(tmp_path, config):
         )
         return app.state.operations_kernel
     return state, store, source
+
+
+def receive_tree(console, actor, reviewer, title):
+    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
+    return console.receive_source(actor_id=actor, class_='beslisboom', filename='boom.json',
+        content_type='application/json', data=_boom_freeze_bytes(), title=title, version='1',
+        family=title, date='2026-10-09', live_url='', ingest_kind='new',
+        named_reviewers=[reviewer])['snapshot_id']

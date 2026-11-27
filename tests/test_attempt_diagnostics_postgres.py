@@ -80,7 +80,9 @@ def test_recovery_permission_http_restart_and_concurrent_consumption(workflow_po
     with pytest.raises(ConsoleError, match="publisher_role_required"):
         console.authorize_processing_recovery(actor_id=actor, snapshot_id=sid, reason="Investigate")
     client = _client(console)
-    assert client.post("/tree/processing-recovery", data={"snapshot_id": sid, "reason": "Record rejected evidence"}, follow_redirects=False).status_code == 303
+    assert client.post("/tree/processing-recovery", data={"snapshot_id": sid, "reason": "Record rejected evidence"}, follow_redirects=False).status_code == 404
+    assert console._envelope(sid)["processing_attempts"] == prior
+    console.authorize_processing_recovery(actor_id=reviewer, snapshot_id=sid, reason="Record rejected evidence")
     restarted = _console(tmp_path, workflow_postgres)
     assert restarted.processing_status(sid)["retry_allowed"]
     with pytest.raises(ConsoleError, match="processing_recovery_already_authorized"):

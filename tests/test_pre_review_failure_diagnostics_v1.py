@@ -75,15 +75,12 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         assert "Document veilig ontvangen" in response.text
         assert "Bron openen voor annotatie" in response.text
         assert not console._envelope(sid).get("processing_attempts")
-        started = client.post("/source-selection/start", data={"document": sid,
-            "command_id": "selection-diagnostics", "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
-        assert started.status_code == 303
-        import asyncio
-        async def wait():
-            await asyncio.gather(*tuple(app.state.source_selection_workers))
-        client.portal.call(wait)
+        from tests.test_review_formation_problems import execute
+        with pytest.raises(ConsoleError) as failure_error:
+            execute(console, sid, actor["account_id"], 'selection-diagnostics')
+        assert failure_error.value.code == code
         response = client.get("/source-selection", params={"document": sid})
-        assert "Status: mislukt" in response.text
+        assert "Vormingsproblemen" not in response.text
         envelope = console._envelope(sid)
         # The combined workspace now includes the former problem room's
         # collapsed technical evidence. Keep codes out of the primary copy.
@@ -118,12 +115,11 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         response = client.post("/tree/reprocess", data={"snapshot_id": sid}, follow_redirects=False)
         assert response.status_code == 404
         assert console._envelope(sid) == before
-        started = client.post("/source-selection/start", data={"document": sid,
-            "command_id": "retry-diagnostics", "expected_revision": console.objects_revision(sid)}, follow_redirects=False)
-        assert started.status_code == 303
-        client.portal.call(wait)
+        with pytest.raises(ConsoleError) as failure_error:
+            execute(console, sid, actor["account_id"], 'retry-diagnostics')
+        assert failure_error.value.code == code
         response = client.get("/source-selection", params={"document": sid})
-        assert response.status_code == 200 and "Status: mislukt" in response.text
+        assert response.status_code == 200 and "Vormingsproblemen" not in response.text
         reference = console._envelope(sid)["processing_attempts"][-1]["processing_reference"]
         assert re.fullmatch(r"[a-f0-9]{32}", reference)
         assert "Verwerkingsreferentie:" not in response.text

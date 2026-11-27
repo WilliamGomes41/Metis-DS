@@ -37,12 +37,17 @@ def runtime(request, tmp_path, monkeypatch, *, production_app, production_consol
                                     roles=("researcher", "reviewer", "publisher"))["account_id"]
     other = console.create_account(username="other", password="fixture-only",
                                    roles=("researcher", "reviewer"))["account_id"]
-    inference_boundary = {"call": provider}
+    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
+    from tests.semantic_fixture_support import _decision_tree_response
+    import json
+    def tree_provider(_url, _headers, payload, _timeout):
+        return _decision_tree_response(json.loads(payload['input'][1]['content']))
+    inference_boundary = {"call": tree_provider}
     bind(console, lambda *args: inference_boundary["call"](*args))
-    parent = console.ingest(actor_id=author, filename="parent.html",
-        data=b"<html><body><p>Gebruik geen zalf.</p></body></html>", content_type="text/html",
+    parent = console.ingest(actor_id=author, filename="parent.json",
+        data=_boom_freeze_bytes(), content_type="application/json",
         ingest_kind="new", title="Parent", version="1", date="2026-10-09", live_url="",
-        class_="richtlijn", family="fixture", named_reviewers=[],
+        class_="beslisboom", family="fixture", named_reviewers=[],
         review_policy={"contract": "explicit-review-v1", "revision": 1,
                        "primary": author, "assignments": []})["snapshot_id"]
     if native:
@@ -121,22 +126,22 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
         entered.set()
         assert release.wait(15), "A04_PAUSE_NOT_RELEASED"
 
-    # This is the actual HTML extractor invoked by OperationsConsole._extract,
-    # not a pause before the preparation orchestrator. It still extracts real HTML.
-    import src.operations_console_v1 as kernel
-    original_extract = kernel.extract_html
+    # Pause inside extraction of the stored decision tree.
+    import src.review.beslisboom_path_v1 as kernel
+    original_extract = kernel.extract_boom_fragments
     def extract(*args, **kwargs):
         extraction_calls.append(1)
         if boundary == "extractor":
             pause()
         return original_extract(*args, **kwargs)
-    monkeypatch.setattr(kernel, "extract_html", extract)
+    monkeypatch.setattr(kernel, "extract_boom_fragments", extract)
 
+    original_inference = inference_boundary["call"]
     def inference(*args):
         provider_calls.append(1)
         if boundary == "provider":
             pause()
-        return provider(*args)
+        return original_inference(*args)
     inference_boundary["call"] = inference
 
     if block_eventloop:
@@ -163,7 +168,7 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
 
             command = {"document": parent, "expected_revision": console.objects_revision(parent),
                 "command_id": "successor", "reason": "Nieuwe controle", "primary": author,
-                "policy_revision": "2", "new_class": "richtlijn"}
+                "policy_revision": "2", "new_class": "beslisboom"}
             receipt = client.post("/review/successor", data=command, follow_redirects=False)
             assert receipt.status_code == 303, receipt.text
             child = receipt.headers["location"].split("document=")[1]

@@ -79,6 +79,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                                     'browser_heading_workplace_check.cjs':2,
                                     'browser_continuation_workplace_check.cjs':2,
                                     'browser_source_context_check.cjs':2,
+                                    'browser_source_exclusions_check.cjs':2,
                                     'browser_formation_repair_check.cjs':2,
                                     'browser_review_disposition_check.cjs':4,
                                     'browser_graph_workplace_check.cjs':8,

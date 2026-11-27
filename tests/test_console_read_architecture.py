@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 
+from tests.decision_graph_native_support import receive_tree
 from tests.ko_review_fixture_support import affirmative_assessment
 from collections import Counter
 from copy import deepcopy
@@ -289,9 +290,9 @@ def test_source_overview_never_loads_full_payloads_or_offers_unchecked_commands(
         monkeypatch.setattr(console.workflow_document_store, name, forbidden)
     response = client.get('/source-selection')
     assert response.status_code == 200
-    assert 'Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd' in response.text
+    assert 'Bekijk status bouwopdrachten' in response.text
     assert 'action="/source-selection/start"' not in response.text
-    assert 'Document openen' in response.text
+    assert 'Nieuwe bronversie inleveren' in response.text
 
 
 def test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked(tmp_path, production_console, production_app, monkeypatch):
@@ -459,7 +460,7 @@ def test_notices_second_diagnostic_batch_failure_is_explicit_partial(tmp_path, p
 
 def test_source_overview_refreshes_running_document(tmp_path, production_console, production_app):
     console, users, _, _ = _system(tmp_path, production_console=production_console)
-    sid = _received(console, users)
+    sid = receive_tree(console, users['researcher']['account_id'], users['reviewer_a']['account_id'], 'Running tree')
     console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
         command_id='overview-running', expected_revision=console.objects_revision(sid))
     response = _login(console, users['researcher']['username'], production_app=production_app).get('/source-selection')

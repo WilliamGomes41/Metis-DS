@@ -64,9 +64,10 @@ def _blocker_message(code: str) -> str:
 def _blocker_view(code: str, snapshot_id: str) -> dict[str, Any]:
     recovery_href = None
     recovery_label = None
-    if code in {'source_passage_review_incomplete', 'source_formation_incomplete', 'pre_review_processing_incomplete'}:
-        # Source closure covers knowledge candidates as well as source records.
-        # Its aggregate blocker needs the document overview, not the source-only editor.
+    if code in {'source_passage_review_incomplete', 'source_formation_incomplete'}:
+        recovery_href = f"/inzicht/document?document={quote(snapshot_id, safe='')}"
+        recovery_label = "Bekijk documentdiagnose"
+    elif code == 'pre_review_processing_incomplete':
         recovery_href = f"/source-selection?document={quote(snapshot_id, safe='')}"
         recovery_label = "Open Vorming"
     elif code in REVIEW_RECOVERY_BLOCKERS:

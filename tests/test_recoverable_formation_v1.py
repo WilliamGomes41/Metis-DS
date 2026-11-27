@@ -127,7 +127,7 @@ def test_review_points_to_problems_with_or_without_candidate(tmp_path, *, produc
     client.cookies.set(COOKIE, state.authenticate('reviewer', 'strong-test-password')['token'])
     page = client.get('/review', params={'document': sid, 'task': 'contextual'}).text
     assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
-    assert f'/source-selection?document={sid}' in page
+    assert f'/inzicht/document?document={sid}' in page
     # The current-state projection decides, not the stored flag alone.
     real_status = state.processing_status
     for change in ({'formation_incomplete': False},):
@@ -177,17 +177,14 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
     assert len(calls) == 2
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
     page = client.get('/inzicht/document', params={'document': sid})
-    assert 'Naar Vorming voor Starten of Hervatten' in page.text and 'publicatie is geblokkeerd' in page.text
+    assert 'Naar Vorming voor Starten of Hervatten' not in page.text and 'publicatie is geblokkeerd' in page.text
     assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False
     response = client.post('/tree/resume-formation', data=command, follow_redirects=False)
     assert response.status_code == 404
     assert len(calls) == 2
-    with client:
-        from tests.test_availability_repair import drain
-        assert client.post('/source-selection/start', data={'document': sid, 'command_id': command['command_id'],
-            'expected_revision': command['expected_revision']}, follow_redirects=False).status_code == 303
-        drain(client, client.app)
+    from tests.test_review_formation_problems import execute
+    execute(state, sid, actor, command['command_id'])
     assert len(calls) == 3
 
 

@@ -63,7 +63,7 @@ def test_removed_tree_routes_never_reserve_or_execute(console, monkeypatch):
         assert console._envelope(sid).get("processing_attempts", []) == []
         assert console.snapshot_objects(sid) == []
         page = client.get("/inzicht/document", params={"document": sid}).text
-        assert f'href="/source-selection?document={sid}"' in page
+        assert "Naar Vorming voor Starten of Hervatten" not in page
         stranger = console.create_account(username="stranger", password="fixture-only", roles=("reviewer",))
         login(client, stranger["username"])
         for route in ("/tree/reprocess", "/tree/resume-formation"):
@@ -194,18 +194,14 @@ def test_pdf_capacity_other_process_keeps_durable_command_pending_then_recovers(
             login(client)
             drain(client, app)
             screen = client.get("/source-selection", params={"document": ids[0]}).text
-            assert "Status: wacht op uitvoering" in screen
-            assert "Verstreken sinds aanvraag:" in screen
-            assert "telt deze poging mee voor de herstelgrens" in screen
+            assert 'lopende verwerking' in screen and 'data-source-poll' not in screen
+            assert console._envelope(ids[0])['processing_attempts'][-1]['dispatch']['state'] == 'pending'
             assert 'window.location.reload' not in screen
             assert ">Hervatten</button>" not in screen
 
             response = client.get("/source-selection/progress", params={"snapshot": ids[0]})
             assert response.status_code == 200
-            row, = response.json()["rows"]
-            assert row["snapshot"] == ids[0]
-            assert row["attempt"] in {attempts[0]["attempt_id"], attempts[0]["started_at"]}
-            assert row["state"] == "wacht op uitvoering" and row["running"]
+            assert response.json()["rows"] == []
             assert calls == []
             for sid, attempt in zip(ids, attempts):
                 assert console._envelope(sid)["processing_attempts"] == [attempt]

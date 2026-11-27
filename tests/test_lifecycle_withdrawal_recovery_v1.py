@@ -61,7 +61,6 @@ def _client(console, username="publisher.carla"):
 def _ingest(console, accounts, title, version, prior=None):
     bind_fixture_selections(console)
     import uuid
-    import asyncio
     with TestClient(application_for(console, trusted_origin="https://testserver"),
                     base_url="https://testserver", headers={"Origin": "https://testserver"}) as client:
         response = client.post("/login", data={"username": accounts["researcher"]["username"], "password": TEST_PASSWORD},
@@ -81,13 +80,8 @@ def _ingest(console, accounts, title, version, prior=None):
         sid = parse_qs(urlparse(response.headers["location"]).query)["document"][0]
         assert console.snapshot_objects(sid) == []
         assert not console._envelope(sid).get("processing_attempts")
-        response = client.post("/source-selection/start", data={"document": sid,
-            "command_id": "start-" + uuid.uuid4().hex, "expected_revision": console.objects_revision(sid)},
-            follow_redirects=False)
-        assert response.status_code == 303, response.text
-        async def wait():
-            await asyncio.gather(*tuple(client.app.state.source_selection_workers))
-        client.portal.call(wait)
+        from tests.test_review_formation_problems import execute
+        execute(console, sid, accounts['researcher']['account_id'], 'start-' + uuid.uuid4().hex)
         assert console._envelope(sid)["processing_attempts"][-1]["state"] == "succeeded"
     receipt = {"snapshot_id": sid}
     return console._envelope(receipt["snapshot_id"])
@@ -317,12 +311,8 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     resumed = researcher_client.post("/tree/reprocess", data={"snapshot_id": v3["snapshot_id"]}, follow_redirects=False)
     assert resumed.status_code == 404
     assert not fresh.snapshot_objects(v3["snapshot_id"])
-    with researcher_client:
-        from tests.test_availability_repair import drain
-        assert researcher_client.post("/source-selection/start", data={"document": v3["snapshot_id"],
-            "command_id": "recover-v3", "expected_revision": fresh.objects_revision(v3["snapshot_id"])},
-            follow_redirects=False).status_code == 303
-        drain(researcher_client, researcher_client.app)
+    from tests.test_review_formation_problems import execute
+    execute(fresh, v3["snapshot_id"], accounts["researcher"]["account_id"], 'recover-v3')
     assert fresh.snapshot_objects(v3["snapshot_id"])
     _assert_review_projection(fresh, researcher_client, v3["snapshot_id"])
     resumed_envelope = fresh._envelope(v3["snapshot_id"])

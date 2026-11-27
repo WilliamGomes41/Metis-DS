@@ -80,7 +80,7 @@ def test_durable_independent_valid_proposal_reaches_review(tmp_path, production_
     response = client.get('/review', params={'document': sid, 'object': candidates[0]['object_id'], 'task': 'contextual'})
     assert response.status_code == 200 and FIRST in response.text
     assert 'data-document-assessment="not_evaluated"' in response.text and 'Bekijk documentbeoordeling' in response.text
-    assert f'href="/source-selection?document={sid}">Bekijk documentbeoordeling</a>' in response.text
+    assert f'href="/inzicht/document?document={sid}">Bekijk documentbeoordeling</a>' in response.text
     assert console.snapshot_objects(sid) == before
     assert console.objects_revision(sid) == revision and len(calls) == provider_calls
     assert 'source_formation_incomplete' in console.publication_readiness(sid)['blockers']
@@ -113,8 +113,8 @@ def test_problems_restart_targeted_recovery_and_duplicate(tmp_path, production_c
     login(client)
     page = client.get('/source-selection', params={'document': sid})
     assert page.status_code == 200
-    assert 'Hervatten</button>' in page.text
-    assert 'Bekijk en behandel dit bronstuk' in page.text
+    assert 'Hervatten</button>' not in page.text
+    assert 'Bekijk en behandel dit bronstuk' not in page.text
     assert restarted.snapshot_objects(sid) == before and len(calls) == 3
     mode['broken'] = False
     revision = restarted.objects_revision(sid)
@@ -151,8 +151,8 @@ def test_review_does_not_hide_remaining_problems_or_allow_reextract(tmp_path, pr
     client = TestClient(console._metis_test_application)
     login(client, 'reviewer')
     page = client.get('/source-selection', params={'document': sid})
-    assert page.status_code == 200 and 'Opnieuw verwerken is nu niet beschikbaar' in page.text
-    assert 'Bekijk en behandel dit bronstuk' in page.text and 'Hervatten</button>' not in page.text
+    assert page.status_code == 200 and 'Bekijk status bouwopdrachten' in page.text
+    assert 'Bekijk en behandel dit bronstuk' not in page.text and 'Hervatten</button>' not in page.text
     with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
         execute(console, sid, author, 'guarded')
     assert console.snapshot_objects(sid) == reviewed
@@ -254,7 +254,7 @@ def test_actual_start_does_not_call_model_for_whitespace_gaps(tmp_path, producti
 def test_real_browser_navigation_and_raad_read_only(tmp_path, production_console, monkeypatch):
     import socket
     import subprocess
-    from threading import Event, Thread
+    from threading import Thread
     import time
     from uuid import uuid4
     import uvicorn
@@ -263,43 +263,22 @@ def test_real_browser_navigation_and_raad_read_only(tmp_path, production_console
     module = os.environ['METIS_PLAYWRIGHT_MODULE']
     browser = os.environ['METIS_BROWSER_EXECUTABLE']
     console, sid, author, reviewer, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
-    entered, release = Event(), Event()
-    mode['pause'] = entered, release
+    execute(console, sid, author, 'historical-work')
+    assert console.processing_status(sid)['formation_incomplete']
     app = console._metis_test_application
     sock = socket.socket(); sock.bind(('127.0.0.1', 0))
     origin = f'http://127.0.0.1:{sock.getsockname()[1]}'
     server = uvicorn.Server(uvicorn.Config(app, log_level='critical', access_log=False))
     thread = Thread(target=lambda: server.run(sockets=[sock]), daemon=True)
     thread.start()
-    process = None
     try:
         deadline = time.monotonic() + 5
         while not server.started and time.monotonic() < deadline:
             time.sleep(.01)
         assert server.started
-        marker = tmp_path / 'navigated'
         env = dict(os.environ, METIS_BROWSER_BASE=origin, METIS_PROBLEM_DOCUMENT=sid,
-            METIS_PROBLEM_REVISION=console.objects_revision(sid),
-            METIS_PROBLEM_NAVIGATED=str(marker), METIS_PROBLEM_SCREENSHOT=str(tmp_path/'problems.png'))
-        process = subprocess.Popen(['node', 'tests/browser_formation_problems.cjs'],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-        deadline = time.monotonic() + 20
-        while not entered.is_set() and process.poll() is None and time.monotonic() < deadline:
-            time.sleep(.02)
-        if not entered.is_set() and process.poll() is not None:
-            stdout, stderr = process.communicate(timeout=2)
-            pytest.fail('Browser failed before processing: ' + stderr)
-        assert entered.is_set(), 'Browser did not reach the existing processing command'
-        deadline = time.monotonic() + 12
-        while not marker.exists() and process.poll() is None and time.monotonic() < deadline:
-            time.sleep(.02)
-        assert marker.exists(), 'Problem navigation failed during model processing'
-        assert len(calls) == 1 and console._envelope(sid)['processing_attempts'][-1]['state'] == 'running'
-        release.set()
-        stdout, stderr = process.communicate(timeout=25)
-        assert process.returncode == 0, stderr
-        assert json.loads(stdout)['navigatedWhileProcessing']
-        assert len(calls) == 3 and console.processing_status(sid)['formation_incomplete']
+                   METIS_PROBLEM_REVISION=console.objects_revision(sid))
+        subprocess.run(['node', 'tests/browser_formation_problems.cjs'], env=env, check=True, timeout=35)
         # Run the actual Raad investigation worker with a scoped capability.
         service = configure(app, console, None, tmp_path/'raad-evidence', origin=origin, module=module, browser=browser)
         pinned = {**context(console, reviewer, sid), 'origin': origin}
@@ -309,12 +288,9 @@ def test_real_browser_navigation_and_raad_read_only(tmp_path, production_console
         result = service.store.get(job['id'])
         assert result['state'] == 'completed', result
         assert all(row['verdict'] == 'pass' for row in result['result']['checks'])
-        assert result['result']['coverage']['formation_problems'] == 'first_page_read_only'
+        assert result['result']['coverage']['formation_problems'] == 'not_applicable'
         assert before == (console._envelope(sid), console.snapshot_objects(sid), console.object_review_bindings(sid))
     finally:
-        release.set()
-        if process is not None and process.poll() is None:
-            process.kill(); process.communicate(timeout=5)
         server.should_exit = True
         thread.join(6)
         sock.close()

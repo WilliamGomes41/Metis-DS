@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from src.operations_console_v1 import ConsoleError
 from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.vorming.processing_retry_v1 import now
+from tests.decision_graph_native_support import receive_tree
 from tests.test_recommendation_context_v3 import response_for
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -109,33 +110,36 @@ def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backen
     before=deepcopy(restarted._envelope(sid))
     with TestClient(app,base_url='https://testserver') as client:
         login(client)
-        assert start(client,restarted,sid).status_code==303
+        assert start(client,restarted,sid).status_code==404
         drain(client,app)
         assert client.get('/source-selection',params={'document':sid}).status_code==200
     final=state(tmp_path, production_console=production_console)
     assert final._envelope(sid)['sha256']==before['sha256']
     assert final._verified_source_bytes(final._envelope(sid))[1].startswith(b'<html>')
-    assert final._envelope(sid)['processing_attempts'][-1]['state']=='failed'
-    assert calls==[1]
+    assert final._envelope(sid) == before
+    assert calls == []
 
 
 def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backend_state, tmp_path, *, production_app, production_console):
     console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
     entered=Event();release=Event();calls=[];observations=[]
-    def paused(*args):
+    bind_fixture_selections(console)
+    original = console._fragments_and_spec
+    def paused(*args, **kwargs):
         calls.append(1)
         observations.append(_preparation_context(console))
         entered.set(); assert release.wait(5)
-        return provider(*args)
-    bind(console,paused); app=production_app(console)
+        return original(*args, **kwargs)
+    console._fragments_and_spec = paused
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client,ThreadPoolExecutor(3) as pool:
-        login(client);assert upload(client,reviewer).status_code==303
-        sid=console.list_envelopes()[0]['snapshot_id'];rev=console.objects_revision(sid)
+        login(client)
+        sid=receive_tree(console,author,reviewer,'Startcontrole');rev=console.objects_revision(sid)
         try:
             assert start(client,console,sid).status_code==303
             assert entered.wait(3)
             progress=client.get('/source-selection',params={'document':sid})
-            assert 'Fase: Bronpassages selecteren' in progress.text
+            assert 'Fase:' in progress.text
             assert 'Verstreken:' in progress.text and 'Geschat resterend:' in progress.text
             # The selected running document is already polled: no self-link that only reloads.
             assert 'Voortgang bekijken' not in progress.text
@@ -180,7 +184,8 @@ def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(b
         other=client.post('/review/successor',data={**command,'command_id':'duplicate-context'},follow_redirects=False)
         assert other.status_code==400 and 'review_successor_already_exists' in other.text
         try:
-            assert start(client,console,sid2).status_code==303
+            attempt, _ = console.reserve_source_selection(actor_id=author, snapshot_id=sid2, command_id='successor-start', expected_revision=console.objects_revision(sid2))
+            worker = pool.submit(console.execute_source_selection, actor_id=author, snapshot_id=sid2, attempt=attempt)
             assert entered.wait(3)
             assert pool.submit(client.get,'/health').result(timeout=1).status_code==200
             assert pool.submit(client.get,'/ingest').result(timeout=1).status_code==200
@@ -188,7 +193,9 @@ def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(b
             with console._reprocessing_transaction(sid):
                 changed=deepcopy(console._envelope(sid));changed['review_policy']['revision']=3
                 console._commit_prepared_store(envelopes={sid:changed},snapshot_id=sid)
-        finally:release.set();drain(client,app)
+        finally:release.set()
+        with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
+            worker.result(10)
     assert console.snapshot_objects(sid)==before
     assert console.snapshot_objects(sid2)==[]
     attempt=console._envelope(sid2)['processing_attempts'][-1]
@@ -214,10 +221,10 @@ def test_restart_expired_reservation_resumes_without_losing_source(backend_state
     with TestClient(app,base_url='https://testserver') as client:
         login(client)
         screen=client.get('/source-selection',params={'document':sid}).text
-        assert 'Status: onderbroken' in screen and '>Hervatten</button>' in screen
-        assert start(client,restarted,sid,'resume').status_code==303
-        drain(client,app)
-        assert 'Status: voltooid' in client.get('/source-selection',params={'document':sid}).text
+        assert '>Hervatten</button>' not in screen
+        assert start(client,restarted,sid,'resume').status_code==404
+        from tests.test_review_formation_problems import execute
+        execute(restarted, sid, author, 'resume')
     final=state(tmp_path, production_console=production_console)
     assert [a['state'] for a in final._envelope(sid)['processing_attempts']]==['interrupted','succeeded']
     with pytest.raises(ConsoleError):
@@ -396,13 +403,11 @@ def test_http_partial_attempt_success_is_not_complete_then_resume_only_open_rang
     with TestClient(app,base_url='https://testserver') as client:
         assert client.post('/login',data={'username':'author','password':'strong-test-password'},follow_redirects=False).status_code==303
         screen=client.get('/source-selection',params={'document':sid}).text
-        assert 'Status: onderbroken' in screen
-        assert 'Poging technisch geslaagd: ja' in screen
-        assert 'Volledige bronverwerking: nog niet bevestigd' in screen
+        assert 'Vormingsproblemen' not in screen
         mode['broken']=False;prior_calls=len(calls)
-        assert start(client,restarted,sid,'resume-http').status_code==303
-        drain(client,app)
-        assert 'Status: voltooid' in client.get('/source-selection',params={'document':sid}).text
+        assert start(client,restarted,sid,'resume-http').status_code==404
+        from tests.test_review_formation_problems import execute
+        execute(restarted, sid, actor, 'resume-kernel')
         assert len(calls)==prior_calls+1
         data=json.loads(calls[-1]['input'][1]['content'])
         assert [b['text'] for b in data['source_blocks']]==[SECOND]
@@ -467,10 +472,12 @@ def test_expired_first_selection_can_complete_with_only_retained_source(tmp_path
     bind(console,abstain)
     app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client:
-        login(client);assert start(client,console,sid,'recover-empty').status_code==303;drain(client,app)
-        text=client.get('/source-selection',params={'document':sid}).text
-        assert 'Status: voltooid' in text
-        assert '0 gevormde kandidaten' in text and '1 overige bronpassages' in text
-        assert 'Naar Review' not in text
+        login(client)
+        assert start(client,console,sid,'recover-empty').status_code==404
+        from tests.test_review_formation_problems import execute
+        execute(console, sid, author, 'recover-empty')
+        from src.vorming.source_accountability_v1 import is_source_record
+        objects = [o for o in console.snapshot_objects(sid) if o['object_type'] != 'document']
+        assert len(objects) == 1 and is_source_record(objects[0])
     assert console._envelope(sid)['processing_attempts'][-1]['state']=='succeeded'
     assert not console.publication_readiness(sid)['publish_allowed']

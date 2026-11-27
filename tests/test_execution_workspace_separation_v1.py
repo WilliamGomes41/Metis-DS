@@ -132,7 +132,7 @@ def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_
         'reason_code': 'pre_review_llm_provider_unavailable', 'retry_not_before': None})
     page = client.get('/inzicht/document', params={'document': sid})
     assert page.status_code == 200
-    assert f'href="/source-selection?document={sid}"' in page.text
+    assert "Naar Vorming voor Starten of Hervatten" not in page.text
     assert 'action="/tree/reprocess"' not in page.text
     assert 'pre_review_llm_provider_unavailable' in page.text
     commands = []

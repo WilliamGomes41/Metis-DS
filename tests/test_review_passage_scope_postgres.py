@@ -24,7 +24,7 @@ def test_passage_notice_never_reloads_archives_or_evaluates_global_status(incomp
             forbidden.setattr(console, 'processing_status', unrelated_document_work)
             forbidden.setattr(console.workflow_document_store, 'get_envelope', unrelated_document_work)
             forbidden.setattr(console.workflow_document_store, 'processing_history_input', unrelated_document_work)
-            notice = _review_formation_notice(console, sid, inputs)
+            notice = _review_formation_notice(console, sid, inputs, review_path="richtlijn")
         assert 'data-document-assessment="not_evaluated"' in notice
         assert 'publicatie is geblokkeerd' not in notice
         assert inputs.document_assessment == 'not_evaluated'
@@ -54,7 +54,7 @@ def test_explicit_document_notice_keeps_complete_formation_owner(incomplete_docu
         with pytest.raises(ConsoleError, match='source_views_carrier_immutable'):
             inputs.fragments[0]['clean_text'] = 'forbidden'
         monkeypatch.setattr(console, 'processing_status', measured)
-        notice = _review_formation_notice(console, sid, inputs, document_source=inputs.fragments)
+        notice = _review_formation_notice(console, sid, inputs, review_path="richtlijn", document_source=inputs.fragments)
     assert 'data-formation-incomplete' in notice
     assert calls == [expected]
 
@@ -107,7 +107,7 @@ def test_compact_document_assessment_uses_captured_immutable_inputs_without_full
         inputs = read_review_document(console, {'account_id': reviewer, 'roles': ['reviewer']}, sid)
         assert inputs.scope == 'document'
         assert 'semantic_replay' in inputs.envelope
-        notice = _review_formation_notice(console, sid, inputs, document_source=inputs.fragments)
+        notice = _review_formation_notice(console, sid, inputs, review_path="richtlijn", document_source=inputs.fragments)
         assert 'data-formation-incomplete' in notice
     assert console.processing_status(sid) == expected
 
@@ -139,5 +139,5 @@ def test_complete_document_attempts_remain_bound_to_captured_snapshot(incomplete
         inputs = read_review_document(console, {'account_id': reviewer, 'roles': ['reviewer']}, sid)
         assert changed[1] not in {a['attempt_id'] for a in inputs.envelope['processing_attempts']}
         assert console.processing_status(sid) == expected
-        assert 'data-formation-incomplete' in _review_formation_notice(console, sid, inputs, document_source=inputs.fragments)
+        assert 'data-formation-incomplete' in _review_formation_notice(console, sid, inputs, review_path="richtlijn", document_source=inputs.fragments)
     assert changed[1] in {a['attempt_id'] for a in console._processing_envelope(sid)['processing_attempts']}

@@ -628,9 +628,10 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                          and not processing.get("formation_incomplete") and not processing.get("error_code") else code)
         processing_blocked = bool(blocking_code) or processing.get("state") in _DIAGNOSIS_UNFINISHED_STATES
         controls = ""
-        if processing.get("resume_allowed") or processing.get("retry_allowed"):
+        tree = envelope["class"] == "beslisboom"
+        if tree and (processing.get("resume_allowed") or processing.get("retry_allowed")):
             controls += f'<p><a class="btn-primary" href="/source-selection?{query}">Naar Vorming voor Starten of Hervatten</a></p>'
-        if processing_access and processing_blocked and processing.get("reason_code") == "processing_attempt_limit_reached":
+        if tree and processing_access and processing_blocked and processing.get("reason_code") == "processing_attempt_limit_reached":
             controls += f'<p><a href="/source-selection?{query}#processing-recovery">Herstelvoorwaarden bekijken in Vorming</a></p>'
         progress = processing.get("formation_progress") or {}
         attempts = (envelope.get("processing_attempts") or []) if processing_access else []

@@ -77,8 +77,8 @@ def test_unknown_reason_and_missing_identity_are_evidence_not_invented_editor_id
 
 
 @pytest.mark.parametrize(('code', 'path', 'task'), [
-    ('source_passage_review_incomplete', '/source-selection', None),
-    ('source_formation_incomplete', '/source-selection', None),
+    ('source_passage_review_incomplete', '/inzicht/document', None),
+    ('source_formation_incomplete', '/inzicht/document', None),
     ('pre_review_processing_incomplete', '/source-selection', None),
     ('review_work_incomplete', '/review', None),
     ('four_eyes_required', '/review', None),

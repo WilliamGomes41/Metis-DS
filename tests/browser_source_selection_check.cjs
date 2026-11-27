@@ -26,20 +26,20 @@ const fs = require('fs');
   await page.locator('[name=review_option][value=one_other]').check();
   await page.locator('[name=review_reviewers]').selectOption(manifest.reviewer);
   await Promise.all([page.waitForURL('**/annotations?**'), page.locator('#ingest-submit').click()]);
-  const sid = new URL(page.url()).searchParams.get('document');
+  const prose = new URL(page.url()).searchParams.get('document');
   const revision = await page.locator('form[action="/annotations/source"] [name=expected_revision]').inputValue();
   await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).waitFor();
   if (await page.locator('form[action="/source-selection/start"]').count()) throw Error('receipt offers AI start');
   await page.screenshot({path:output+'/received.png',fullPage:true});
-  await page.goto(base+'/source-selection?selected_document='+sid);
-  const manualCard = page.locator(`[data-source-document="${sid}"]`);
+  await page.goto(base+'/source-selection?selected_document='+prose);
+  const manualCard = page.locator(`[data-source-document="${prose}"]`);
   if (await manualCard.getByRole('link',{name:'Bekijk diagnose in Inzicht',exact:true}).count()) {
     throw Error('manual card still shows the diagnosis entry');
   }
-  await page.goto(base+'/inzicht/document?document='+encodeURIComponent(sid));
+  await page.goto(base+'/inzicht/document?document='+encodeURIComponent(prose));
   await page.getByRole('heading',{name:'Oordeel',exact:true}).waitFor();
   const diagnosisURL = new URL(page.url());
-  if (diagnosisURL.pathname!=='/inzicht/document' || diagnosisURL.searchParams.get('document')!==sid)
+  if (diagnosisURL.pathname!=='/inzicht/document' || diagnosisURL.searchParams.get('document')!==prose)
     throw Error('diagnosis lost selected source '+page.url());
   await page.locator('.diagnosis-verdict[role=status]').waitFor();
   if ((await page.locator('.diagnosis-facts dd').last().innerText()).trim()!=='0')
@@ -54,25 +54,25 @@ const fs = require('fs');
       throw Error('diagnostic download did not return authenticated JSON: '+response.status+' '+new URL(response.url).pathname);
     }
     return response.json();
-  }, sid);
-  if (diagnostic.schema!=='blockage-report-v1' || diagnostic.context.snapshot_id!==sid || diagnostic.attempts.length!==0) throw Error('diagnostic changed or lost the received document');
+  }, prose);
+  if (diagnostic.schema!=='blockage-report-v1' || diagnostic.context.snapshot_id!==prose || diagnostic.attempts.length!==0) throw Error('diagnostic changed or lost the received document');
   if (diagnostic.follow_up.some(a=>a.observed_conditions_met!==null || a.execution_authorized)) throw Error('unchecked diagnostic authorized work');
   await page.setViewportSize({width:390,height:844});
   await page.locator('details').last().evaluate(e=>{e.open=true;});
   if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('blockage mobile overflow');
   await page.setViewportSize({width:1440,height:1000});
-  await page.goto(base+'/source-selection?document='+sid);
+  await page.goto(base+'/source-selection?document='+prose);
   await page.reload();
   await manualCard.getByRole('button',{name:'Annoteren',exact:true}).waitFor();
-  // Exercise the retained legacy command explicitly; fresh-upload UI offers annotation.
-  await page.evaluate(async ({sid,revision}) => {
-    const response = await fetch('/source-selection/start',{method:'POST',
-      body:new URLSearchParams({document:sid,expected_revision:revision,command_id:'browser-legacy-start'})});
-    if (!response.ok) throw Error('legacy start rejected: '+response.status);
-  },{sid,revision});
+  const refused = await page.evaluate(async ({sid,revision}) => (await fetch('/source-selection/start',{
+    method:'POST',body:new URLSearchParams({document:sid,expected_revision:revision,command_id:'retired-start'})
+  })).status,{sid:prose,revision});
+  if (refused!==404) throw Error('guideline start returned '+refused);
+  const sid = manifest.tree;
   await page.goto(base+'/source-selection?document='+sid);
+  await page.getByRole('button',{name:'Starten',exact:true}).click();
   const runningCard = page.locator(`[data-source-document="${sid}"][data-source-attempt]`);
-  await runningCard.locator('[data-source-progress]').getByText('Bronpassages selecteren', {exact:false}).waitFor({timeout:10000});
+  await runningCard.locator('[data-source-progress]').getByText(/Fase:|Wacht op een uitvoeringsplek/).waitFor({timeout:10000});
   const isProgress = response => new URL(response.url()).pathname === '/source-selection/progress' && response.ok();
   const pause = page.getByRole('button',{name:'Updates pauzeren',exact:true});
   await pause.click();
@@ -95,7 +95,7 @@ const fs = require('fs');
   if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('progress mobile overflow');
   const before = await page.evaluate(()=>({timeOrigin:performance.timeOrigin, scroll:window.scrollY}));
   await page.screenshot({path:output+'/progress.png',fullPage:true});
-  if (!(await page.request.post(base+'/browser-release-provider')).ok()) throw Error('Could not release processing');
+  if (!(await page.request.post(base+'/browser-release-tree')).ok()) throw Error('Could not release processing');
   await page.getByRole('link',{name:'Naar Review',exact:true}).waitFor({timeout:15000});
   const after = await page.evaluate(()=>({timeOrigin:performance.timeOrigin, scroll:window.scrollY, focus:document.activeElement.id}));
   if (before.timeOrigin!==after.timeOrigin || before.scroll!==after.scroll || after.focus!=='source-document') {

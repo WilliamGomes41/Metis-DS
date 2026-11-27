@@ -71,8 +71,11 @@ def test_http_extraction_checkpoint_survives_provider_failure_and_restart(factor
         assert upload(client, reviewer).status_code == 303
         sid = first.list_envelopes()[0]['snapshot_id']
         assert extracted == []
-        assert start(client, first, sid).status_code == 303
-        drain(client, app)
+        assert start(client, first, sid).status_code == 404
+        from tests.test_review_formation_problems import execute
+        with pytest.raises(ConsoleError) as failure:
+            execute(first, sid, actor, 'initial')
+        assert failure.value.code == 'pre_review_llm_connection_failed'
     assert extracted == [1]
     assert first.snapshot_objects(sid) == []
     assert first._envelope(sid)['processing_attempts'][-1]['state'] == 'failed'
@@ -83,8 +86,8 @@ def test_http_extraction_checkpoint_survives_provider_failure_and_restart(factor
     app = installed_app(restarted)
     with TestClient(app, base_url='https://testserver') as client:
         login(client)
-        assert start(client, restarted, sid, command='retry-after-checkpoint').status_code == 303
-        drain(client, app)
+        assert start(client, restarted, sid, command='retry-after-checkpoint').status_code == 404
+        execute(restarted, sid, actor, 'retry-after-checkpoint')
     final = factory()
     assert final.snapshot_objects(sid)
     assert final._envelope(sid)['processing_attempts'][-1]['state'] == 'succeeded'

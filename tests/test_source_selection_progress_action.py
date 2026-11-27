@@ -9,21 +9,28 @@ from fastapi.testclient import TestClient
 
 import src.vorming.source_selection_ui_v1 as ui
 from src.operations_console_app import COOKIE
-from tests.test_recoverable_formation_v1 import FIRST, SECOND, system
 
 
 def test_progress_link_only_for_running_documents_that_are_not_selected(tmp_path, monkeypatch, *, production_app, production_console):
-    console, first, author, reviewer, *_ = system(tmp_path, production_console=production_console)
-    second = console.ingest(actor_id=author, filename='second.html',
-        data=f'<html><body><p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode(), content_type='text/html',
-        ingest_kind='new', title='Tweede', version='1.0', date='2026-10-05', live_url='', class_='richtlijn',
-        family='second', named_reviewers=[reviewer])['snapshot_id']
+    from tests.test_availability_repair import accounts
+    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
+    console = production_console(root=tmp_path)
+    author, reviewer = accounts(console)
+    documents = []
+    for title in ('Eerste', 'Tweede'):
+        sid = console.receive_source(actor_id=author, filename='boom.json', data=_boom_freeze_bytes(),
+            content_type='application/json', ingest_kind='new', title=title, version='1.0', date='2026-10-05',
+            live_url='', class_='beslisboom', family=title, named_reviewers=[reviewer])['snapshot_id']
+        console.reserve_source_selection(actor_id=author, snapshot_id=sid, command_id=title,
+                                         expected_revision=console.objects_revision(sid))
+        documents.append(sid)
+    first, second = documents
     real = ui.projection
     monkeypatch.setattr(ui, 'projection', lambda *args, **kwargs: {**real(*args, **kwargs), 'state': 'bezig'})
     summary = ui.summary_projection
     monkeypatch.setattr(ui, 'summary_projection', lambda *args, **kwargs: {**summary(*args, **kwargs), 'state': 'bezig'})
     client = TestClient(production_app(console))
-    client.cookies.set(COOKIE, console.authenticate('author', 'strong-test-password')['token'])
+    client.cookies.set(COOKIE, console.authenticate('author', 'fixture-only')['token'])
 
     html = client.get('/source-selection', params={'document': first}).text
 

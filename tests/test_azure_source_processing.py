@@ -3,6 +3,7 @@
 # release-control-evidence: opslag concurrent stale interrupt retry version-compat
 # release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
 """
+from tests.decision_graph_native_support import receive_tree
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
@@ -63,7 +64,8 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
     blob = ImmutableBlobFixture()
     calls = []
     first = production_console(root=tmp_path / "first", processing_binder=bind_fixture_selections, azure=True, immutable_source_store=blob)
-    author, _, sid = received(first)
+    author, reviewer = accounts(first)
+    sid = receive_tree(first, author, reviewer, "Stored tree")
     from src.vorming.source_processing_dispatch_v1 import SourceProcessingDispatcher
     app = installed_app(first)
     with monkeypatch.context() as patch, TestClient(app, base_url="https://console.example.test", headers={"Origin": "https://console.example.test"}, raise_server_exceptions=False) as client:
@@ -82,7 +84,7 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
     def post(*args):
         calls.append(1)
         return provider(*args)
-    bind(second, post)
+    bind_fixture_selections(second)
     app = installed_app(second)
     with TestClient(app, base_url="https://console.example.test", headers={"Origin": "https://console.example.test"}) as client:
         drain(client, app)
@@ -92,8 +94,9 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
     assert final._envelope(sid)["processing_attempts"][-1]["command_id"] == "start"
     assert final._envelope(sid)["processing_attempts"][-1]["dispatch"]["state"] == "claimed"
     assert final._envelope(sid)["processing_attempts"][-1]["state"] == "succeeded"
-    assert calls == [1] and blob.reads >= 2
-    assert final._verified_source_bytes(final._envelope(sid))[1].startswith(b"<html>")
+    import json
+    assert not calls and blob.reads >= 2
+    assert json.loads(final._verified_source_bytes(final._envelope(sid))[1])["kind"] == "beslisboom-freeze"
 
 
 def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workflow_postgres, tmp_path, *, production_console):
