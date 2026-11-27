@@ -58,7 +58,8 @@ def test_decision_review_moves_type_explanations_to_help_without_mutating_eviden
     assert console.snapshot_objects(sid) == before
     assert console._envelope(sid) == envelope
 
-def test_passage_type_repair_reopens_the_exact_passage(tmp_path, production_app, production_console, monkeypatch):
+@pytest.mark.parametrize("passage_type", ["node", "path", "outcome"])
+def test_passage_type_repair_reopens_the_exact_passage(tmp_path, production_app, production_console, monkeypatch, passage_type):
     from tests.test_source_context_review_ui_v1 import Forms
     from tests.test_decision_graph_chain import complete_graph, command, ingest
 
@@ -73,7 +74,7 @@ def test_passage_type_repair_reopens_the_exact_passage(tmp_path, production_app,
     form = next(form for form in Forms(view.text).forms
                 if any(field.get("name") == "object_id" for field in form["inputs"]))
     fields = {field["name"]: field["value"] for field in form["inputs"] if field.get("type") == "hidden"}
-    fields.update(action="classification", confirmed_object_type="path", reason="Deze passage beschrijft de route.")
+    fields.update(action="classification", confirmed_object_type=passage_type, reason="Type gecontroleerd tegen de bron.")
     before = console._current_object(sid, fields["object_id"])
     for invalid in ({"confirmed_object_type": "heading"}, {"expected_revision": ""}):
         assert client.post(url, data={**fields, **invalid}).status_code == 400
@@ -90,7 +91,7 @@ def test_passage_type_repair_reopens_the_exact_passage(tmp_path, production_app,
     assert result.status_code == 303, result.text
     assert result.headers["location"] == url + "?document=" + sid + "#passage-" + fields["object_id"]
     updated = console._current_object(sid, fields["object_id"])
-    assert updated["confirmed_object_type"] == "path"
+    assert updated["confirmed_object_type"] == passage_type
     assert updated["object_version"] != before["object_version"]
     assert updated["governance"]["validation_status"] == "needs_review"
     assert updated["provenance"]["source_fragments"] == before["provenance"]["source_fragments"]
