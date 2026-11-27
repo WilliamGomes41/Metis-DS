@@ -223,18 +223,19 @@ def test_view_model_preserves_codes_order_categories_and_recovery() -> None:
 
 def test_publish_page_separates_curation_and_technical_blockers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
     console, _accounts, receipt, _source = _console_with_document(tmp_path, production_console=production_console)
+    curation_blockers = ["source_passage_review_incomplete", "review_repair_incomplete", "review_disposition_inconsistent"]
     considered = {
         "state": "captured_not_published",
         "publication_ready": False,
         "publish_allowed": False,
         "publishable_object_count": 1,
         "curation_ready": False,
-        "curation_blockers": ["source_passage_review_incomplete"],
+        "curation_blockers": curation_blockers,
         "unresolved_review_object_count": 0,
         "unresolved_source_passage_count": 4,
         "technical_ready": False,
         "technical_blockers": ["four_eyes_required"],
-        "blockers": ["four_eyes_required", "source_passage_review_incomplete"],
+        "blockers": ["four_eyes_required", *curation_blockers],
     }
     monkeypatch.setattr(
         console,
@@ -253,6 +254,9 @@ def test_publish_page_separates_curation_and_technical_blockers(tmp_path: Path, 
     assert 'data-blocker-code="source_passage_review_incomplete"' in page.text
     assert 'data-blocker-code="four_eyes_required"' in page.text
     assert "Nog 4 inhoudelijke bronpassage(s)" in page.text
+    assert "Er staat nog een inhoudelijke correctie open." in page.text
+    assert "De reviewuitkomst en de vastgelegde passage-afhandeling zijn niet consistent." in page.text
+    assert "task=repair" not in page.text
     assert "Open Review" in page.text
     assert 'data-publish-form' not in page.text
     assert str(receipt["snapshot_id"]) in page.text

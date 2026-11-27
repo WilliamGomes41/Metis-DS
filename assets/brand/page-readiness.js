@@ -12,7 +12,6 @@
       '/review': ['review_inventory_or_empty', '.review-passage-inventory, [data-content-review-workplace], [data-review-form], .second-review-card, [data-personal-group], [data-personal-empty], .review-empty, .doc-list .doc-card'],
       '/publish': ['publication_inventory_or_empty', '.doc-list .doc-card, .doc-list > p'],
       '/tree': ['document_inventory_or_empty', '#documents .document-row, #documents .document-empty'],
-      '/formation-problems': ['formation_problem_access_available', '#formation-problems'],
       '/settings': ['settings_navigation_available', '.room a[href="/accounts"]'],
       '/inzicht': ['document_inventory_loaded', '#d-table[data-readiness="ready"]'],
     };

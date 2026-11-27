@@ -78,8 +78,6 @@ def test_unknown_reason_and_missing_identity_are_evidence_not_invented_editor_id
 
 @pytest.mark.parametrize(('code', 'path', 'task'), [
     ('source_passage_review_incomplete', '/source-selection', None),
-    ('review_disposition_inconsistent', '/source-selection', 'repair'),
-    ('review_repair_incomplete', '/source-selection', 'repair'),
     ('source_formation_incomplete', '/source-selection', None),
     ('pre_review_processing_incomplete', '/source-selection', None),
     ('review_work_incomplete', '/review', None),
@@ -96,6 +94,13 @@ def test_publication_explains_blocker_and_opens_its_existing_owner(code, path, t
 
 def test_unknown_publication_gate_does_not_invent_a_human_task():
     assert _blocker_view('unknown_integrity_gate', 'snapshot')['recovery_href'] is None
+
+
+@pytest.mark.parametrize('code', ['review_disposition_inconsistent', 'review_repair_incomplete'])
+def test_publication_repair_blocker_has_no_retired_repair_link(code):
+    view = _blocker_view(code, 'snapshot & exact')
+    assert view['recovery_href'] is None and view['recovery_label'] is None
+    assert view['code'] == code
 
 
 def _publication_owner(client, sid, code):
@@ -125,7 +130,7 @@ def test_publication_source_blocker_opens_its_blocked_candidates(tmp_path, *, pr
             console.object_review_bindings(sid), read_events(console._ledger_path)) == before
 
 
-def test_publication_repair_blocker_opens_requested_revision(tmp_path, *, production_console, production_app):
+def test_publication_repair_blocker_shows_the_reason_without_a_repair_link(tmp_path, *, production_console, production_app):
     from fastapi.testclient import TestClient
     from tests.test_closed_review_loop_v1 import _system as setup
     console, _, reviewer, sid, ids = setup(tmp_path, production_console=production_console)
@@ -143,21 +148,9 @@ def test_publication_repair_blocker_opens_requested_revision(tmp_path, *, produc
     publisher = TestClient(production_app(console), base_url='https://testserver')
     assert publisher.post('/login', data={'username': 'publisher.862', 'password': 'publisher-862-secret'},
                           follow_redirects=False).status_code == 303
-    href = _publication_owner(publisher, sid, 'review_repair_incomplete')
-    browser = TestClient(production_app(console), base_url='https://testserver')
-    assert browser.post('/login', data={'username': 'bert', 'password': 'bert-secret'},
-                        follow_redirects=False).status_code == 303
-    before = deepcopy((console.snapshot_objects(sid), console.objects_revision(sid),
-                       console.object_review_bindings(sid), read_events(console._ledger_path)))
-    owner = browser.get(href)
-    assert owner.status_code == 200
-    repair_links = [url for url in Links(owner.text).hrefs if parse_qs(urlsplit(url).query).get('object') == [oid]]
-    assert repair_links, 'The publication repair link must expose the requested revision'
-    assert all(parse_qs(urlsplit(url).query).get('object') != [ids[1]] for url in Links(owner.text).hrefs)
-    editor = browser.get(next(url for url in repair_links if urlsplit(url).path == '/source-selection'))
-    assert editor.status_code == 200 and 'data-formation-repair' in editor.text
-    assert oid in editor.text
-    assert browser.get(href).status_code == 200
-    assert publisher.get(href).status_code == 403
-    assert (console.snapshot_objects(sid), console.objects_revision(sid),
-            console.object_review_bindings(sid), read_events(console._ledger_path)) == before
+    publication = publisher.get('/publish', params={'document': sid})
+    assert publication.status_code == 200
+    blocker = publication.text.split('data-blocker-code="review_repair_incomplete">', 1)[1].split('</li>', 1)[0]
+    assert Links(blocker).hrefs == [], 'The retired repair task must not be linked from Publicatie'
+    assert 'task=repair' not in publication.text
+    assert 'review_repair_incomplete' in console.publication_readiness(sid)['blockers']

@@ -978,17 +978,6 @@ def install(app, console, require, page, nav, esc):
             raise
         return JSONResponse({'rows': rows}, headers=headers)
 
-    @app.get('/formation-problems', response_class=HTMLResponse)
-    def formation_problems_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):
-        require(request)
-        # Historical bookmarks only navigate; the existing owner checks the
-        # selected document and renders its one command form on the next GET.
-        query = {'document': document} if document else {}
-        if offset:
-            query['offset'] = offset
-        return RedirectResponse('/source-selection' + ('?' + urlencode(query) if query else ''),
-                                status_code=303, headers={'Cache-Control': 'no-store'})
-
     @app.get('/inzicht/document/verwerkingsspoor')
     def processing_trace_export(request: Request, document: str = '', attempt: str | None = None,
                                 origin_request: str | None = None):

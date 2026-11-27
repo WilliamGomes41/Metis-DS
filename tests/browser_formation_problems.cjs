@@ -26,9 +26,9 @@ const fs = require('node:fs');
         body:new URLSearchParams({document:sid,expected_revision:revision,command_id:'browser-problems-legacy-start'})});
       if (!response.ok) throw Error('legacy start rejected: '+response.status);
     },{sid,revision:process.env.METIS_PROBLEM_REVISION});
-    await page.goto(base+'/formation-problems?document='+sid);
+    await page.goto(base+'/source-selection?document='+sid+'#formation-problems');
     await page.getByRole('heading',{name:'Vorming',exact:true}).waitFor();
-    if (new URL(page.url()).pathname !== '/source-selection') throw Error('legacy bookmark did not open Vorming');
+    if (new URL(page.url()).pathname !== '/source-selection') throw Error('document did not open Vorming');
     fs.writeFileSync(process.env.METIS_PROBLEM_NAVIGATED, 'yes');
     for (let i=0;i<50;i++) {
       await page.goto(base+'/source-selection?document='+sid);
@@ -36,7 +36,7 @@ const fs = require('node:fs');
       await new Promise(resolve => setTimeout(resolve,200));
     }
     await page.getByRole('link',{name:'Naar Review',exact:true}).waitFor();
-    await page.goto(base+'/formation-problems?document='+sid);
+    await page.goto(base+'/source-selection?document='+sid+'#formation-problems');
     await page.getByRole('button',{name:'Hervatten',exact:true}).waitFor();
     const contrast = () => page.evaluate(() => {
       const luminance = color => {

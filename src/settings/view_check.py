@@ -119,7 +119,6 @@ def allowed_request(method, path, params, document):
     if path.startswith('/brand/'):
         return '..' not in path and len(path) < 200
     permitted = {'/source-selection': {'document'}, '/review': {'document', 'task'},
-                 '/formation-problems': {'document'},
                  '/inzicht/document/passages': {'document', 'format'}}
     if path not in permitted or set(params) - permitted[path]:
         return False

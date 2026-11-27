@@ -3700,6 +3700,7 @@ def create_console_app(
 
     from src.vorming.source_selection_ui_v1 import install as install_source_selection
     source_dispatcher = install_source_selection(app, state, _require, _page, _nav, _esc)
+    # The controlled stop stays until the old AI start and worker paths are retired (#1017).
     from src.vorming.prose_transition_api_v1 import install as install_prose_transition
     install_prose_transition(app, state, _require)
     from src.vorming.human_annotation_ui_v1 import install as install_annotations

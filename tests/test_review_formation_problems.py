@@ -111,7 +111,7 @@ def test_problems_restart_targeted_recovery_and_duplicate(tmp_path, production_c
     assert [r['problem_id'] for r in collect(restarted, actor_id=author, snapshot_id=sid)['problems']] == problem_ids
     client = TestClient(restarted._metis_test_application)
     login(client)
-    page = client.get('/formation-problems', params={'document': sid})
+    page = client.get('/source-selection', params={'document': sid})
     assert page.status_code == 200
     assert 'Hervatten</button>' in page.text
     assert 'Bekijk en behandel dit bronstuk' in page.text
@@ -150,7 +150,7 @@ def test_review_does_not_hide_remaining_problems_or_allow_reextract(tmp_path, pr
     assert not report['processing']['resume_allowed']
     client = TestClient(console._metis_test_application)
     login(client, 'reviewer')
-    page = client.get('/formation-problems', params={'document': sid})
+    page = client.get('/source-selection', params={'document': sid})
     assert page.status_code == 200 and 'Opnieuw verwerken is nu niet beschikbaar' in page.text
     assert 'Bekijk en behandel dit bronstuk' in page.text and 'Hervatten</button>' not in page.text
     with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
@@ -165,7 +165,7 @@ def test_unauthorized_problem_read_is_denied(tmp_path, production_console, monke
     client = TestClient(console._metis_test_application)
     login(client, 'outsider')
     before = deepcopy(console._envelope(sid)), console.snapshot_objects(sid)
-    denied = client.get('/formation-problems', params={'document': sid})
+    denied = client.get('/source-selection', params={'document': sid})
     assert denied.status_code == 400  # Existing ConsoleError HTTP contract.
     assert 'Smetten patroon' not in denied.text
     refused = client.post('/source-selection/start', data={
