@@ -13,17 +13,21 @@ KIND = 'human_annotation_source'
 MODE = 'human-annotation-source-v1'
 
 
-def received_prose(envelope):
+def received_for_annotation(envelope):
     return bool(envelope.get('received_source'))
 
 
 def configuration(console, envelope):
     from src.vorming.docling_pdf_v1 import enabled
-    return {'mode': MODE, 'docling': envelope['content_kind'] == 'pdf' and enabled(),
+    config = {'mode': MODE, 'docling': envelope['content_kind'] == 'pdf' and enabled(),
             'extractor_contract': annotations.extractor_contract(envelope['content_kind']),
             'source_identity': annotations._identity(envelope),
             'working_revision_id': envelope['working_revision_id'],
             'logical_document_id': envelope['logical_document_id'], 'class': envelope['class']}
+    if envelope['class'] == 'beslisboom':
+        from src.vorming.human_annotation_decision_tree_v1 import ROUTE
+        config.update(route=ROUTE, extractor_contract='decision-tree-annotation-source-v1')
+    return config
 
 
 def require_storage(con):
@@ -46,7 +50,7 @@ def reserve(console, *, actor_id, snapshot_id, command_id, expected_revision):
             require_storage(con)
             if annotations.owns_source(console, snapshot_id):
                 return None, False
-            if not received_prose(envelope):
+            if not received_for_annotation(envelope):
                 raise ConsoleError('annotation_source_not_received')
             if store.objects_revision(snapshot_id) != expected_revision:
                 raise ConsoleError('annotation_objects_stale')

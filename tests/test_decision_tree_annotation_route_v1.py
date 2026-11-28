@@ -28,7 +28,7 @@ def test_export_tree_publishes_with_only_selection_and_entry_labelled(production
             'branches': [{'from':'q','to':'a','label':'Ja'},{'from':'q','to':'b','label':'Nee'}]}
     sid = console.receive_source(actor_id=actor, filename='tree.json', data=json.dumps(data).encode(),
         content_type='application/json', ingest_kind='new', title='Boom', version='1.0', date='2026-11-10',
-        live_url='', class_='beslisboom', family='test', named_reviewers=[], review_policy=policy(accounts))['snapshot_id']
+        live_url='', class_='beslisboom', family='test', named_reviewers=[], review_policy=policy(accounts, 'required'))['snapshot_id']
     scope = {'actor_id': actor, 'snapshot_id': sid}
     view = annotation.prepare(console, **scope, expected_revision=console.objects_revision(sid))
     row, fragments = annotation._read_set(console, sid)
@@ -49,10 +49,10 @@ def test_export_tree_publishes_with_only_selection_and_entry_labelled(production
     assert env['decision_tree_formation']['annotation_seal_id'] == receipt['seal_id']
 
     assert {e['label'] for e in env['decision_graph']['edges']} == {'Ja', 'Nee'}
-    publish_reviewed(console, accounts, sid)
+    publish_reviewed(console, accounts, sid, second_required=True)
 
 
-def publish_reviewed(console, accounts, sid):
+def publish_reviewed(console, accounts, sid, *, second_required=False):
     scope = {'actor_id': accounts['researcher']['account_id'], 'snapshot_id': sid}
     def bind(command_id):
         graph = annotated_graph_for_review(console._tree_envelope(sid, envelope=console._envelope(sid)), console.snapshot_objects(sid))
@@ -67,6 +67,16 @@ def publish_reviewed(console, accounts, sid):
                 assessment=affirmative_assessment(), evidence_not_applicable=True)
     bind('reviewed')
     console.confirm_decision_graph(**command(console, accounts, sid, 'confirm'))
+    if second_required:
+        blocked = console.consider_publish(actor_id=accounts['publisher']['account_id'], snapshot_id=sid)
+        assert 'decision_graph_review_incomplete' in blocked['blockers']
+        secondary = accounts['reviewer']['account_id']
+        for obj in console.snapshot_objects(sid):
+            if obj['object_type'] != 'document':
+                console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=obj['object_id'],
+                                              assessment=affirmative_assessment(), evidence_not_applicable=True)
+        confirmation = command(console, accounts, sid, 'confirm-second')
+        console.confirm_decision_graph(**{**confirmation, 'actor_id': secondary})
     result = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=sid)
     assert result['status'] == 'PASS', result
 

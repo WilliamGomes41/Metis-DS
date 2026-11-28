@@ -94,8 +94,7 @@ def source_record(console, envelope, *, deadline=None):
         kind = envelope['content_kind']
         fragments = source_fragments(kind, source_path, data, document_id=envelope['document_id'],
                                      source_id=envelope['source_id'], deadline=deadline)
-        fragments = json.loads(json.dumps(fragments))
-        record = extraction_record(envelope, fragments, 'decision-tree-annotation-source-v1')
+        record = json.loads(json.dumps(extraction_record(envelope, fragments, 'decision-tree-annotation-source-v1')))
         source = {'inventory': source_evidence(source_path, data, kind, fragments, envelope['sha256'])}
         if kind == 'boom':
             source['branches'] = json.loads(data).get('branches', [])

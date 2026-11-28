@@ -13,16 +13,17 @@
     if (element('build')) element('build').hidden = true;
     element('status').textContent = 'Wijzigingen nog niet opgeslagen.';
   }
+  let lastSelection;
   function selection() {
     const block = byBlock.get(element('block').value), text = block.text;
     const range = window.getSelection();
     if (range.rangeCount && !range.isCollapsed) {
       const r = range.getRangeAt(0), node = element('passage').firstChild;
       if (r.startContainer === node && r.endContainer === node)
-        return {block_id:block.block_id, start:Array.from(text.slice(0,r.startOffset)).length,
+        return lastSelection = {block_id:block.block_id, start:Array.from(text.slice(0,r.startOffset)).length,
           end:Array.from(text.slice(0,r.endOffset)).length};
     }
-    return {block_id:block.block_id, start:0, end:Array.from(text).length};
+    return lastSelection || {block_id:block.block_id, start:0, end:Array.from(text).length};
   }
   function dropdown(box, name, values, value, update) {
     const label = document.createElement('label'), select = document.createElement('select');
@@ -54,6 +55,7 @@
       if(unit.role==='question') dropdown(box,'Keuzesoort',choices,unit.selection,value=>unit.selection=value);
       const label=document.createElement('label'), check=document.createElement('input');
       check.type='checkbox'; check.checked=unit.entry;
+      check.disabled=fromExport && graph.connections.some(edge=>edge.to===unit.ref);
       check.onchange=()=>{unit.entry=check.checked;changed();};
       label.append(check,' Startpunt'); box.append(label); element('units').append(box);
       if(!fromExport) {
@@ -90,7 +92,13 @@
   const ref = prefix => prefix+crypto.randomUUID().replaceAll('-','');
   if(!fromExport) {
     for(const block of blocks) option(element('block'),block.block_id,block.text);
-    element('block').onchange=()=>element('passage').textContent=byBlock.get(element('block').value)?.text||'';
+    element('block').onchange=()=>{
+      lastSelection=null;
+      element('passage').textContent=byBlock.get(element('block').value)?.text||'';
+    };
+    document.addEventListener('selectionchange', ()=>{
+      if(window.getSelection().anchorNode===element('passage').firstChild && !window.getSelection().isCollapsed) selection();
+    });
     element('block').onchange();
     for(const [id,item] of Object.entries(evidence)) option(element('evidence'),id,item.kind==='graphic' ? ('Pagina '+item.page+' · lijn '+id+' · '+item.bbox.join(', ')) : (item.text || id));
     for(const [id,label] of Object.entries(doubts)) option(element('code'),id,label);

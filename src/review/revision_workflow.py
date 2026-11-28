@@ -66,7 +66,7 @@ def lineage_evidence(obj):
 
 def knowledge_revision(obj):
     """Scope includes blocked selected candidates; excludes source/structure/boom."""
-    if (obj.get("metadata") or {}).get("semantic_passage", {}).get("formation_mode") == "decision-tree-annotation-v1":
+    if ((obj.get("metadata") or {}).get("semantic_passage") or {}).get("formation_mode") == "decision-tree-annotation-v1":
         return True
     if lineage_evidence(obj) is not None:
         return True
