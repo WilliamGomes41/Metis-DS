@@ -23,7 +23,7 @@ def test_contract_header_is_a_valid_class_a_high_risk_contract():
 
 
 def test_contract_records_the_implementation_stage():
-    assert '**Status:** Expand gestart.' in CONTRACT.read_text(encoding='utf-8')
+    assert '**Status:** Fase 2 is gestart' in CONTRACT.read_text(encoding='utf-8')
 
 
 def test_every_claim_cited_in_the_contract_is_defined_in_the_verification_list():
@@ -32,13 +32,15 @@ def test_every_claim_cited_in_the_contract_is_defined_in_the_verification_list()
     assert cited and cited <= defined
 
 
-def test_mapped_model_route_symbols_exist_on_this_revision():
+def test_mapped_model_route_is_removed_and_historical_readers_remain():
     route = (ROOT / 'src' / 'vorming' / 'decision_tree_route_v1.py').read_text(encoding='utf-8')
     for symbol in ('def llm_proposer', 'def request_proposal', 'def request_input',
-                   'PROPOSER_PROMPT', 'EXPORT_PROMPT', 'def verify_export_preserved', 'def finalize'):
+                   'PROPOSER_PROMPT', 'EXPORT_PROMPT'):
+        assert symbol not in route
+    for symbol in ('def verify_export_preserved', 'def finalize', 'def has_recorded_route'):
         assert symbol in route
     binding = (ROOT / 'src' / 'vorming' / 'pre_review_semantic_v1.py').read_text(encoding='utf-8')
-    assert 'console._decision_tree_proposer = llm_proposer(' in binding
+    assert '_decision_tree_proposer' not in binding
 
 
 def test_reused_proposal_contract_still_offers_the_mapped_roles_and_uncertainty_codes():
