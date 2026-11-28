@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
 
 import yaml
 
@@ -179,6 +181,48 @@ def test_non_workflow_rights_are_a_stop_gate_before_cutover_and_deployment() -> 
     assert all(value in step for value in ('`public`', '`api_access`', 'runtime-identiteit', 'STOP'))
 
 
+def test_azure_release_runbook_shell_blocks_parse() -> None:
+    runbook = (ROOT / 'docs/AZURE_RELEASE_RUNBOOK.md').read_text(encoding='utf-8')
+    blocks = re.findall(r'```bash\n(.*?)```', runbook, re.DOTALL)
+    assert blocks
+    for block in blocks:
+        result = subprocess.run(['bash', '-n'], input=block, text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+
+
+def test_production_switch_requires_recorded_rollback_and_immutable_image() -> None:
+    runbook = (ROOT / 'docs/AZURE_RELEASE_RUNBOOK.md').read_text(encoding='utf-8')
+    switch = runbook.split('## 3. Wisselen', 1)[1].split('## 4. Controleren', 1)[0]
+    assert 'telling van `0` lopende pogingen en GO voor de wissel' in switch
+    script = switch.split('```bash\n', 1)[1].split('```', 1)[0]
+    stub = '''
+az() {
+  case "$*" in
+    "webapp config show "*) printf '%s\\n' "$mock_current_image" ;;
+    "webapp config container set "*) printf 'MOCK_SWITCH %s\\n' "$*" ;;
+    *) return 99 ;;
+  esac
+}
+'''
+    previous = 'DOCKER|registry.example/metis@sha256:' + 'a' * 64
+    release = 'registry.example/metis@sha256:' + 'b' * 64
+    environment = dict(os.environ, azure_subscription='test', resource_group='test',
+                       app_name='test', rollback=previous)
+    for current, image, allowed in (
+        (previous, release, True),
+        ('DOCKER|' + release, release, False),
+        (previous, 'registry.example/metis:latest', False),
+    ):
+        result = subprocess.run(
+            ['bash'], input=stub + script, text=True, capture_output=True,
+            env=dict(environment, mock_current_image=current, release_image_reference=image),
+        )
+        assert (result.returncode == 0) == allowed, result.stderr
+        assert ('MOCK_SWITCH' in result.stdout) == allowed
+        if allowed:
+            assert '--container-image-name ' + release in result.stdout
+
+
 def test_pr_template_and_agents_use_closing_keywords_and_live_label() -> None:
     template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
     for rule in ("`Closes #N` + `Fixes MET-N`", "`Part of MET-N` + `Refs #N`",
@@ -320,3 +364,62 @@ def test_agents_requires_one_deterministic_candidate_creator_before_review():
         "agents MUST NOT weaken or bypass it autonomously",
     ):
         assert obligation in section
+
+
+def test_release_build_accepts_subscription_name_or_id_and_refuses_other_subscription() -> None:
+    """Codex #1194: az --subscription takes a name or an ID; the guard compares IDs."""
+    runbook = (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").read_text(encoding="utf-8")
+    build = runbook.split('## 2. Image bouwen', 1)[1].split('## 3. Wisselen', 1)[0]
+    script = build.split('Na GO voor de build:', 1)[1].split('```bash\n', 1)[1].split('```', 1)[0]
+    assert 'bash scripts/build_azure_release_image.sh' in script
+    script = script.replace('bash scripts/build_azure_release_image.sh', 'printf "MOCK_BUILD %s\\n"')
+    stub = '''
+az() {
+  case "$*" in
+    "account show --subscription Metis-productie --query id --output tsv") echo 11111111-1111-1111-1111-111111111111 ;;
+    "account show --subscription 11111111-1111-1111-1111-111111111111 --query id --output tsv") echo 11111111-1111-1111-1111-111111111111 ;;
+    "account show --subscription Andere --query id --output tsv") echo 22222222-2222-2222-2222-222222222222 ;;
+    "account show --query id --output tsv") echo 11111111-1111-1111-1111-111111111111 ;;
+    *) return 99 ;;
+  esac
+}
+'''
+    environment = dict(os.environ, acr_name='acr', image_repo='metis', release_sha='a' * 40)
+    for subscription, allowed in (('Metis-productie', True),
+                                  ('11111111-1111-1111-1111-111111111111', True),
+                                  ('Andere', False)):
+        result = subprocess.run(['bash'], input=stub + script, text=True, capture_output=True,
+                                env=dict(environment, azure_subscription=subscription))
+        assert (result.returncode == 0) == allowed, result.stderr
+        assert ('MOCK_BUILD' in result.stdout) == allowed
+
+
+def test_running_attempt_count_ignores_expired_and_keeps_unknown_running() -> None:
+    """Codex #1194: the pre-cutover count uses the application's expiry rule (processing_retry_v1.status)."""
+    import psycopg
+    import pytest
+    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("PostgreSQL test database not configured")
+    runbook = (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").read_text(encoding="utf-8")
+    query = runbook.split("```sql\n", 1)[1].split("```", 1)[0]
+    assert "AS lopende_pogingen" in query
+    schema = "runbook_count_probe"
+    future, past = "2999-01-01T00:00:00+00:00", "2000-01-01T00:00:00+00:00"
+    with psycopg.connect(dsn) as con:
+        con.execute(f"CREATE SCHEMA {schema}")
+        try:
+            con.execute(f"CREATE TABLE {schema}.processing_attempts (payload jsonb)")
+            con.execute(f"CREATE TABLE {schema}.documents (envelope_payload jsonb, processing_storage_version int)")
+            for payload in ({"state": "running", "expires_at": future}, {"state": "running", "expires_at": past},
+                            {"state": "running"}, {"state": "succeeded", "expires_at": future}):
+                con.execute(f"INSERT INTO {schema}.processing_attempts VALUES (%s)", (psycopg.types.json.Jsonb(payload),))
+            inline = {"processing_attempts": [{"state": "running", "expires_at": future},
+                                              {"state": "running", "expires_at": past}]}
+            con.execute(f"INSERT INTO {schema}.documents VALUES (%s, NULL)", (psycopg.types.json.Jsonb(inline),))
+            con.execute(f"INSERT INTO {schema}.documents VALUES (%s, 1)", (psycopg.types.json.Jsonb(inline),))
+            count = con.execute(query.replace("workflow.", schema + ".")).fetchone()[0]
+        finally:
+            con.rollback()
+    # Native: running+future and running without expires_at; inline (non-native only): running+future.
+    assert count == 3
