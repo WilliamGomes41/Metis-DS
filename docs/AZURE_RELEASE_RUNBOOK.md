@@ -16,7 +16,7 @@ Elke stap die Azure wijzigt (build, migratie, app settings, tijdelijke firewallt
 - `az` aangemeld met een identiteit die mag bouwen in de ACR en de web app mag configureren.
 - Namen: ACR (`<acr>`), image-repository (`<repo>`), resourcegroep (`<rg>`), web app (`<app>`), app-URL (`<url>`).
 - Een checkout van deze repository met `origin/main` bijgewerkt.
-- Zet voor de shellblokken hieronder `azure_subscription`, `resource_group`, `app_name`, `app_url` (de origin zonder pad), `acr_name` en `image_repo` op het cutoverdoel. Zet `release_sha` op de gecontroleerde volledige SHA van `main`. Controleer de waarden opnieuw na een nieuwe Cloud Shell-sessie.
+- Zet voor de shellblokken hieronder `azure_subscription` (naam of ID), `resource_group`, `app_name`, `app_url` (de origin zonder pad), `acr_name` en `image_repo` op het cutoverdoel. Zet `release_sha` op de gecontroleerde volledige SHA van `main`. Controleer de waarden opnieuw na een nieuwe Cloud Shell-sessie.
 
 ## 1. Vooraf
 
@@ -80,7 +80,9 @@ Na GO voor de build:
 ```bash
 (
   set -e
-  if [[ "$(az account show --query id --output tsv)" != "${azure_subscription:?}" ]]; then
+  # --subscription accepteert een naam of een ID; vergelijk aan beide kanten het ID.
+  release_subscription_id=$(az account show --subscription "${azure_subscription:?}" --query id --output tsv)
+  if [[ "$(az account show --query id --output tsv)" != "$release_subscription_id" ]]; then
     printf '%s\n' 'Gestopt. Selecteer de Azure-subscription van de release.' >&2
     exit 1
   fi

@@ -364,3 +364,31 @@ def test_agents_requires_one_deterministic_candidate_creator_before_review():
         "agents MUST NOT weaken or bypass it autonomously",
     ):
         assert obligation in section
+
+
+def test_release_build_accepts_subscription_name_or_id_and_refuses_other_subscription() -> None:
+    """Codex #1194: az --subscription takes a name or an ID; the guard compares IDs."""
+    runbook = (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").read_text(encoding="utf-8")
+    build = runbook.split('## 2. Image bouwen', 1)[1].split('## 3. Wisselen', 1)[0]
+    script = build.split('Na GO voor de build:', 1)[1].split('```bash\n', 1)[1].split('```', 1)[0]
+    assert 'bash scripts/build_azure_release_image.sh' in script
+    script = script.replace('bash scripts/build_azure_release_image.sh', 'printf "MOCK_BUILD %s\\n"')
+    stub = '''
+az() {
+  case "$*" in
+    "account show --subscription Metis-productie --query id --output tsv") echo 11111111-1111-1111-1111-111111111111 ;;
+    "account show --subscription 11111111-1111-1111-1111-111111111111 --query id --output tsv") echo 11111111-1111-1111-1111-111111111111 ;;
+    "account show --subscription Andere --query id --output tsv") echo 22222222-2222-2222-2222-222222222222 ;;
+    "account show --query id --output tsv") echo 11111111-1111-1111-1111-111111111111 ;;
+    *) return 99 ;;
+  esac
+}
+'''
+    environment = dict(os.environ, acr_name='acr', image_repo='metis', release_sha='a' * 40)
+    for subscription, allowed in (('Metis-productie', True),
+                                  ('11111111-1111-1111-1111-111111111111', True),
+                                  ('Andere', False)):
+        result = subprocess.run(['bash'], input=stub + script, text=True, capture_output=True,
+                                env=dict(environment, azure_subscription=subscription))
+        assert (result.returncode == 0) == allowed, result.stderr
+        assert ('MOCK_BUILD' in result.stdout) == allowed

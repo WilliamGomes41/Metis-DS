@@ -76,10 +76,18 @@ def manual_command():
     return re.search(r"```bash\n(python scripts/verify_console_deployment\.py .*?)\n```", text, re.DOTALL)[1]
 
 
+CONTAINER_IMAGE = "fixture.azurecr.io/metis@sha256:" + "c" * 64
+
+
 def container_command():
+    # The checked-in "4. Controleren" block: bounded health check, then App Service state and image.
     text = (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").read_text()
-    command = re.search(r"```bash\n(python scripts/verify_console_deployment\.py[^\n]+)\n```", text)[1]
-    return command.replace('<url>', '${APP_URL}').replace('<sha>', '${REQUESTED_SHA}')
+    section = text.split("## 4. Controleren", 1)[1]
+    command = re.search(r"```bash\n(.*?)\n```", section, re.DOTALL)[1]
+    assert "python3 scripts/verify_console_deployment.py" in command
+    command = command.replace("python3 scripts/verify_console_deployment.py", CHECKER)
+    # Bound startup waiting for this test only; the checker and its arguments stay the checked-in ones.
+    return command.replace("--attempts 18 --retry-delay 10", "")
 
 
 def run_route(route, origin, tmp_path):
@@ -93,14 +101,20 @@ def run_route(route, origin, tmp_path):
     tools = tmp_path / "bin"
     tools.mkdir(exist_ok=True)
     az = tools / "az"
-    az.write_text("#!/bin/sh\nexit 0\n")
+    az.write_text("#!/bin/sh\n"
+                  "case \"$*\" in\n"
+                  "  *'webapp show'*) echo Running ;;\n"
+                  f"  *'webapp config show'*) echo 'DOCKER|{CONTAINER_IMAGE}' ;;\n"
+                  "esac\nexit 0\n")
     az.chmod(0o700)
     return subprocess.run(
         ["bash", "-e", "-c", command], cwd=ROOT, capture_output=True, text=True, timeout=10,
         env={**os.environ, "PATH": f"{tools}:{os.environ['PATH']}",
              "APP_URL": origin, "REQUESTED_SHA": EXPECTED, "METIS_MAIN_SHA": EXPECTED,
              "METIS_SUBSCRIPTION_ID": "fixture", "METIS_RESOURCE_GROUP": "fixture",
-             "METIS_WEBAPP": "fixture"},
+             "METIS_WEBAPP": "fixture",
+             "app_url": origin, "release_sha": EXPECTED, "release_image_reference": CONTAINER_IMAGE,
+             "azure_subscription": "fixture", "resource_group": "fixture", "app_name": "fixture"},
     )
 
 
