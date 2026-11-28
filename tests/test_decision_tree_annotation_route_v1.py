@@ -134,3 +134,82 @@ def test_pdf_tree_publishes_without_a_model(production_console, tmp_path, monkey
     graph['unresolved'] = []
     save_and_build(1)
     publish_reviewed(console, accounts, sid)
+
+
+@pytest.mark.parametrize('storage', ['legacy', 'v1'])
+def test_direct_ingest_registers_tree_for_annotation(production_console, tmp_path, monkeypatch, storage):
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', storage)
+    if storage == 'v1':
+        monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
+    from tests.test_decision_graph_chain import source_pdf
+    console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
+    accounts = _accounts(console)
+    actor = accounts['researcher']['account_id']
+    def unexpected_model(*args, **kwargs):
+        pytest.fail('A new decision-tree snapshot invoked the model.')
+    console._decision_tree_proposer = unexpected_model
+    command_data = dict(actor_id=actor, filename='tree.pdf', data=source_pdf(), content_type='application/pdf',
+        ingest_kind='new', title='Bron', version='1.0', date='2026-11-28', live_url='', class_='beslisboom',
+        family='test', named_reviewers=[], review_policy=policy(accounts), command_id='receive-1191')
+    sid = console.ingest(**command_data)['snapshot_id']
+    assert console.ingest(**command_data)['snapshot_id'] == sid
+    scope = {'actor_id':actor, 'snapshot_id':sid}
+    assert console._envelope(sid)['received_source']['formation_route'] == 'decision-tree-annotation-v1'
+    revision = console.objects_revision(sid)
+    commands = [(console.reserve_source_selection, {'command_id':'start','expected_revision':revision}),
+                (console.retry_pre_review, {'command_id':'retry'}),
+                (console.resume_formation, {'command_id':'resume','expected_revision':revision}),
+                (console.reextract_unpublished, {})]
+    for method, arguments in commands:
+        with pytest.raises(ConsoleError, match='decision_tree_annotation_required'):
+            method(**scope, **arguments)
+    assert not console._processing_history_envelope(sid).get('processing_attempts')
+    assert not console.snapshot_objects(sid, include_blocked=True)
+    assert annotation.prepare(console, **scope, expected_revision=revision)['blocks']
+
+
+@pytest.mark.parametrize('storage', ['legacy', 'v1'])
+def test_open_tree_attempt_closes_once_and_successor_can_annotate(production_console, tmp_path, monkeypatch, storage):
+    from src.vorming.processing_retry_v1 import reserve, now
+    from src.vorming.source_processing_dispatch_v1 import retire_open_tree_attempts
+    from tests.test_decision_graph_chain import source_pdf
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', storage)
+    monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', storage)
+    console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
+    accounts = _accounts(console)
+    actor = accounts['researcher']['account_id']
+    sid = console.receive_source(actor_id=actor, filename='old.pdf', data=source_pdf(), content_type='application/pdf',
+        ingest_kind='new', title='Oude boom', version='1', date='2026-11-28', live_url='', class_='beslisboom',
+        family='test', named_reviewers=[], review_policy=policy(accounts))['snapshot_id']
+    revision = console.objects_revision(sid)
+    with console._reprocessing_transaction(sid):
+        env = console._processing_command_envelope(sid)
+        del env['received_source']['formation_route']
+        reserve(env, command_id='old-model', actor_id=actor, revision=revision, clock=now(),
+                limits=console._processing_limits(), kind='ingest')
+        console._commit_prepared_store(envelopes={sid:env}, snapshot_id=sid)
+    retire_open_tree_attempts(console)
+    attempt, = console._processing_history_envelope(sid)['processing_attempts']
+    assert (attempt['state'], attempt['error_code']) == ('failed', 'decision_tree_model_route_retired')
+    retire_open_tree_attempts(console)
+    assert console._processing_history_envelope(sid)['processing_attempts'] == [attempt]
+    with pytest.raises(ConsoleError, match='decision_tree_model_route_retired'):
+        annotation.prepare(console, actor_id=actor, snapshot_id=sid, expected_revision=revision)
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    from tests.test_formation_repair_workplace import form_data
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username':'researcher.anne', 'password':'anne-secret'})
+        page = client.get('/source-selection', params={'document':sid})
+        assert 'De AI-poging is afgesloten' in page.text
+        action = '/source-selection/annotation-successor'
+        response = client.post(action, data=form_data(page, action), follow_redirects=False)
+        assert response.status_code == 303
+        from urllib.parse import parse_qs, urlsplit
+        assert urlsplit(response.headers['location']).path == '/annotations'
+        child = parse_qs(urlsplit(response.headers['location']).query)['document'][0]
+        assert client.get(response.headers['location']).status_code == 200
+    assert child != sid and console._envelope(child)['replaces_snapshot_id'] == sid
+    assert console._envelope(child)['sha256'] == console._envelope(sid)['sha256']
+    assert annotation.prepare(console, actor_id=actor, snapshot_id=child,
+                              expected_revision=console.objects_revision(child))['blocks']

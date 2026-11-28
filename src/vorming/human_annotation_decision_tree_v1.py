@@ -40,6 +40,19 @@ def proposal_from_entries(entries, *, fragments, inventory):
 ROUTE = "decision-tree-annotation-v1"
 
 
+RETIRED = "decision_tree_model_route_retired"
+
+
+def require_annotation_command(envelope):
+    """A source registered for human annotation cannot reserve a model job."""
+    if (envelope.get("received_source") or {}).get("formation_route") == ROUTE:
+        from src.operations_console_v1 import ConsoleError
+        raise ConsoleError("decision_tree_annotation_required")
+    if envelope.get("class") == "beslisboom":
+        from src.operations_console_v1 import ConsoleError
+        raise ConsoleError(RETIRED)
+
+
 def empty_entries():
     return {"contract": INPUT_CONTRACT, "units": [], "connections": [],
             "context_bindings": [], "result_bundles": [], "unresolved": []}

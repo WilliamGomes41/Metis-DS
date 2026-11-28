@@ -279,6 +279,8 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
     from src.vorming.prose_transition_v1 import current, STOPPED
     if latest.get('kind') not in {'human_annotation_build', 'human_annotation_source'} and current(envelope) is not None:
         allowed, reason, recovery_available = False, STOPPED, False
+    if latest.get("error_code") == "decision_tree_model_route_retired":
+        allowed, reason, recovery_available = False, latest["error_code"], False
     return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
             "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
             "recovery_available": recovery_available, "attempts_used":attempts_used,

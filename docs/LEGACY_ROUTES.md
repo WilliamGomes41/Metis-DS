@@ -2,9 +2,9 @@
 
 De actuele verwerkingsregels staan in [PROTOCOL.md §5](../PROTOCOL.md#5-semantische-interpretatie-en-harde-invarianten); open uitvoering en acceptatie staan in [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues). Dit register beschrijft compatibiliteit en uitgevoerde verwijderingen, geen aanvullende productnorm.
 
-Eigenaar voor L01–L08: Metis-maintainer; oorspronkelijk uitvoeringsissue #455. De historische machineleesbare inventaris staat in `config/legacy_processing_routes.json`; het oorspronkelijke vervangingsplan staat in [het implementatievoorstel](METIS_SOURCE_BOUND_IMPLEMENTATION_PLAN.md), §6–9.
+Eigenaar voor L01–L09: Metis-maintainer; oorspronkelijk uitvoeringsissue #455. De historische machineleesbare inventaris staat in `config/legacy_processing_routes.json`; het oorspronkelijke vervangingsplan staat in [het implementatievoorstel](METIS_SOURCE_BOUND_IMPLEMENTATION_PLAN.md), §6–9.
 
-LEGACY-REMOVED betekent dat de route in Protocol 4.3.0 (besluit William 2026-10-22) is verwijderd zonder rollbackvenster en zonder voorafgaand G4-bewijs; rollback is een softwareterugzetting. Zie `docs/change-contracts/semantic-only-formation.md`.
+Voor L01–L08 betekent LEGACY-REMOVED dat de route in Protocol 4.3.0 (besluit William 2026-10-22) is verwijderd zonder rollbackvenster en zonder voorafgaand G4-bewijs; rollback is een softwareterugzetting. Zie `docs/change-contracts/semantic-only-formation.md`.
 
 LEGACY-FROZEN beschrijft behouden compatibiliteit: geen verdere featureontwikkeling in het oude contract; compatibiliteit, huidige productie, vergelijking en noodzakelijk herstel blijven toegestaan. Het label betekent **niet** dat de code al uitgeschakeld is. `cutover_enabled=false` is beschrijvende release-evidence, geen tweede runtimeflag.
 
@@ -18,5 +18,6 @@ LEGACY-FROZEN beschrijft behouden compatibiliteit: geen verdere featureontwikkel
 | L06 | Afzonderlijke vergelijking-adapters | **LEGACY-REMOVED** (4.3.0): deterministische arm en nieuwe vergelijkingen geweigerd | Vastgelegde vergelijkingen blijven [leesbaar](history/ROUTE_COMPARISON.md) |
 | L07 | Replay voor v1-contract | V2-identity toegevoegd, zelfde mechanisme | Historische readers behouden |
 | L08 | Directe vrije-tekstconversie bij klassewijziging | **LEGACY-REMOVED** (4.3.0): via de geïnstalleerde verwerkingsstrategie | — |
+| L09 | AI-voorstel voor beslisbomen | **LEGACY-REMOVED** (4.4.0). Menselijke annotatie levert de bronselectie en labels. | Historische grafen en reviewbewijs leesbaar houden. |
 
 Geen van deze labels geldt voor hele modules. Extractie, reconstructie, kopstructuur, beslisboom, bronvalidatie, menselijke repair, review, publicatie, retrieval en kwaliteitsmetingen blijven actief. Voor verwijdering zijn G0–G5, expliciete rollbackafsluiting en nul noodzakelijke aanroepers nodig. Runtimeblokkade en importgrenzen horen bij die cutoverslice; dit register claimt ze niet.

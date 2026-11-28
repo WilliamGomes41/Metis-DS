@@ -12,11 +12,24 @@ from src.vorming.decision_tree_construction_v1 import proposal_inputs
 from src.vorming.decision_tree_proposal_v1 import CONTRACT
 
 
+def historical_proposal_input(frozen):
+    evidence_items = {key: {k: v for k, v in item.items() if k in {"kind", "text", "page", "bbox", "record"}}
+                      for key, item in frozen["inventory"]["items"].items()}
+    if frozen.get("kind") == "boom":
+        # Request-only view: which exported item each text item is, so export_edge
+        # records can be read. The recorded inventory itself is unchanged.
+        for fragment in frozen["fragments"]:
+            item = evidence_items.get(fragment["fragment_id"])
+            if item is not None and item["kind"] == "text":
+                item["record"] = {"export_id": fragment.get("boom_id"), "export_kind": fragment.get("boom_kind"),
+                                  "bundle_id": fragment.get("bundle_id"), "bundle_role": fragment.get("bundle_role")}
+    return {"source_blocks": proposal_inputs(frozen["fragments"]), "evidence_items": evidence_items}
+
+
 def fragment_proposal(frozen):
     if frozen.get("kind") == "boom":
-        from src.vorming.decision_tree_route_v1 import request_input
         from tests.semantic_fixture_support import export_tree_proposal
-        return export_tree_proposal(request_input(frozen)[1]), "test-proposer"
+        return export_tree_proposal(historical_proposal_input(frozen)), "test-proposer"
     blocks = proposal_inputs(frozen["fragments"])
     units = []
     for fragment in frozen["fragments"]:

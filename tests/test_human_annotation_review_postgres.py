@@ -611,19 +611,11 @@ def test_upload_entry_follows_source_class(production_console, tmp_path, klasse,
         sid = parse_qs(urlsplit(response.headers['location']).query)['document'][0]
         command = {'document':sid, 'expected_revision':console.objects_revision(sid), 'command_id':'direct-start'}
         if klasse == 'beslisboom':
-            from tests.test_availability_repair import drain
-            assert client.post('/source-selection/start', data=command, follow_redirects=False).status_code == 303
-            drain(client, client.app)
-            attempt, = console._processing_history_envelope(sid)['processing_attempts']
-            assert attempt['dispatch']['version'] == 'source-dispatch-v1' and attempt['state'] == 'succeeded'
-            from tests.test_insight_diagnostics_navigation_v1 import Links
-            card = client.get('/source-selection', params={'document':sid})
-            graph = f'/source-selection?document={sid}&task=graph'
-            assert graph in Links(card.text).hrefs
-            graph_page = client.get(graph)
-            review = f'/review/decision-graph?document={sid}'
-            assert graph_page.status_code == 200 and review in Links(graph_page.text).hrefs
-            assert '<h1>Beslisroutes beoordelen</h1>' in client.get(review).text
+            for _ in range(2):
+                redirected = client.post('/source-selection/start', data=command, follow_redirects=False)
+                assert redirected.status_code == 303
+                assert redirected.headers['location'] == f'/annotations?document={sid}'
+            assert not console._processing_history_envelope(sid).get('processing_attempts')
         else:
             before = console.workflow_document_store.get_envelope(sid)
             for _ in range(2):

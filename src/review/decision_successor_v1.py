@@ -86,7 +86,7 @@ def execute(console: Any, *, actor_id: str, snapshot_id: str, command_id: str,
         review_policy=successor_policy, source_status=env.get("source_declaration", {}).get("status", "unknown"),
         command_id=command_id, revision_reason=reason, _receive_only=True,
         _registration_boundary=lambda: console._reprocessing_transaction(snapshot_id), _registration_guard=guard)
-    if receive_only or console.snapshot_objects(receipt["snapshot_id"]):
+    if receive_only or (class_ or env["class"]) == "beslisboom" or console.snapshot_objects(receipt["snapshot_id"]):
         return receipt
     # Synchronous kernel compatibility. The HTTP form uses receive_only and a
     # later explicit selection command instead. No outer lock wraps preparation.

@@ -1,56 +1,17 @@
-"""The single formation route for decision trees (Protocol §5.4, strategy C).
-
-source extraction -> source-bound model proposal -> deterministic construction
-(``materialise_knowledge_candidates`` is the only candidate creator) ->
-existing transform, admission, review and publication.
-
-PDF trees and structured exports both get their proposal from the configured
-model and pass through the same contract and constructor. For an export the
-explicit nodes, branches, answer labels and result bundles stay authoritative
-source evidence: a proposal that does not reproduce every one of them exactly,
-or that adds a route, is rejected (``verify_export_preserved``). A failing
-proposer fails the attempt; there is no other route to fall back to.
-"""
+"""Shared extraction, export validation and graph finalization for decision trees."""
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from src.vorming.decision_tree_construction_v1 import (
-    CONTRACT as CONSTRUCTION_CONTRACT,
-    FORMATION_MODE as ROUTE,
-    bind_graph,
-    construct,
-    proposal_inputs,
-)
-from src.vorming.decision_tree_proposal_v1 import CONTRACT as PROPOSAL_CONTRACT, DecisionTreeProposalError
-from src.integrity_kernel import sha256_bytes, stamp_canonical_hashes
+from src.vorming.decision_tree_construction_v1 import bind_graph, proposal_inputs
+from src.vorming.decision_tree_proposal_v1 import DecisionTreeProposalError
+from src.integrity_kernel import stamp_canonical_hashes
 
 POLICY_VERSION = "decision-tree-formation-policy-v1.0.0"
 SPEC_KEY = "_decision_tree_formation"
 ENVELOPE_KEY = "decision_tree_formation"
-PROPOSER_PROMPT = (
-    "You propose the structure of one decision tree from frozen source blocks. "
-    "Select exact character spans only; never write, repair or summarise source text. "
-    "quoted_text must equal the selected spans joined by single spaces. "
-    "Roles: start, question, action, outcome, context. Answer labels (for example Ja/Nee) "
-    "are route evidence on a connection (label_span), never units. Cite evidence_ids from "
-    "evidence_items that support each connection itself. Use to=null for a target you "
-    "cannot identify and add an unresolved entry instead of guessing."
-)
-# Appended for structured exports only, so the PDF prompt stays unchanged.
-EXPORT_PROMPT = (
-    " This source is a structured export: each text evidence item names its export_id, and "
-    "export_edge records name the export_id of their from and to items. Propose exactly one unit "
-    "per exported item, selecting its complete text. Propose exactly one connection per "
-    "export_edge evidence item, citing that item alone, between the units of its from and to "
-    "items; never add, drop or redirect a connection. Propose one result bundle per container "
-    "item (bundle_role container) with exactly the member items of its bundle_id."
-)
-
-Proposer = Callable[[dict[str, Any]], tuple[dict[str, Any], str]]
 
 
 def has_recorded_route(envelope):
@@ -60,47 +21,6 @@ def has_recorded_route(envelope):
 def _error(code: str, detail: str = ""):
     from src.operations_console_v1 import ConsoleError
     return ConsoleError(code, detail) if detail else ConsoleError(code)
-
-
-def request_input(frozen: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    """The developer prompt and source view a proposer receives; nothing else."""
-    evidence_items = {key: {k: v for k, v in item.items() if k in {"kind", "text", "page", "bbox", "record"}}
-                      for key, item in frozen["inventory"]["items"].items()}
-    if frozen.get("kind") == "boom":
-        # Request-only view: which exported item each text item is, so export_edge
-        # records can be read. The recorded inventory itself is unchanged.
-        for fragment in frozen["fragments"]:
-            item = evidence_items.get(fragment["fragment_id"])
-            if item is not None and item["kind"] == "text":
-                item["record"] = {"export_id": fragment.get("boom_id"), "export_kind": fragment.get("boom_kind"),
-                                  "bundle_id": fragment.get("bundle_id"), "bundle_role": fragment.get("bundle_role")}
-    prompt = PROPOSER_PROMPT + (EXPORT_PROMPT if frozen.get("kind") == "boom" else "")
-    return prompt, {"source_blocks": proposal_inputs(frozen["fragments"]), "evidence_items": evidence_items}
-
-
-def request_proposal(frozen: dict[str, Any], *, api_key: str, model: str, limits: Any,
-                     post_json: Callable | None = None) -> dict[str, Any]:
-    """Bounded provider call outside any write transaction; failures never fall back."""
-    from src.vorming.decision_tree_proposal_v1 import proposal_schema
-    from src.vorming.llm_provider_v1 import OPENAI_RESPONSES_URL
-    from src.vorming.bounded_model_call_v1 import logged_post_json as _bounded_provider_json, extract_output_text as _extract_output_text
-    if not str(api_key or "").strip():
-        raise _error("pre_review_llm_api_key_required")
-    prompt, source = request_input(frozen)
-    payload = {"model": model, "input": [
-        {"role": "developer", "content": prompt},
-        {"role": "user", "content": json.dumps(source, ensure_ascii=False)}],
-        "text": {"format": {"type": "json_schema", "name": "decision_tree_proposal", "strict": True,
-                            "schema": proposal_schema()}}}
-    headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
-    response = (_bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits) if post_json is None
-                else post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total))
-    if not isinstance(response, dict):
-        raise _error("pre_review_llm_response_invalid")
-    try:
-        return json.loads(_extract_output_text(response))
-    except json.JSONDecodeError as exc:
-        raise _error("pre_review_llm_response_invalid") from exc
 
 
 def export_types(proposal: dict[str, Any], fragments: list[dict[str, Any]]) -> dict[str, str]:
@@ -215,71 +135,6 @@ def source_fragments(kind: str, path: Path, data: bytes, *, document_id: str, so
     raise _error("decision_tree_source_kind_unsupported")
 
 
-def prepare(kind: str, path: Path, *, data: bytes, document_id: str, source_id: str, title: str,
-            family: str, class_: str, formation_context: dict[str, Any] | None,
-            proposer: Proposer | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Extract, propose and construct; raises on any failure (attempt records it)."""
-    from src.vorming.decision_graph_v1 import source_evidence
-    context = formation_context or {}
-    retained = context.get("retained_fragments")
-    try:
-        fragments = (list(retained) if retained is not None else
-                     source_fragments(kind, path, data, document_id=document_id, source_id=source_id,
-                                      deadline=context.get("attempt_deadline")))
-    except Exception as exc:
-        from src.vorming.docling_contract_v1 import DoclingError
-        from src.operations_console_v1 import ConsoleError, docling_console_error
-        if isinstance(exc, DoclingError):
-            # Same conversion as every extraction route: code plus page numbers.
-            raise docling_console_error(exc) from exc
-        if isinstance(exc, ConsoleError):
-            raise
-        raise _error("invalid_boom_freeze" if kind == "boom" else "invalid_decision_pdf") from exc
-    if kind == "pdf":
-        from src.vorming.docling_pdf_v1 import release_conversion_capacity
-        release_conversion_capacity()
-    source_hash = sha256_bytes(data)
-    inventory = source_evidence(path, data, kind, fragments, source_hash)
-    frozen = {"kind": kind, "fragments": fragments, "inventory": inventory, "formation_context": context}
-    invalid: list[str] = []
-    types = None
-    if proposer is None:
-        raise _error("pre_review_llm_decision_tree_proposer_unbound")
-    try:
-        proposal, model = proposer(frozen)
-        if kind == "boom":
-            from src.vorming.decision_graph_v1 import export_branches
-            valid = {index for index, _branch in export_branches(data, fragments)}
-            invalid = [f"invalid_export_branch:{i}" for i in range(len(json.loads(data).get("branches", [])))
-                       if i not in valid]
-            from src.vorming.decision_tree_proposal_v1 import validate_proposal
-            validate_proposal(proposal, blocks=proposal_inputs(fragments), inventory=inventory)
-            types = export_types(proposal, fragments)
-        construction = construct(proposal, document_id=document_id, title=title, family=family, class_=class_,
-                                 content_kind=kind, fragments=fragments, inventory=inventory, model=model,
-                                 proposed_types=types)
-        if kind == "boom":
-            verify_export_preserved(construction, data, fragments)
-    except DecisionTreeProposalError as exc:
-        raise _error("pre_review_llm_proposal_rejected", exc.code) from exc
-    except Exception as exc:  # materialisation failures keep their stable code
-        from src.vorming.knowledge_materialisation_v1 import MaterialisationError
-        if isinstance(exc, MaterialisationError):
-            raise _error("pre_review_llm_proposal_rejected", exc.code) from exc
-        raise
-    construction["graph_plan"]["unresolved"].extend(invalid)
-    if kind == "boom":
-        _export_enrichment(construction, fragments, document_id)
-    spec = construction.pop("spec")
-    spec[SPEC_KEY] = {"construction": construction, "inventory": inventory,
-                      "formation": {"route": ROUTE, "policy_version": POLICY_VERSION,
-                                    "proposal_contract": PROPOSAL_CONTRACT,
-                                    "construction_contract": CONSTRUCTION_CONTRACT, "model": model,
-                                    "proposal_hash": construction["proposal_hash"],
-                                    "reason": "only_admitted_route_for_decision_trees"}}
-    return fragments, spec
-
-
 def finalize(record: dict[str, Any], objects: list[dict[str, Any]], fragments: list[dict[str, Any]],
              source_hash: str, *, actor: str, with_graph: bool) -> dict[str, Any]:
     """Record the route; with a review policy also bind the reviewable graph.
@@ -308,28 +163,3 @@ def finalize(record: dict[str, Any], objects: list[dict[str, Any]], fragments: l
         stamp_canonical_hashes(obj)
     return {"decision_graph": graph, "decision_graph_evidence": deepcopy(record["inventory"]),
             "decision_graph_reviews": [], **fields}
-
-
-def llm_proposer(env, *, post_json=None) -> Proposer:
-    """Model proposer bound to deployment configuration; honours the attempt deadline."""
-    def propose(frozen: dict[str, Any]) -> tuple[dict[str, Any], str]:
-        import time
-        from dataclasses import replace
-        from src.vorming.bounded_model_call_v1 import CLEANUP_SECONDS, ModelCallLimits, load_limits
-        from src.vorming.llm_provider_v1 import load_llm_provider_config
-        context = frozen["formation_context"]
-        provider = load_llm_provider_config(env)
-        if not provider.model:
-            raise _error("pre_review_llm_model_required")
-        limits = (ModelCallLimits(**context["model_call_limits"]) if context.get("model_call_limits")
-                  else load_limits(env))
-        deadline = context.get("attempt_deadline")
-        if deadline is not None:
-            remaining = deadline - time.monotonic() - CLEANUP_SECONDS
-            if remaining <= 0:
-                raise _error("processing_attempt_expired")
-            limits = replace(limits, total=min(limits.total, remaining),
-                             connect=min(limits.connect, remaining), idle=min(limits.idle, remaining))
-        return request_proposal(frozen, api_key=provider.api_key, model=provider.model,
-                                limits=limits, post_json=post_json), provider.model
-    return propose

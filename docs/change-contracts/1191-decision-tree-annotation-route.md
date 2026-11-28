@@ -1,8 +1,7 @@
 # Beslisboom via menselijke annotatie (vervangt het modelvoorstel van strategie C)
 
 Issue: [#1191](https://github.com/WilliamGomes41/Metis-DS/issues/1191) · Linear MET-150 (`needs-triage`; `ready-for-agent` pas na GO William). Referentierevisie: main `147ee2d67f7e19322ba20061f1d7c512e968c8b8`.
-**Status:** Expand gestart. De annotatiekaart en bouwstap zijn aangesloten. PostgreSQL-integratietests doorlopen review en publicatie voor PDF en JSON-export en een correctie van een PDF-annotatie.
-William heeft opdracht gegeven om Expand te starten en de vergelijking met de AI-route over te slaan. Het formele wijzigingsbesluit volgens Protocol §15 hoort bij de latere omschakeling.
+**Status:** Fase 2 is gestart op verzoek van William. Het §15-besluit staat in §10. De omschakeling is in ontwikkeling op een aparte PR boven op de annotatieroute. De release vereist de verificatie uit §3.
 
 ```text
 Change class: A
@@ -190,7 +189,7 @@ William beoordeelt de kwaliteit van de huidige AI-route als onvoldoende en heeft
 ## 10. Besluiten over review en omschakeling
 
 1. **Review van eigen werk (besloten).** De annotator mag de eigen graaf reviewen. Bij ingest wordt het vereiste aantal reviewers vastgelegd. Elke persoon telt eenmaal mee na een expliciete goedkeuring van de te reviewen versie.
-2. **Openstaande modelpogingen bij de cutover:** sluiten met een opvolger (voorstel, §5) of laten afronden vóór fase 2.
+2. **Openstaande modelpogingen bij de cutover:** besloten op 2026-11-28. Sluit de poging af met de zichtbare reden `decision_tree_model_route_retired`. De gebruiker kan met dezelfde bron en reviewinstellingen verder via menselijke annotatie in een nieuwe werkrevisie.
 
 ## 11. Niet-geverifieerde risico's
 

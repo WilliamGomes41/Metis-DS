@@ -903,8 +903,6 @@ def bind_pre_review_semantic_processing(
     # and is deliberately the same reader used by the processing router below.
     console._passage_formation_mode_reader = active_passage_formation_mode
     console._processing_configuration_reader = lambda: {"mode": active_passage_formation_mode(), "model": env.get("METIS_LLM_MODEL")}
-    from src.vorming.decision_tree_route_v1 import llm_proposer
-    console._decision_tree_proposer = llm_proposer(env, post_json=post_json)
 
     def configured_fragments_and_spec(
         kind: str,
@@ -918,6 +916,9 @@ def bind_pre_review_semantic_processing(
         class_: str,
         formation_context: Mapping[str, Any] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if class_ == "beslisboom":
+            from src.vorming.human_annotation_decision_tree_v1 import RETIRED
+            raise ConsoleError(RETIRED)
         if (formation_context or {}).get("resume_formation"):
             from src.vorming.source_selection_v1 import assert_resume_configuration
             assert_resume_configuration(console, console._processing_command_envelope(formation_context["snapshot_id"]))
@@ -928,13 +929,6 @@ def bind_pre_review_semantic_processing(
             decision = resolve_passage_formation_strategy(deployment_mode=mode)
         except PassageFormationPolicyError as exc:
             raise ConsoleError(exc.code) from exc
-
-        if class_ == "beslisboom" and kind in {"pdf", "boom"}:
-            from src.vorming.decision_tree_route_v1 import prepare
-            return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
-                           title=title, family=family, class_=class_,
-                           formation_context=formation_context,
-                           proposer=getattr(console, "_decision_tree_proposer", None))
 
         checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
         if checkpoint:
