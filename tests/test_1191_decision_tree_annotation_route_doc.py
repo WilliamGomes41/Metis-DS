@@ -22,8 +22,8 @@ def test_contract_header_is_a_valid_class_a_high_risk_contract():
     assert validate_change_contract(CONTRACT.read_text(encoding='utf-8')) == []
 
 
-def test_contract_states_it_is_not_implemented():
-    assert '**Status:** ontwerp ter besluit; niet geïmplementeerd.' in CONTRACT.read_text(encoding='utf-8')
+def test_contract_records_the_implementation_stage():
+    assert '**Status:** Expand gestart.' in CONTRACT.read_text(encoding='utf-8')
 
 
 def test_every_claim_cited_in_the_contract_is_defined_in_the_verification_list():
