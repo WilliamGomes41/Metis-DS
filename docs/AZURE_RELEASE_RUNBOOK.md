@@ -53,19 +53,21 @@ Test eerst de bestaande toegang. Is het actuele Cloud Shell-IP niet toegestaan e
 
 Voer de alleen-lezen databasecontroles voor dit controlemoment samen uit. Verwijder de regel direct na de controles, ook bij een fout, en bevestig via de firewallregellijst dat de regel weg is. Houd de regel gesloten tijdens de ACR-build. Herhaal vlak vóór de wissel alleen de benodigde telling en gebruik na de wissel een afzonderlijk controlemoment voor `pg_stat_activity`.
 
-Gebruik voor de telling van lopende pogingen deze query op de doeldatabase:
+Gebruik voor de telling van lopende pogingen deze query op de doeldatabase. Een poging met status `running` waarvan `expires_at` voorbij is, telt net als in de applicatie als verlopen. Een poging zonder `expires_at` telt mee:
 
 ```sql
 SELECT
     (SELECT count(*) FROM workflow.processing_attempts
-     WHERE payload->>'state' = 'running')
+     WHERE payload->>'state' = 'running'
+       AND (payload->>'expires_at' IS NULL OR (payload->>'expires_at')::timestamptz > now()))
     +
     (SELECT count(*) FROM workflow.documents AS d
      CROSS JOIN LATERAL jsonb_array_elements(
          COALESCE(NULLIF(d.envelope_payload->'processing_attempts', 'null'::jsonb), '[]'::jsonb)
      ) AS a(attempt)
      WHERE d.processing_storage_version IS DISTINCT FROM 1
-       AND a.attempt->>'state' = 'running') AS lopende_pogingen;
+       AND a.attempt->>'state' = 'running'
+       AND (a.attempt->>'expires_at' IS NULL OR (a.attempt->>'expires_at')::timestamptz > now())) AS lopende_pogingen;
 ```
 
 ## 2. Image bouwen

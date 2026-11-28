@@ -392,3 +392,34 @@ az() {
                                 env=dict(environment, azure_subscription=subscription))
         assert (result.returncode == 0) == allowed, result.stderr
         assert ('MOCK_BUILD' in result.stdout) == allowed
+
+
+def test_running_attempt_count_ignores_expired_and_keeps_unknown_running() -> None:
+    """Codex #1194: the pre-cutover count uses the application's expiry rule (processing_retry_v1.status)."""
+    import psycopg
+    import pytest
+    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN")
+    if not dsn:
+        pytest.skip("PostgreSQL test database not configured")
+    runbook = (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").read_text(encoding="utf-8")
+    query = runbook.split("```sql\n", 1)[1].split("```", 1)[0]
+    assert "AS lopende_pogingen" in query
+    schema = "runbook_count_probe"
+    future, past = "2999-01-01T00:00:00+00:00", "2000-01-01T00:00:00+00:00"
+    with psycopg.connect(dsn) as con:
+        con.execute(f"CREATE SCHEMA {schema}")
+        try:
+            con.execute(f"CREATE TABLE {schema}.processing_attempts (payload jsonb)")
+            con.execute(f"CREATE TABLE {schema}.documents (envelope_payload jsonb, processing_storage_version int)")
+            for payload in ({"state": "running", "expires_at": future}, {"state": "running", "expires_at": past},
+                            {"state": "running"}, {"state": "succeeded", "expires_at": future}):
+                con.execute(f"INSERT INTO {schema}.processing_attempts VALUES (%s)", (psycopg.types.json.Jsonb(payload),))
+            inline = {"processing_attempts": [{"state": "running", "expires_at": future},
+                                              {"state": "running", "expires_at": past}]}
+            con.execute(f"INSERT INTO {schema}.documents VALUES (%s, NULL)", (psycopg.types.json.Jsonb(inline),))
+            con.execute(f"INSERT INTO {schema}.documents VALUES (%s, 1)", (psycopg.types.json.Jsonb(inline),))
+            count = con.execute(query.replace("workflow.", schema + ".")).fetchone()[0]
+        finally:
+            con.rollback()
+    # Native: running+future and running without expires_at; inline (non-native only): running+future.
+    assert count == 3
