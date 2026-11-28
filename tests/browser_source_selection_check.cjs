@@ -70,7 +70,17 @@ const fs = require('fs');
   if (refused!==404) throw Error('guideline start returned '+refused);
   const sid = manifest.tree;
   await page.goto(base+'/source-selection?document='+sid);
-  await page.getByRole('button',{name:'Starten',exact:true}).click();
+  // #1191: a new decision tree opens annotation only; no AI start is offered on the card.
+  const treeCard = page.locator(`[data-source-document="${sid}"]`);
+  await treeCard.getByRole('button',{name:'Annoteren',exact:true}).waitFor();
+  if (await page.getByRole('button',{name:'Starten',exact:true}).count()) throw Error('new decision tree still offers AI start');
+  // The retained model route (phase 1 rollback) still runs; its progress card is checked below.
+  const treeRevision = await treeCard.locator('form[action="/annotations/source"] [name=expected_revision]').inputValue();
+  const started = await page.evaluate(async ({sid,revision}) => (await fetch('/source-selection/start',{
+    method:'POST',body:new URLSearchParams({document:sid,expected_revision:revision,command_id:'retained-model-start'}),redirect:'manual'
+  })).type,{sid,revision:treeRevision});
+  if (started!=='opaqueredirect') throw Error('retained model start did not redirect: '+started);
+  await page.goto(base+'/source-selection?document='+sid);
   const runningCard = page.locator(`[data-source-document="${sid}"][data-source-attempt]`);
   await runningCard.locator('[data-source-progress]').getByText(/Fase:|Wacht op een uitvoeringsplek/).waitFor({timeout:10000});
   const isProgress = response => new URL(response.url()).pathname === '/source-selection/progress' && response.ok();

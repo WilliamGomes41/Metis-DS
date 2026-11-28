@@ -505,6 +505,11 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
                 '<p>Annoteren geeft geen goedkeuring. De bij ontvangst gekozen beoordeling blijft gelden.</p>'
                 +source_preparation_form(document, console.objects_revision(document), 'Bron openen voor annotatie', esc)
                 +'</section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})
+        if envelope['class'] == 'beslisboom':
+            from src.vorming.human_annotation_tree_ui_v1 import tree_card
+            body = tree_card(console, actor['account_id'], envelope)
+            return HTMLResponse(page(nav(actor, 'selection')+'<section class="room">'+body+'</section>',
+                                     title='Beslisboom annoteren'), headers={'Cache-Control':'no-store'})
         state = editor_state(actor, document, include_coverage=True)
         from src.vorming.source_bound_fields_v3 import FIELDS, TYPE_FIELDS, CONTEXT_FIELDS
         from src.vorming.human_annotation_contract_v1 import CONTEXT_BINDING_FIELDS, ROLE_MAP
@@ -756,6 +761,12 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         if isinstance(section, str):
             location += '#' + quote(section, safe='')
         return RedirectResponse(location, status_code=303)
+
+    @app.get('/annotations/tree.js')
+    def tree_script(request: Request):
+        require(request)
+        return Response(Path(__file__).with_name('human_annotation_tree.js').read_text(),
+                        media_type='text/javascript', headers={'Cache-Control':'no-store'})
 
     @app.get('/annotations/editor.js')
     def script(request: Request):

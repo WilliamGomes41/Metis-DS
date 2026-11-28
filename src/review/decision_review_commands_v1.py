@@ -117,6 +117,10 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
             envelope["decision_graph_reviews"] = [r for r in rows if r["reviewer_id"] != actor_id] + [
                 {"reviewer_id": actor_id, "target": target, "at": utc_now(), "reason": reason}]
         elif action == "graph":
+            if (prepared_tree.get("decision_tree_formation") or {}).get("route") == "decision-tree-annotation-v1":
+                expected = annotated_graph_for_review(prepared_tree, current)
+                if graph != expected:
+                    raise ConsoleError("decision_graph_annotation_correction_required")
             issues = graph_issues(graph, current, envelope["decision_graph_evidence"])
             # Incomplete structure may be saved for repair, malformed or
             # ungrounded claims may not become a draft graph.
@@ -160,7 +164,13 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
                            graph=envelope["decision_graph"], inventory=envelope["decision_graph_evidence"])
         gated = apply_passage_register(gated)
         prior = {o["object_id"]: o for o in current}
-        history.extend(o for o in gated if o != prior[o["object_id"]])
+        from src.review.revision_workflow import knowledge_revision, revise_object
+        for obj in gated:
+            previous = prior[obj["object_id"]]
+            if obj != previous:
+                if knowledge_revision(previous) and obj["object_version"] != previous["object_version"]:
+                    obj = revise_object(previous, obj, snapshot_id=snapshot_id, actor=actor_id, reason=reason, force=True)
+                history.append(obj)
         envelopes = deepcopy(console._envelopes)
         if '_document_inputs' in envelope:
             from src.workflows.processing_archives_v1 import TREE_FIELDS
@@ -176,3 +186,12 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
                          "prior_policy": old_policy, "policy": envelope.get("review_policy"),
                          "reason": reason, "actor_account_id": actor_id, "result": result}))
         return result
+
+def annotated_graph_for_review(envelope, objects):
+    """Review may acknowledge a sealed graph and bind its current passage versions."""
+    graph = deepcopy(envelope["decision_graph"])
+    versions = {obj["object_id"]: obj["object_version"] for obj in objects}
+    for node in graph["nodes"]:
+        node["object_version"] = versions[node["object_id"]]
+    graph["unresolved"] = [code for code in graph["unresolved"] if code != "human_route_confirmation_required"]
+    return graph

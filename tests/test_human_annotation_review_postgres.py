@@ -580,7 +580,7 @@ def test_structural_dependency_does_not_revoke_an_unchanged_claim_review(product
     assert [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id] == first_binding
 
 
-@pytest.mark.parametrize('klasse,target', [('beslisboom','/source-selection'), *[(klasse, '/annotations') for klasse in ('richtlijn', 'handreiking', 'artikel', 'transcript', 'podcast')]])
+@pytest.mark.parametrize('klasse,target', [('beslisboom','/annotations'), *[(klasse, '/annotations') for klasse in ('richtlijn', 'handreiking', 'artikel', 'transcript', 'podcast')]])
 def test_upload_entry_follows_source_class(production_console, tmp_path, klasse, target):
     import fitz
     from starlette.testclient import TestClient
@@ -605,8 +605,8 @@ def test_upload_entry_follows_source_class(production_console, tmp_path, klasse,
         assert response.headers['location'].startswith(target+'?document=')
         page = client.get(response.headers['location'])
         assert page.status_code == 200
-        assert ('action="/source-selection/start"' in page.text) == (klasse == 'beslisboom')
-        assert ('Bron openen voor annotatie' in page.text) == (klasse != 'beslisboom')
+        assert 'action="/source-selection/start"' not in page.text
+        assert 'Bron openen voor annotatie' in page.text
         from urllib.parse import parse_qs, urlsplit
         sid = parse_qs(urlsplit(response.headers['location']).query)['document'][0]
         command = {'document':sid, 'expected_revision':console.objects_revision(sid), 'command_id':'direct-start'}
@@ -617,7 +617,7 @@ def test_upload_entry_follows_source_class(production_console, tmp_path, klasse,
             attempt, = console._processing_history_envelope(sid)['processing_attempts']
             assert attempt['dispatch']['version'] == 'source-dispatch-v1' and attempt['state'] == 'succeeded'
             from tests.test_insight_diagnostics_navigation_v1 import Links
-            card = client.get(response.headers['location'])
+            card = client.get('/source-selection', params={'document':sid})
             graph = f'/source-selection?document={sid}&task=graph'
             assert graph in Links(card.text).hrefs
             graph_page = client.get(graph)

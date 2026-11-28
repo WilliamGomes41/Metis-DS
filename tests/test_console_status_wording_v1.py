@@ -62,7 +62,9 @@ def test_received_decision_tree_opens_formation(production_console, production_a
     assert f'href="/annotations?document={sid}"' not in documents
     formation = client.get("/source-selection", params={"document": sid})
     assert formation.status_code == 200
-    assert 'action="/source-selection/start"' in formation.text
+    # #1191: a new decision tree is formed through annotation only.
+    assert 'action="/annotations/source"' in formation.text
+    assert 'action="/source-selection/start"' not in formation.text
 
 
 def test_publisher_without_annotation_access_only_sees_status(production_console, production_app):

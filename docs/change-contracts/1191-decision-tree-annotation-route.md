@@ -1,8 +1,8 @@
 # Beslisboom via menselijke annotatie (vervangt het modelvoorstel van strategie C)
 
 Issue: [#1191](https://github.com/WilliamGomes41/Metis-DS/issues/1191) · Linear MET-150 (`needs-triage`; `ready-for-agent` pas na GO William). Referentierevisie: main `147ee2d67f7e19322ba20061f1d7c512e968c8b8`.
-**Status:** ontwerp ter besluit; niet geïmplementeerd.
-Richting afgestemd met William op 2026-11-28; het formele wijzigingsbesluit volgt Protocol §15 na het experiment van §10 (fase 2 hieronder).
+**Status:** Expand gestart. De annotatiekaart en bouwstap zijn aangesloten. PostgreSQL-integratietests doorlopen review en publicatie voor PDF en JSON-export en een correctie van een PDF-annotatie.
+William heeft opdracht gegeven om Expand te starten en de vergelijking met de AI-route over te slaan. Het formele wijzigingsbesluit volgens Protocol §15 hoort bij de latere omschakeling.
 
 ```text
 Change class: A
@@ -14,11 +14,11 @@ Rewrite target: de voorstelbron van strategie C: decision_tree_route_v1.prepare 
 Why local patching is insufficient: het modelvoorstel is de enige voorstelbron voor beslisbomen en wordt bij ingest synchroon aangeroepen; de annotatieroute weigert beslisbomen expliciet (human_annotation_v1.prepare: annotation_prose_required). Een tweede voorstelbron naast het model zou een verborgen tweede vormingspad zijn; de voorstelbron moet daarom worden vervangen, niet aangevuld.
 Current authority/writer/reader map: zie §1.
 Supported runtime topologies: één productiecompositie console_asgi.build_app met bind_pre_review_semantic_processing (PostgreSQL-only, D6b) en de bestaande annotatieworker (human_annotation_build_v1.execute).
-Persisted-state impact: geen schemawijziging verwacht; annotatiesets, seals en buildbewijs krijgen voor klasse beslisboom een eigen payloadcontract binnen de bestaande tabellen (zie §4). Bestaande snapshots, objecten, grafen, reviews en releases blijven ongewijzigd.
-Compatibility/migration plan: expand → experiment → contract (§3). Met het model gevormde beslisbomen blijven leesbaar, reviewbaar en verifieerbaar onder hun vastgelegde decision_tree_formation.model; geen backfill, geen stille hervorming.
-Rollback/recovery plan: in fase 1 en 2 bestaat de modelroute nog en is rollback een softwareterugzetting zonder datamigratie. Na fase 3 is rollback een softwareterugzetting naar de laatste fase-2-commit; annotatiegevormde snapshots blijven daar leesbaar omdat het voorstelformaat en de constructie ongewijzigd zijn.
-Cutover trigger: experimentbesluit KEEP in Audit (§10), gevolgd door het §15-wijzigingsbesluit en de letterlijke GO van William voor fase 3.
-Cleanup/decommission criteria: fase 3 verwijdert de modelvoorstelbron volledig (§5); een statische test bewaakt dat er geen modelaanroep voor beslisbomen overblijft.
+Persisted-state impact: een PostgreSQL-migratie voor de sealcontroles is noodzakelijk (§4); annotatiesets, seals en buildbewijs krijgen voor klasse beslisboom een eigen payloadcontract binnen de bestaande tabellen (zie §4). Bestaande snapshots, objecten, grafen, reviews en releases blijven ongewijzigd.
+Compatibility/migration plan: expand → contract (§3). Met het model gevormde beslisbomen blijven leesbaar, reviewbaar en verifieerbaar onder hun vastgelegde decision_tree_formation.model; geen backfill, geen stille hervorming.
+Rollback/recovery plan: in fase 1 bestaat de modelroute nog en is rollback een softwareterugzetting zonder datamigratie. Na fase 2 is rollback een softwareterugzetting naar de laatste fase-1-commit; annotatiegevormde snapshots blijven daar leesbaar omdat het voorstelformaat en de constructie ongewijzigd zijn.
+Cutover trigger: bewijs van de annotatieroute volgens §3, het §15-wijzigingsbesluit en de letterlijke GO van William voor fase 2.
+Cleanup/decommission criteria: fase 2 verwijdert de modelvoorstelbron volledig (§5); een statische test bewaakt dat er geen modelaanroep voor beslisbomen overblijft.
 Failure blast radius: een fout in de nieuwe route blokkeert alleen nieuwe beslisboomvorming (fail closed met zichtbare code); proza, bestaande beslisbomen, review en publicatie blijven beschikbaar.
 Adversarial proof matrix: §7.
 Lifecycle entity: kenniskandidaten en beslisgraaf van een beslisboom-snapshot vóór review; de bestaande WorkingRevision.
@@ -40,7 +40,7 @@ Expected UI result: Vorming opent een beslisboom in de annotatiekaart met rollen
 Failure result: ongeldig of onvolledig annotatievoorstel faalt gesloten met de bestaande decision_*- of materialisation_*-code en laat bron en annotatiewerk intact; open twijfellabels blokkeren publicatie.
 Restart result: een onderbroken bouw hervat via de bestaande annotatieworker (claimed delivery, seal, één bundelcommit); een herhaalde bouw met dezelfde seal geeft dezelfde proposal_hash en graafhash.
 Recovery result: bron, annotatieset en eerder werk blijven intact; herstel via de bestaande retry van de annotatiebouw.
-Legacy-data result: met het model gevormde beslisbomen blijven leesbaar, reviewbaar en verifieerbaar; na fase 3 wordt een openstaande modelpoging niet hervat maar gesloten met decision_tree_model_route_retired, waarna een opvolger met nieuwe werkrevisie de annotatieroute volgt.
+Legacy-data result: met het model gevormde beslisbomen blijven leesbaar, reviewbaar en verifieerbaar; na fase 2 wordt een openstaande modelpoging niet hervat maar gesloten met decision_tree_model_route_retired, waarna een opvolger met nieuwe werkrevisie de annotatieroute volgt.
 Required black-box scenario: GIVEN een bevroren PDF-beslisboom zonder geconfigureerd model WHEN de annotator eenheden, rollen, labels en verbindingen aanwijst en afrondt THEN bestaan kandidaten en een gebonden graaf met dezelfde controles als nu, slaagt review en publicatie, levert een herhaalde bouw dezelfde hashes en is er geen modelaanroep gedaan; idem voor een JSON-export waarin alleen keuzesoort en startpunt worden gelabeld.
 Explicit non-goals: een publiceerbare toestand "bron geeft hier geen vervolg" (twijfellabels blijven publicatie blokkeren); wijziging van voorstelformaat, constructie, graafcontroles, review-, vier-ogen- of publicatiecontracten; prozavorming; automatische controle op gemiste antwoorden in de bron (dat blijft graafreview).
 ```
@@ -50,7 +50,7 @@ Explicit non-goals: een publiceerbare toestand "bron geeft hier geen vervolg" (t
 - **Bronvastheid zonder interpretatie door een model.** In Metis wijst een annotator aan en labelt hij; hij schrijft niet. Het voorstelformaat `decision-tree-proposal-v1` bevat al uitsluitend bronselecties, rollen, verbindingen, aangewezen labels, contextkoppelingen, bundels en onzekerheidscodes. `quoted_text` is een claim die de materialiser tegen de bron controleert. Een annotator kan dit voorstel dus volledig maken door aan te wijzen.
 - **Eén werkwijze voor proza en beslisbomen.** De annotatiekaart, de afronding, de bouw en de correctie vanuit de kaart (#1064/#1156) bestaan al. Daar wordt niets van dubbel gebouwd.
 - **Geen afhankelijkheid van een leverancier.** Nu faalt elke beslisboomvorming als het model ontbreekt of faalt (`pre_review_llm_decision_tree_proposer_unbound`). Exports vragen een modelaanroep, terwijl het model daar de structuur niet mag wijzigen.
-- **Bekend risico van de huidige reviewvorm.** Een reviewer die een modelvoorstel beoordeelt, neemt fouten eerder over. Het experiment in fase 2 meet of de annotatieroute in de praktijk minder fouten oplevert. Dat is niet vooraf aangetoond.
+- **Bekend risico van de huidige reviewvorm.** Een reviewer die een modelvoorstel beoordeelt, neemt fouten eerder over.
 
 ## 1. Huidige implementatie van de AI-route (authority/writer/reader map)
 
@@ -112,26 +112,26 @@ flowchart TD
 
 **Review.** De reviewer opent dezelfde annotatiekaart, op dezelfde manier als bij richtlijnen (#1064/#1156: Aanpassing opslaan, Afronden en bouwen). Een aanpassing levert een nieuwe objectversie op met de vorige in de versieregel. De review hoort bij die nieuwe versie (§6.4). Er komt geen apart correctiepad voor beslisbomen.
 
-## 3. Gefaseerde uitvoering (expand → experiment → contract)
+## 3. Gefaseerde uitvoering (expand → contract)
 
 | Fase | Inhoud | Merge-voorwaarde |
 | --- | --- | --- |
 | 1. Expand | Annotatieroute voor `class=beslisboom` naast de modelroute. Nieuwe route-id `decision-tree-annotation-v1`, keuze vastgelegd op bronversie en poging (§5.4 kader punt 1). `human_annotation_v1.prepare` accepteert beslisbomen. Beslisboompayload in de bestaande annotatieopslag. Projectie `human_annotation_decision_tree_v1.proposal_from_entries` naar `decision-tree-proposal-v1`. Bouw via `construct`/`finalize`. Kaart-UI volgens Impeccable. Correctie vanuit de kaart. | Verificatielijst V01–V14 en V16–V18 VERIFIED; volledige suite groen; adversariële review van §7 |
-| 2. Experiment (§10, Audit) | Baseline `decision-tree-source-bound-v1` tegenover kandidaat `decision-tree-annotation-v1` op dezelfde bevroren bronnen, met `decision_tree_experiment_v1` en een onafhankelijke menselijke referentie. Geen schrijfrechten naar publicatie. | Metrics en besluitcriteria vooraf vastgelegd door William (§8). Uitkomst KEEP, ITERATE of afwijzen. |
-| 3. Contract | Na KEEP, het §15-besluit en GO: de modelvoorstelbron verwijderen (§5), protocol naar 4.4.0, `docs/LEGACY_ROUTES.md` en `config/legacy_processing_routes.json` bijwerken (nieuw L09), historische snapshots leesbaar laten. | V15 en V19–V20 VERIFIED; volledige suite groen; adversariële review |
+| 2. Contract | Na het §15-besluit en GO: de modelvoorstelbron verwijderen (§5), protocol naar 4.4.0, `docs/LEGACY_ROUTES.md` en `config/legacy_processing_routes.json` bijwerken (nieuw L09), historische snapshots leesbaar laten. | V15 en V19–V20 VERIFIED; volledige suite groen; adversariële review |
 
-Waarom gefaseerd: volgens `continuous-development.md` §2 en `lifecycle-vsa.md` §13A blijft de oude route terugzetbaar tot de nieuwe route bewezen is. Zonder fase 2 zou de vervanging berusten op een verwachting en niet op bewijs (G4-les uit 4.3.0, `semantic-only-formation.md` §8).
+Waarom gefaseerd: volgens `continuous-development.md` §2 en `lifecycle-vsa.md` §13A blijft de oude route terugzetbaar tot de nieuwe route bewezen is.
 
 ## 4. Opslag en identiteit
 
-- **Geen nieuwe tabel.** Het beslisboompayload komt in de bestaande `workflow.annotation_sets` en entries, met een eigen versie (`decision-tree-annotation-input-v1`). `human_annotation_v1._validate` krijgt een klassegebonden validator. Is een migratie toch nodig, dan stopt de uitvoering, conform `lifecycle-vsa.md` §16.
+- **Migratie 046.** In migraties 036 en 037 sluiten de PostgreSQL-functies voor het vastleggen en controleren van een seal beslisbomen expliciet uit. Migratie 046 bindt de annotatieroute aan de documentklasse en vereist voor beslisbomen één gereed invoerrecord met contract `decision-tree-annotation-input-v1`. De bouwstap kan een seal alleen gebruiken zolang onder meer de generatie, extractie en documentcontext overeenkomen. De databasetest controleert de route, het manifest en het vervallen van de seal na een generatiewijziging.
+- **Bestaande tabellen.** Het beslisboompayload komt in de bestaande `workflow.annotation_sets` en entries, met een eigen versie (`decision-tree-annotation-input-v1`). `human_annotation_v1._validate` krijgt een klassegebonden validator. De toestemming voor migratie 046 geldt voor ontwikkeling en lokale tests.
 - **Geen nieuwe identiteit.** Kandidaatidentiteit en tekst komen uit `materialise_knowledge_candidates` (spans). Tijdelijke `ref`'s in het voorstel blijven tijdelijk, zoals nu.
 - **Provenance.** `decision_tree_formation` legt `route=decision-tree-annotation-v1`, `proposal_contract`, `construction_contract`, `proposal_hash`, `actor` en `annotation_seal_id` vast, en `model: null`. Kwaliteit & werkproces telt per route.
 - **Determinisme.** Bij dezelfde seal, dezelfde extractie en dezelfde inventaris zijn `proposal_hash` en graafhash identiek (V09).
 
-## 5. Uitfasering van de AI-route (fase 3)
+## 5. Uitfasering van de AI-route (fase 2)
 
-| Component | Status na fase 3 | Reden |
+| Component | Status na fase 2 | Reden |
 | --- | --- | --- |
 | `decision_tree_route_v1.llm_proposer`, `request_proposal`, `request_input`, `PROPOSER_PROMPT`, `EXPORT_PROMPT` | **verwijderd** | Geen modelvoorstel meer voor beslisbomen |
 | `console._decision_tree_proposer` en de binding in `bind_pre_review_semantic_processing` | **verwijderd** | Geen voorstellerbinding meer |
@@ -166,39 +166,34 @@ Registratie: `config/legacy_processing_routes.json` krijgt L09 (`LEGACY-REMOVED`
 | Gelijktijdig opslaan door twee annotatoren | Eén slaagt, de andere krijgt een CAS-conflict, er gaat niets verloren | V10 |
 | Herstart midden in de bouw | Bouw hervat, één bundelcommit, geen dubbele objecten | V11 |
 | Reviewer past aan in de kaart | Nieuwe objectversie, vorige in de versieregel, review gebonden aan de nieuwe versie | V12 |
-| Hoog-risicoboom | Twee onafhankelijke goedkeuringen; dezelfde persoon telt niet twee keer | V13 |
+| Review van eigen annotatie | De annotator telt mee na expliciete goedkeuring. Bij twee vereiste reviewers is ook goedkeuring door een andere reviewer nodig. | V13 |
 | Snapshot met annotatieset en semantische vorming of selectie | `annotation_source_owned` | V14 |
-| Openstaande modelpoging na fase 3 | `decision_tree_model_route_retired`, opvolger mogelijk | V15 |
+| Openstaande modelpoging na fase 2 | `decision_tree_model_route_retired`, opvolger mogelijk | V15 |
 | Historische, met het model gevormde boom | Leesbaar, reviewbaar en verifieerbaar, publicatiereplay ongewijzigd | V16 |
 | Product API voor dezelfde gepubliceerde toestand | Byte-gelijk antwoord | V17 |
 | Kandidaatmakers | Alleen `materialise_knowledge_candidates` | V18 |
-| Modelroute na fase 3 | Geen verwijzing naar `llm_proposer` en dergelijke in `src/` | V19 |
+| Modelroute na fase 2 | Geen verwijzing naar `llm_proposer` en dergelijke in `src/` | V19 |
 
-## 8. Experiment (fase 2, Protocol §10)
+## 8. Besluit over de vergelijking
 
-- **Gelijke uitgangspunten:** dezelfde bevroren bronnen voor beide routes, zowel PDF als export. De referentie is een onafhankelijke menselijke annotatie die buiten beide routes is gemaakt.
-- **Harnas:** `decision_tree_experiment_v1` (`decision-tree-route-acceptance-v1`), uitgebreid met de kandidaatroute als arm. Het harnas schrijft niets naar KnowledgeObjects, reviews of publicatie.
-- **Maatstaven:** de bestaande `THRESHOLD_KEYS`: `unit_recall_min`, `unit_precision_min`, `edge_recall_min`, `edge_precision_min`, `condition_recall_min` en `correction_actions_max_per_reference_unit`. Daarnaast `FABRICATED_CONTENT_MAX = 0` en de tijd per boom.
-- **Besluitcriteria:** William legt ze vast vóór de start. Voorstel: de kandidaat is minstens gelijk aan de baseline op `edge_recall`, heeft nul verzonnen inhoud, en kost per referentie-eenheid niet meer correcties.
-- **Status:** `READY FOR IMPLEMENTATION` machtigt geen codewijziging. Fase 3 vraagt een apart besluit en GO.
+William beoordeelt de kwaliteit van de huidige AI-route als onvoldoende en heeft besloten de vergelijkende proef over te slaan. De acceptatie van de annotatieroute berust op de verificatielijst voor PDF en export in §3.
 
 ## 9. Testaanpassingen en waarom geen invariant wordt verzwakt
 
 | Test | Aanpassing | Reden |
 | --- | --- | --- |
-| `test_semantic_only_formation_v1::test_no_deterministic_formation_route_or_its_configuration_remains` | Beslisbomen uitzonderen. De test blijft bewaken dat er voor proza geen deterministische vorming bestaat. Er komt een nieuwe test bij die bewaakt dat er voor beslisbomen geen modelvoorstel is (fase 3). | De invariant "geen verborgen tweede vormingspad" blijft volledig. Alleen de voorstelbron voor beslisbomen verandert, en die blijft enkelvoudig. |
-| `test_failing_or_missing_model_never_falls_back_for_exports`, `test_export_request_names_export_ids_while_pdf_request_and_recorded_evidence_stay_unchanged` | In fase 3 omzetten naar "export zonder model wordt vooringevuld en exact behouden". | Bewijst dezelfde exportinvariant zonder model. |
-| `test_decision_tree_route_lifecycle_v1` (`_decision_tree_proposer`-tests) | In fase 3 omzetten naar annotatiefixtures. | Bewijst dezelfde levenscyclus met de nieuwe voorstelbron. |
+| `test_semantic_only_formation_v1::test_no_deterministic_formation_route_or_its_configuration_remains` | Beslisbomen uitzonderen. De test blijft bewaken dat er voor proza geen deterministische vorming bestaat. Er komt een nieuwe test bij die bewaakt dat er voor beslisbomen geen modelvoorstel is (fase 2). | De invariant "geen verborgen tweede vormingspad" blijft volledig. Alleen de voorstelbron voor beslisbomen verandert, en die blijft enkelvoudig. |
+| `test_failing_or_missing_model_never_falls_back_for_exports`, `test_export_request_names_export_ids_while_pdf_request_and_recorded_evidence_stay_unchanged` | In fase 2 omzetten naar "export zonder model wordt vooringevuld en exact behouden". | Bewijst dezelfde exportinvariant zonder model. |
+| `test_decision_tree_route_lifecycle_v1` (`_decision_tree_proposer`-tests) | In fase 2 omzetten naar annotatiefixtures. | Bewijst dezelfde levenscyclus met de nieuwe voorstelbron. |
 | Exporttests voor gewijzigde of weggelaten verbindingen | Ongewijzigd behouden, met de kaart als bron van de mutatie. | Exportbehoud blijft fail closed. |
 
-## 10. Open besluiten (stopcondities vóór implementatie)
+## 10. Besluiten over review en omschakeling
 
-1. **Mag de annotator zijn eigen graaf reviewen?** De eigenaar is vaak ook de annotator. De vier-ogenregel telt dezelfde persoon niet twee keer, maar zegt niets over de verhouding tussen annotator en reviewer. Voorstel: de keuze bij ingest bepaalt het, en bij een hoog-risicoboom is de annotator niet de tweede goedkeurder.
-2. **Besluitcriteria van het experiment** (§8).
-3. **Openstaande modelpogingen bij de cutover:** sluiten met een opvolger (voorstel, §5) of laten afronden vóór fase 3.
+1. **Review van eigen werk (besloten).** De annotator mag de eigen graaf reviewen. Bij ingest wordt het vereiste aantal reviewers vastgelegd. Elke persoon telt eenmaal mee na een expliciete goedkeuring van de te reviewen versie.
+2. **Openstaande modelpogingen bij de cutover:** sluiten met een opvolger (voorstel, §5) of laten afronden vóór fase 2.
 
 ## 11. Niet-geverifieerde risico's
 
 - **Gemiste takken.** De graafcontrole eist minstens twee verschillende, letterlijke antwoordlabels per vraag. Een derde antwoord dat in de bron staat maar niet is aangewezen, ziet alleen de graafreview. Dat blijft zo: het staat bij de non-goals en is in de review een expliciet controlepunt.
-- **Afbeelding zonder tekstlaag.** Een span vraagt om tekst uit de extractie. Een boom die alleen als afbeelding bestaat, krijgt dezelfde extractie als nu (Docling). Of aanwijzen daar volstaat, wordt in het experiment gemeten.
-- **Kosten van annotatie.** De tijd per boom is onbekend tot het experiment. Bij grote bomen kan de kaart traag worden; de UI-bewijsvoering moet daarom grote fixtures bevatten.
+- **Afbeelding zonder tekstlaag.** Een span vraagt om tekst uit de extractie. Een boom die alleen als afbeelding bestaat, krijgt dezelfde extractie als nu (Docling). De bruikbaarheid bij zulke bronnen blijft een open risico.
+- **Kosten van annotatie.** De tijd per boom is onbekend. Bij grote bomen kan de kaart traag worden; de UI-bewijsvoering moet daarom grote fixtures bevatten.

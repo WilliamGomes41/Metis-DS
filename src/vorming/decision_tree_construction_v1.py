@@ -38,7 +38,7 @@ def proposal_inputs(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def construct(proposal: Any, *, document_id: str, title: str, family: str, class_: str,
               content_kind: str, fragments: list[dict[str, Any]],
-              inventory: dict[str, Any], model: str,
+              inventory: dict[str, Any], model: str | None, annotation: dict | None = None,
               proposed_types: dict[str, str] | None = None) -> dict[str, Any]:
     """Return a spec plus a graph plan; raise on any proposal or materialisation failure."""
     from src.vorming.knowledge_materialisation_v1 import (
@@ -47,7 +47,9 @@ def construct(proposal: Any, *, document_id: str, title: str, family: str, class
     )
     from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_PROPOSAL
 
-    if not str(model or "").strip():
+    if annotation is not None and (model is not None or not annotation.get("actor") or not annotation.get("annotation_seal_id")):
+        raise DecisionTreeProposalError("decision_construction_annotation_invalid")
+    if annotation is None and not str(model or "").strip():
         raise DecisionTreeProposalError("decision_construction_model_required")
     fragments = list(fragments)
     blocks = proposal_inputs(fragments)
@@ -64,6 +66,9 @@ def construct(proposal: Any, *, document_id: str, title: str, family: str, class
     candidates = materialise_knowledge_candidates(decisions, document_id=document_id, fragments=fragments)
     provenance = {"formation_mode": FORMATION_MODE, "model": str(model),
                   "source_blocks_hash": stable_hash(blocks), "proposal_hash": stable_hash(proposal)}
+    if annotation is not None:
+        from src.vorming.human_annotation_decision_tree_v1 import ROUTE
+        provenance.update(formation_mode=ROUTE, model=None, **annotation)
     for candidate in candidates:
         # Formation provenance only, as on the prose route; text/identity/mapping untouched.
         candidate["semantic_passage"].update(provenance)

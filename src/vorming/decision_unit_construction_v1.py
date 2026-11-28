@@ -118,7 +118,7 @@ def finalized_source_refs(obj, selected_refs, fragments=None):
 def _formed_by_route(obj) -> bool:
     from src.vorming.decision_tree_construction_v1 import FORMATION_MODE
     semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
-    return semantic.get("formation_mode") == FORMATION_MODE
+    return semantic.get("formation_mode") in {FORMATION_MODE, "decision-tree-annotation-v1"}
 
 
 def apply_gate(objects, *, source_hash, graph=None, inventory=None):

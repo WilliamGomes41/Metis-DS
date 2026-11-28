@@ -316,3 +316,25 @@ def test_legacy_inventory_lists_retired_route_work_read_only():
     assert report["legacy_snapshots"][0]["recorded_processing_mode"] == "semantic-source-bound-v2"
     assert report["legacy_snapshots"][0]["recorded_route"] == "decision-unit-construction-v1"
     assert report["attempts_reserved_before_cutover"] == ["snap-a"]
+
+
+def test_projection_is_a_valid_proposal_without_free_text(tmp_path):
+    from src.vorming.human_annotation_decision_tree_v1 import INPUT_CONTRACT, proposal_from_entries
+
+    frozen = _tree_pdf(tmp_path)
+    expected = _proposal(_Source(frozen))
+    entries = deepcopy(expected)
+    entries["contract"] = INPUT_CONTRACT
+    for unit in entries["units"]:
+        del unit["quoted_text"]
+    inputs = {"fragments": frozen["fragments"], "inventory": frozen["inventory"]}
+    assert proposal_from_entries(entries, **inputs) == expected
+    assert all("quoted_text" not in unit for unit in entries["units"])
+
+    entries["units"][0]["quoted_text"] = "Ingevoerde tekst"
+    with pytest.raises(DecisionTreeProposalError, match="decision_annotation_unit_invalid"):
+        proposal_from_entries(entries, **inputs)
+    del entries["units"][0]["quoted_text"]
+    entries["units"][0]["spans"][0]["block_id"] = "ontbrekend"
+    with pytest.raises(MaterialisationError, match="materialisation_unknown_block"):
+        proposal_from_entries(entries, **inputs)

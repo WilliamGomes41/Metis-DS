@@ -70,8 +70,6 @@ def _capture(con, snapshot_id, store, actor_id):
         'WHERE s.snapshot_id=%s', (snapshot_id,)).fetchone()
     if row is None:
         annotations.fail('annotation_source_not_prepared')
-    if row['context']['class'] == 'beslisboom':
-        annotations.fail('annotation_prose_required')
     entries = con.execute('SELECT v.annotation_id,v.revision,v.payload,v.payload_hash,v.author_id '
         'FROM workflow.annotation_heads h JOIN workflow.annotation_versions v '
         'USING(snapshot_id,annotation_id,revision) WHERE h.snapshot_id=%s ORDER BY h.position',
@@ -88,6 +86,11 @@ def _capture(con, snapshot_id, store, actor_id):
     from src.vorming.source_accountability_v1 import CONTAINERS_VERSION
     basis.update(version=MODE, source_accountability_version=CONTAINERS_VERSION, entries=[{key: entry[key] for key in
                                        ('annotation_id', 'revision', 'payload_hash')} for entry in entries])
+    if row['context']['class'] == 'beslisboom':
+        from src.vorming.human_annotation_decision_tree_v1 import ROUTE
+        if 'tree_source' not in row['extraction']:
+            annotations.fail('annotation_representation_stale')
+        basis.update(route=ROUTE, tree_source=row['extraction']['tree_source'])
     producer = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()['formation_evidence_id']
     if producer:
         require_revision_storage(con)
@@ -117,6 +120,15 @@ def overview(console, *, actor_id, snapshot_id):
     fragments = stored_extraction({**row['source_identity'], 'prepared_source_extraction': row['extraction']})
     if fragments is None or row['extraction']['record_hash'] != row['extraction_hash']:
         annotations.fail('annotation_representation_stale')
+    if 'tree_source' in basis:
+        view = annotations.overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
+        if view['generation'] != basis['generation']:
+            annotations.fail('annotation_overview_stale')
+        return {**view, 'overview_hash': basis['overview_hash'], 'current_build': active,
+                'materialization_context': basis['context'], 'document_round': None,
+                'inspection': {'findings': []}, 'already_built': bool(row['current_seal_id'] and active and active['state'] == 'succeeded'),
+                'can_finalize': len(entries) == 1 and view['objects_revision'] == row['objects_revision']
+                    and (not active or active['state'] != 'running') and not (row['current_seal_id'] and active and active['state'] == 'succeeded')}
     from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(fragments).fragments
     from src.vorming import confirmed_document_structure_v1 as structure
@@ -211,7 +223,7 @@ def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
         receipt = issued_receipt(con)
         if receipt:
             return receipt
-        if (basis.get(document_check.KEY, {}).get('round', {}).get('phase') != 'checking'
+        if 'tree_source' not in basis and (basis.get(document_check.KEY, {}).get('round', {}).get('phase') != 'checking'
                 or 'confirmed_document_structure' not in basis):
             annotations.fail('annotation_document_incomplete')
         if (basis['overview_hash'] != overview_hash or view['overview_hash'] != overview_hash
@@ -258,7 +270,7 @@ def execute(console, *, actor_id, snapshot_id, attempt, deadline):
     envelope = deepcopy(console._processing_command_envelope(snapshot_id, attempt_id=attempt['attempt_id']))
     console._verified_source_bytes(envelope)
     with console.workflow_document_store._connect() as con:
-        _, seal, _, _ = human_capture(con, snapshot_id, attempt['attempt_id'])
+        _, seal, entries, _ = human_capture(con, snapshot_id, attempt['attempt_id'])
     extraction = store.retained_extraction(envelope, seal['extraction_hash'])
     fragments = stored_extraction({**envelope, 'prepared_source_extraction': extraction})
     from src.vorming.prepared_source_views_v1 import prepare
@@ -291,6 +303,15 @@ def execute(console, *, actor_id, snapshot_id, attempt, deadline):
     prepared_envelope.update(prepared_source_extraction=extraction, human_formation_ref=proof_ref,
         state='captured_not_published', publication_eligibility='eligible_for_transform_and_review'
             if envelope.get('immutable_storage_locator') else 'blocked_pending_immutable_storage')
+    if 'tree_source' in seal:
+        from src.vorming.human_annotation_decision_tree_v1 import build_graph
+        _, graph_fields = build_graph(seal, entries, fragments)
+        if graph_fields.get('decision_graph') and seal.get('revision_basis'):
+            from src.review.revision_workflow import current_revisions
+            versions = {obj['object_id']: obj['object_version'] for obj in current_revisions(objects, snapshot_id=snapshot_id)}
+            for node in graph_fields['decision_graph']['nodes']:
+                node['object_version'] = versions[node['object_id']]
+        prepared_envelope.update(graph_fields)
     prepared_envelope.pop('processing_blocker', None)
     if prepared_envelope.get('replaces_snapshot_id'):
         prepared_envelope['object_diff'] = console._diff_objects(

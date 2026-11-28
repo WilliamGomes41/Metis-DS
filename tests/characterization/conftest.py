@@ -44,6 +44,10 @@ def offline_clock(monkeypatch):
     # module so its `from uuid import uuid4` binds the real generator rather
     # than retaining this fixture's constant after monkeypatch restores uuid.
     import src.vorming.human_annotation_ui_v1  # noqa: F401
+    # Same for the annotation source owner: it binds `now` at import. Import it
+    # before freezing, and freeze it explicitly, so a decision-tree golden can
+    # never leave the frozen clock behind for later tests (#1191).
+    import src.vorming.human_annotation_source_v1 as annotation_source
 
     stamp = "2026-10-17T08:00:00+00:00"
     monkeypatch.setattr(op, "utc_now", lambda: stamp)
@@ -55,6 +59,7 @@ def offline_clock(monkeypatch):
     monkeypatch.setattr(retry, "now", lambda: datetime(2026, 10, 17, 8, tzinfo=timezone.utc))
     monkeypatch.setattr(dispatch, "now", retry.now)
     monkeypatch.setattr(selection, "now", retry.now)
+    monkeypatch.setattr(annotation_source, "now", retry.now)
     monkeypatch.setattr(ui, "new_review_interaction_id", lambda: "characterization-interaction")
     monkeypatch.setattr(trace, "runtime_identity", lambda: {"version": "a" * 40, "instance": "local",
                                                           "pid": 1, "runtime_id": "b" * 32})

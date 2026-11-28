@@ -85,9 +85,23 @@ def _locked(console, con, actor_id, snapshot_id):
 
 def source_record(console, envelope, *, deadline=None):
     """Read/convert outside the shared transaction; source identity is preserved."""
-    source_path, _ = console._verified_source_bytes(envelope)
+    source_path, data = console._verified_source_bytes(envelope)
     full = console._legacy_review_source_envelope(envelope)
     fragments = stored_extraction(full)
+    if envelope['class'] == 'beslisboom':
+        from src.vorming.decision_tree_route_v1 import source_fragments
+        from src.vorming.decision_graph_v1 import source_evidence
+        kind = envelope['content_kind']
+        fragments = source_fragments(kind, source_path, data, document_id=envelope['document_id'],
+                                     source_id=envelope['source_id'], deadline=deadline)
+        record = json.loads(json.dumps(extraction_record(envelope, fragments, 'decision-tree-annotation-source-v1')))
+        source = {'inventory': source_evidence(source_path, data, kind, fragments, envelope['sha256'])}
+        if kind == 'boom':
+            source['branches'] = json.loads(data).get('branches', [])
+        record['tree_source'] = source
+        del record['record_hash']
+        record['record_hash'] = stable_hash(record)
+        return record
     if fragments is None:
         options = {'deadline': deadline} if deadline is not None else {}
         fragments = console._extract(envelope['content_kind'], source_path,
@@ -131,8 +145,6 @@ def prepare(console, *, actor_id, snapshot_id, expected_revision):
     envelope = console._envelope(snapshot_id)
     authorize(console, actor_id, envelope)
     console._require_mutable_working_revision(snapshot_id)
-    if envelope['class'] == 'beslisboom':
-        fail('annotation_prose_required')
     if owns_source(console, snapshot_id):
         return overview(console, actor_id=actor_id, snapshot_id=snapshot_id)
     if console.objects_revision(snapshot_id) != expected_revision:
@@ -370,19 +382,35 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
     if extraction_hash != row['extraction_hash'] or normalization != NORMALIZATION:
         fail('annotation_representation_stale')
     source_blocks = semantic_source_blocks(fragments)
-    payload = _validate(selection, {b['block_id']:b for b in source_blocks})
-    # #1060 slice 4: a proposal is answered by adding or declining it, never by
-    # ignoring it. Only a live save applies this; recovery and build do not.
-    if payload['status']=='ready' and payload.get('disposition') is None and open_proposals(source_blocks, payload):
-        fail('annotation_context_proposal_open')
-    _relationship_history(None,payload,annotation_id)
-    core = [{k:a[k] for k in ('block_id','start','end')} for a in payload['ranges'] if a['role']=='core']
-    if core and payload.get('disposition') is None:
-        from src.vorming.knowledge_materialisation_v1 import resolve_source_selection, MaterialisationError
+    tree_source = row['extraction'].get('tree_source')
+    if tree_source:
+        from src.vorming.human_annotation_decision_tree_v1 import INPUT_CONTRACT, proposal_from_entries, validate_export_choices
+        from src.vorming.decision_tree_proposal_v1 import DecisionTreeProposalError
+        from src.vorming.knowledge_materialisation_v1 import MaterialisationError
+        if source_role_group is not None:
+            fail('annotation_command_invalid')
         try:
-            resolve_source_selection(core, fragments=fragments)
-        except MaterialisationError as exc:
-            raise ConsoleError('annotation_core_source_invalid') from exc
+            proposal_from_entries(selection, fragments=fragments, inventory=tree_source['inventory'])
+            if 'branches' in tree_source:
+                validate_export_choices(selection, fragments, tree_source['inventory'])
+        except (DecisionTreeProposalError, MaterialisationError) as exc:
+            raise ConsoleError(exc.code) from exc
+        payload = {'status': 'ready', 'ranges': [], 'contract': INPUT_CONTRACT, 'graph': selection}
+        core = []
+    else:
+        payload = _validate(selection, {b['block_id']:b for b in source_blocks})
+        # #1060 slice 4: a proposal is answered by adding or declining it, never by
+        # ignoring it. Only a live save applies this; recovery and build do not.
+        if payload['status']=='ready' and payload.get('disposition') is None and open_proposals(source_blocks, payload):
+            fail('annotation_context_proposal_open')
+        _relationship_history(None,payload,annotation_id)
+        core = [{k:a[k] for k in ('block_id','start','end')} for a in payload['ranges'] if a['role']=='core']
+        if core and payload.get('disposition') is None:
+            from src.vorming.knowledge_materialisation_v1 import resolve_source_selection, MaterialisationError
+            try:
+                resolve_source_selection(core, fragments=fragments)
+            except MaterialisationError as exc:
+                raise ConsoleError('annotation_core_source_invalid') from exc
     request_hash = stable_hash({'actor_id':actor_id,'annotation_id':annotation_id,'expected_revision':expected_revision,
         'expected_generation':expected_generation,'extraction_hash':extraction_hash,'normalization':normalization,'selection':payload})
     if expected_objects_revision is not None:
@@ -409,6 +437,8 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
         head = con.execute('SELECT h.revision,h.position,v.payload,v.payload_hash FROM workflow.annotation_heads h JOIN workflow.annotation_versions v '
             'USING(snapshot_id,annotation_id,revision) WHERE h.snapshot_id=%s AND h.annotation_id=%s', (snapshot_id,annotation_id)).fetchone()
         if active['generation'] != expected_generation or (head['revision'] if head else 0) != expected_revision:
+            fail('annotation_write_conflict')
+        if tree_source and not head and active['generation']:
             fail('annotation_write_conflict')
         if source_role_group is not None:
             from src.vorming.human_annotation_preview_v1 import inspect_for_overview, source_range_key, source_work
@@ -649,7 +679,7 @@ def overview(console, *, actor_id, snapshot_id, include_source_work=False, inclu
     from src.vorming import confirmed_document_structure_v1 as structure
     confirmation = capture[structure.KEY]
     coverage = {structure.KEY: confirmation} if confirmation is not None else {}
-    if include_source_work:
+    if include_source_work and envelope["class"] != "beslisboom":
         from src.vorming.human_annotation_preview_v1 import inspect_for_overview, source_work
         inspection = inspect_for_overview(entries, fragments=fragments, confirmed_headings=structure.anchors(confirmation))
         coverage['source_work'] = source_work(inspection, blocks)
