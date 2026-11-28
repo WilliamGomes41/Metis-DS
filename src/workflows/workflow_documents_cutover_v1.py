@@ -573,10 +573,10 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
             documents = [{**{k: v for k, v in row.items() if k not in {'summary', 'reviewers_consistent'}},
                           **{k: v for k, v in row['summary'].items() if k != 'schema_version' and k not in row}}
                          for row in rows]
-            from src.vorming.human_annotation_source_v1 import received_prose
+            from src.vorming.human_annotation_source_v1 import received_for_annotation
             candidates = [
                 row for row in documents
-                if not row['annotation_source_prepared'] and received_prose(row)
+                if not row['annotation_source_prepared'] and received_for_annotation(row)
                 and not row['annotation_has_formed_work']
             ]
             if candidates:

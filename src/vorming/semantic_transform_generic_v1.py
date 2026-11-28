@@ -59,6 +59,8 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         if origin == SELECTION_ORIGIN_COVERAGE
         else None
     )
+    if origin == SELECTION_ORIGIN_PROPOSAL and value.get("formation_mode") == "decision-tree-annotation-v1":
+        expected_keys = expected_keys | {"actor", "annotation_seal_id"}
     if expected_keys is None or set(value) - {"source_mapping"} != expected_keys:
         raise ValueError("semantic_passage_metadata_invalid")
 
@@ -114,9 +116,13 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         result.update(formation_mode=HUMAN_MODE,annotation_ref=deepcopy(value['annotation_ref']))
     if origin == SELECTION_ORIGIN_PROPOSAL:
         if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2", "semantic-source-bound-v3",
-                                                           "decision-tree-source-bound-v1"}:
+                                                           "decision-tree-source-bound-v1", "decision-tree-annotation-v1"}:
             raise ValueError("semantic_passage_metadata_invalid")
-        if not str(value.get("model") or "").strip():
+        if value["formation_mode"] == "decision-tree-annotation-v1":
+            if value.get("model") is not None or not value.get("actor") or not _SHA256_RE.fullmatch(str(value.get("annotation_seal_id", ""))):
+                raise ValueError("semantic_passage_metadata_invalid")
+            result.update(actor=value["actor"], annotation_seal_id=value["annotation_seal_id"])
+        elif not str(value.get("model") or "").strip():
             raise ValueError("semantic_passage_metadata_invalid")
         for key in ("source_blocks_hash", "proposal_hash"):
             if not _SHA256_RE.fullmatch(str(value.get(key) or "")):
@@ -124,7 +130,7 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         result.update(
             {
                 "formation_mode": value["formation_mode"],
-                "model": str(value["model"]),
+                "model": value["model"] if value["model"] is None else str(value["model"]),
                 "source_blocks_hash": str(value["source_blocks_hash"]),
                 "proposal_hash": str(value["proposal_hash"]),
             }

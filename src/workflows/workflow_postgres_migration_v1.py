@@ -53,6 +53,7 @@ MIGRATION_NAMES = (
     "043_annotation_structure_confirmation.sql",
     "044_annotation_section_coverage.sql",
     "045_annotation_document_check.sql",
+    "046_decision_tree_annotation_seals.sql",
 )
 REQUIRED_TRIGGERS = frozenset({
     ("annotation_round_events", "guard_annotation_round_history"),

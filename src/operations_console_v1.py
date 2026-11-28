@@ -1992,6 +1992,9 @@ class OperationsConsole:
             return header
         from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
         try:
+            if (header['_document_inputs'].get('formation_variant') == 'human'
+                    and header['_document_inputs'].get('tree')):
+                return self.workflow_document_store.tree_input(header, fields=('decision_graph_evidence','decision_tree_formation'))
             return self.workflow_document_store.tree_input(header)
         except WorkflowDocumentStoreError as error:
             raise ConsoleError('workflow_document_unavailable',str(error)) from error

@@ -66,6 +66,8 @@ def lineage_evidence(obj):
 
 def knowledge_revision(obj):
     """Scope includes blocked selected candidates; excludes source/structure/boom."""
+    if ((obj.get("metadata") or {}).get("semantic_passage") or {}).get("formation_mode") == "decision-tree-annotation-v1":
+        return True
     if lineage_evidence(obj) is not None:
         return True
     from src.vorming.admission_gate_v1 import is_boom_object
@@ -352,6 +354,13 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
     if (set(basis) != {'version', 'proof_id', 'actor_id', 'objects'}
             or basis.get('version') != 'human-annotation-revision-v1'):
         raise ValueError('annotation_revision_contract_invalid')
+    if context.get("class") == "beslisboom":
+        old = {row["object_id"]: row for row in basis["objects"]}
+        if set(old) - {row["object_id"] for row in generated}:
+            raise ValueError("annotation_replacement_required")
+        return [revise_object(old[row["object_id"]], row, snapshot_id=snapshot_id,
+                              reason="human annotation correction", actor=basis["actor_id"], force=True)
+                if row["object_id"] in old else deepcopy(row) for row in generated]
     previous = basis['objects']
     by_id = {row['object_id']: row for row in previous}
     by_annotation = {}

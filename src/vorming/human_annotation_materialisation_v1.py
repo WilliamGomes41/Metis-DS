@@ -11,6 +11,11 @@ from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_HUMAN, _reconstruct
 
 
 def build_objects(seal, entries, *, fragments):
+    if seal.get('context', {}).get('class') == 'beslisboom':
+        from src.vorming.human_annotation_decision_tree_v1 import ROUTE, build_graph
+        if seal.get('route') != ROUTE:
+            raise ValueError('decision_annotation_contract_unsupported')
+        return build_graph(seal, entries, fragments)[0]
     from src.vorming.prepared_source_views_v1 import freeze_extraction
     fragments = freeze_extraction(fragments)
     from src.vorming.source_accountability_v1 import VERSION, CONTAINERS_VERSION

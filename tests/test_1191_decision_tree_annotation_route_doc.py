@@ -22,8 +22,8 @@ def test_contract_header_is_a_valid_class_a_high_risk_contract():
     assert validate_change_contract(CONTRACT.read_text(encoding='utf-8')) == []
 
 
-def test_contract_states_it_is_not_implemented():
-    assert '**Status:** ontwerp ter besluit; niet geïmplementeerd.' in CONTRACT.read_text(encoding='utf-8')
+def test_contract_records_the_implementation_stage():
+    assert '**Status:** Expand gestart.' in CONTRACT.read_text(encoding='utf-8')
 
 
 def test_every_claim_cited_in_the_contract_is_defined_in_the_verification_list():
@@ -39,8 +39,6 @@ def test_mapped_model_route_symbols_exist_on_this_revision():
         assert symbol in route
     binding = (ROOT / 'src' / 'vorming' / 'pre_review_semantic_v1.py').read_text(encoding='utf-8')
     assert 'console._decision_tree_proposer = llm_proposer(' in binding
-    annotation = (ROOT / 'src' / 'vorming' / 'human_annotation_v1.py').read_text(encoding='utf-8')
-    assert "fail('annotation_prose_required')" in annotation
 
 
 def test_reused_proposal_contract_still_offers_the_mapped_roles_and_uncertainty_codes():

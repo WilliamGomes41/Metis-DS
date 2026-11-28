@@ -505,7 +505,7 @@ def test_formed_replay_keeps_existing_card_and_rejects_direct_prepare(production
     assert console.objects_revision(sid) == revision
 
 
-def test_decision_tree_retains_its_card_and_cannot_start_annotation(production_console, tmp_path):
+def test_decision_tree_opens_the_annotation_card(production_console, tmp_path):
     console, actor, reviewer, _ = received(production_console, tmp_path)
     from tests.test_v225_beslisboom_path import _boom_freeze_bytes
 
@@ -520,13 +520,16 @@ def test_decision_tree_retains_its_card_and_cannot_start_annotation(production_c
         response = client.get('/source-selection', params={'selected_document': tree_id})
         assert response.status_code == 200
         tree_card = response.text.split(f'id="source-{tree_id}"', 1)[1].split('</article>', 1)[0]
-        assert 'Bekijk diagnose in Inzicht' in tree_card and 'Bekijk status bouwopdrachten' not in tree_card
-        refused = client.post('/annotations/source', data={'document': tree_id, 'command_id': 'bad-tree',
-                              'expected_revision': console.objects_revision(tree_id)}, follow_redirects=False)
-        assert refused.status_code == 409 and 'Open de beslisboom in Vorming.' in refused.text
-    with console.workflow_document_store._connect() as con:
-        assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s',
-                           (tree_id,)).fetchone()['n'] == 0
+        assert 'Bekijk status bouwopdrachten' in tree_card
+        response = client.post('/annotations/source', data={'document': tree_id, 'command_id':'prepare-tree',
+                               'expected_revision':console.objects_revision(tree_id)}, follow_redirects=False)
+        assert response.status_code == 303
+        from tests.test_availability_repair import drain
+        drain(client, client.app)
+        editor = client.get(response.headers['location'])
+        assert editor.status_code == 200 and 'Beslisboom annoteren' in editor.text
+        assert 'Screening op valrisico' in editor.text
+
 
 
 

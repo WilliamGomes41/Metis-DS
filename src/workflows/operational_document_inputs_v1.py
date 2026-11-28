@@ -178,7 +178,7 @@ class OperationalDocumentInputs:
             tasks.prepare_archive_inputs(ref,envelope=envelope)
             refs['tree']=ref
             refs['tree_route']=bool(tree.get('decision_tree_formation'))
-            if refs['replay'] is None:
+            if refs['replay'] is None and not refs.get('human'):
                 refs['formation_variant']='tree'
             records.append(('tree_formation',0,ref))
         extraction=envelope.get('prepared_source_extraction')
@@ -353,7 +353,7 @@ class OperationalDocumentInputs:
             tasks.prepare_archive_inputs(ref,envelope=envelope)
             refs['tree']=ref
             refs['tree_route']=bool(tree.get('decision_tree_formation'))
-            if refs['replay'] is None:
+            if refs['replay'] is None and not refs.get('human'):
                 refs['formation_variant']='tree'
             for key in tree:
                 refs['shapes'][key]='value' if tree[key] is not None else 'null'
