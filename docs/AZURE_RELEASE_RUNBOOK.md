@@ -21,14 +21,14 @@ Elke stap die Azure wijzigt (build, migratie, app settings, tijdelijke firewallt
 ## 1. Vooraf
 
 1. Leg de huidige image-referentie vast als rollbackpunt, samen met de huidige `deployed_commit` uit `<url>/health`. Bewaar de volledige image-referentie in `rollback`:
-   `az webapp config show -g <rg> -n <app> --query linuxFxVersion -o tsv`
+   `az webapp config show --subscription "$azure_subscription" -g "$resource_group" -n "$app_name" --query linuxFxVersion -o tsv`
    Begint die waarde niet met `DOCKER|` (bijvoorbeeld `PYTHON|3.13`, de ZIP-route), stop dan. Dit runbook wisselt alleen van container naar container; een eerste overstap van ZIP naar container vraagt een eigen plan met een eigen rollback (`az webapp config set --linux-fx-version`) en een capaciteitsproef voor Docling.
 2. Controleer de app settings:
    `(set -o pipefail; az webapp config appsettings list --subscription "$azure_subscription" -g "$resource_group" -n "$app_name" -o json | python3 scripts/release_settings_preflight.py)`
    Exit 0 is klaar. Exit 2 blokkeert de release. De belangrijkste weigering is `passage_formation_mode_retired`: `METIS_PASSAGE_FORMATION_MODE=deterministic-v1` laat sinds #817 elke nieuwe verwerking falen, ook beslisbomen. Zet de waarde dan op een semantische modus (`semantic-source-bound-v1`, `-v2` of `-v3`) of verwijder haar (leeg betekent `semantic-source-bound-v2`). De uitvoer toont geen geheime waarden.
 3. Tel lopende pogingen, inclusief bronvoorbereiding en handmatige bouw. Neem zowel native pogingen in `workflow.processing_attempts` als inline pogingen van documenten zonder native verwerkingsopslag mee. Herhaal deze alleen-lezen telling vlak vóór de wissel. Een image-wissel herstart de app en breekt lopende pogingen af.
 4. Controleer dat de app een image uit deze ACR mag trekken en op de goede poort luistert. Begint de referentie uit stap 1.1 al met `DOCKER|` en de login-server van de ACR, dan is dit eerder ingericht; controleer het toch:
-   - `az webapp config show -g <rg> -n <app> --query acrUseManagedIdentityCreds` geeft `true`, en de identiteit van de app heeft de rol `AcrPull` op de ACR (`az role assignment list --assignee <principal-id> --scope <acr-resource-id>`). Anders kan de app het nieuwe image niet ophalen.
+   - `az webapp config show --subscription "$azure_subscription" -g "$resource_group" -n "$app_name" --query acrUseManagedIdentityCreds` geeft `true`, en de identiteit van de app heeft de rol `AcrPull` op de ACR (`az role assignment list --assignee <principal-id> --scope <acr-resource-id>`). Anders kan de app het nieuwe image niet ophalen.
    - De app setting `WEBSITES_PORT` is `8000`. Gunicorn luistert in het image op `${PORT:-8000}`; App Service gaat zonder deze setting uit van poort 80.
 5. Migraties en runtime-rechten. Voer als database-beheerder uit:
    `python scripts/apply_workflow_postgres_migrations.py verify --host <host> --database metis --user <beheerder> --runtime-role vvn-metis-console`
