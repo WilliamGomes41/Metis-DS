@@ -176,6 +176,12 @@ def render_graph(console, actor, document, *, editing=False):
         + ' · ' + esc(e.get('label') or {'continue': 'Onvoorwaardelijk vervolg', 'answer': 'Antwoord'}.get(e['kind'], e['kind'])) + ' · bronbewijs: ' + esc('; '.join(dict(text_evidence + graphic_evidence).get(k, k) for k in e.get('evidence_ids', []))) + '</li>' for e in graph['edges']) + '</ol>'
     heading = '<h1>Vorming</h1><h2>Beslisstructuur vastleggen</h2>' if editing else '<h1>Beslisroutes beoordelen</h1>'
     links = '<p><a href="' + esc(original) + '">Open origineel</a> · <a href="' + esc(review if editing else owner) + '">' + ('Deze beslisroutes beoordelen in Review' if editing else 'Beslisstructuur herstellen in Vorming') + '</a></p>'
+    if (env.get('decision_tree_formation') or {}).get('route') == 'decision-tree-annotation-v1' and not immutable:
+        links = '<p><a href="/annotations?' + esc(urlencode({'document': document})) + '">Annotatie bekijken of aanpassen</a></p>'
+        graph_form = (f'<form method="post" action="/review/decision-graph">{common}'
+                      f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                      '<label>Toelichting bij broncontrole<input name="reason" required></label>'
+                      '<button name="action" value="bind_annotation">Geannoteerde routes vastleggen</button></form>')
     return _page(_nav(actor, 'selection' if editing else 'review') + '<section class="room" data-graph-workplace="' + ('formation' if editing else 'review') + '">'
         + heading + _task_links('review') + links + proposal_note
         + ('<p>Deze gepubliceerde werkversie is alleen te lezen.</p>' if immutable else '')
@@ -279,6 +285,13 @@ def install_decision_review_routes(app, console, require, page):
                        expected_revision=str(form.get("expected_revision") or ""))
         if form.get("action") == "confirm":
             console.confirm_decision_graph(**command)
+        elif form.get("action") == "bind_annotation":
+            from src.review.decision_review_commands_v1 import annotated_graph_for_review
+            tree = console._tree_envelope(sid, envelope=env)
+            if (tree.get("decision_tree_formation") or {}).get("route") != "decision-tree-annotation-v1":
+                raise ConsoleError("decision_graph_not_available")
+            graph = annotated_graph_for_review(tree, console.snapshot_objects(sid))
+            console.update_decision_graph(**command, graph=graph)
         elif form.get("action") == "classification":
             object_id = str(form.get("object_id") or "")
             await asyncio.to_thread(_change_passage_type, console, actor["account_id"], sid,

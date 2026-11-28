@@ -28,7 +28,9 @@ def route_of(obj: dict[str, Any]) -> dict[str, Any]:
     if strategy not in {"semantic", "deterministic"}:
         strategy = "unknown"
     origin = semantic.get("selection_origin")
-    if origin == "coverage_remainder":
+    if semantic.get("formation_mode") == "decision-tree-annotation-v1":
+        route = "decision-tree-annotation-v1"
+    elif origin == "coverage_remainder":
         route = "remainder"
     elif strategy == "semantic" and origin == "proposal_selected":
         route = "semantic"

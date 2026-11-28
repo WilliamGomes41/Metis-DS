@@ -573,7 +573,9 @@ def install(app, console, require, page, nav, esc):
 
     def render_card(envelope, actor, observations, *, selected, detail, offset):
         sid = envelope['snapshot_id']
-        if envelope['class'] != 'beslisboom':
+        if (envelope['class'] != 'beslisboom' or envelope.get('annotation_source_prepared')
+                or (envelope.get('received_source') and not envelope.get('annotation_has_formed_work')
+                    and not envelope.get('processing_attempts'))):
             query = esc(urlencode({'document': sid}))
             latest = next(reversed(envelope.get('processing_attempts') or []), {})
             if envelope['annotation_source_prepared'] or envelope.get('annotation_source_started'):

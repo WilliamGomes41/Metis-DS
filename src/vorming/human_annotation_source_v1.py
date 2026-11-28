@@ -14,7 +14,7 @@ MODE = 'human-annotation-source-v1'
 
 
 def received_prose(envelope):
-    return envelope.get('class') != 'beslisboom' and bool(envelope.get('received_source'))
+    return bool(envelope.get('received_source'))
 
 
 def configuration(console, envelope):
@@ -44,8 +44,6 @@ def reserve(console, *, actor_id, snapshot_id, command_id, expected_revision):
         with store._connect() as con:
             envelope = annotations._locked(console, con, actor_id, snapshot_id)
             require_storage(con)
-            if envelope['class'] == 'beslisboom':
-                raise ConsoleError('annotation_prose_required')
             if annotations.owns_source(console, snapshot_id):
                 return None, False
             if not received_prose(envelope):

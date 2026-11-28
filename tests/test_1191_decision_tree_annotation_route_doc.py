@@ -39,8 +39,6 @@ def test_mapped_model_route_symbols_exist_on_this_revision():
         assert symbol in route
     binding = (ROOT / 'src' / 'vorming' / 'pre_review_semantic_v1.py').read_text(encoding='utf-8')
     assert 'console._decision_tree_proposer = llm_proposer(' in binding
-    annotation = (ROOT / 'src' / 'vorming' / 'human_annotation_v1.py').read_text(encoding='utf-8')
-    assert "fail('annotation_prose_required')" in annotation
 
 
 def test_reused_proposal_contract_still_offers_the_mapped_roles_and_uncertainty_codes():
