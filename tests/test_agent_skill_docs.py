@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 import re
 import shlex
+import subprocess
 
 import yaml
 
@@ -177,6 +179,48 @@ def test_non_workflow_rights_are_a_stop_gate_before_cutover_and_deployment() -> 
     protocol = (ROOT / 'docs/agents/deployment-protocol.md').read_text(encoding='utf-8')
     step = next(line for line in protocol.splitlines() if line.startswith('| 4 |'))
     assert all(value in step for value in ('`public`', '`api_access`', 'runtime-identiteit', 'STOP'))
+
+
+def test_azure_release_runbook_shell_blocks_parse() -> None:
+    runbook = (ROOT / 'docs/AZURE_RELEASE_RUNBOOK.md').read_text(encoding='utf-8')
+    blocks = re.findall(r'```bash\n(.*?)```', runbook, re.DOTALL)
+    assert blocks
+    for block in blocks:
+        result = subprocess.run(['bash', '-n'], input=block, text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+
+
+def test_production_switch_requires_recorded_rollback_and_immutable_image() -> None:
+    runbook = (ROOT / 'docs/AZURE_RELEASE_RUNBOOK.md').read_text(encoding='utf-8')
+    switch = runbook.split('## 3. Wisselen', 1)[1].split('## 4. Controleren', 1)[0]
+    assert 'telling van `0` lopende pogingen en GO voor de wissel' in switch
+    script = switch.split('```bash\n', 1)[1].split('```', 1)[0]
+    stub = '''
+az() {
+  case "$*" in
+    "webapp config show "*) printf '%s\\n' "$mock_current_image" ;;
+    "webapp config container set "*) printf 'MOCK_SWITCH %s\\n' "$*" ;;
+    *) return 99 ;;
+  esac
+}
+'''
+    previous = 'DOCKER|registry.example/metis@sha256:' + 'a' * 64
+    release = 'registry.example/metis@sha256:' + 'b' * 64
+    environment = dict(os.environ, azure_subscription='test', resource_group='test',
+                       app_name='test', rollback=previous)
+    for current, image, allowed in (
+        (previous, release, True),
+        ('DOCKER|' + release, release, False),
+        (previous, 'registry.example/metis:latest', False),
+    ):
+        result = subprocess.run(
+            ['bash'], input=stub + script, text=True, capture_output=True,
+            env=dict(environment, mock_current_image=current, release_image_reference=image),
+        )
+        assert (result.returncode == 0) == allowed, result.stderr
+        assert ('MOCK_SWITCH' in result.stdout) == allowed
+        if allowed:
+            assert '--container-image-name ' + release in result.stdout
 
 
 def test_pr_template_and_agents_use_closing_keywords_and_live_label() -> None:
