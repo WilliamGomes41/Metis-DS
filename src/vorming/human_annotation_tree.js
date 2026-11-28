@@ -14,16 +14,10 @@
     element('status').textContent = 'Wijzigingen nog niet opgeslagen.';
   }
   let lastSelection;
-  function selection() {
-    const block = byBlock.get(element('block').value), text = block.text;
-    const range = window.getSelection();
-    if (range.rangeCount && !range.isCollapsed) {
-      const r = range.getRangeAt(0), node = element('passage').firstChild;
-      if (r.startContainer === node && r.endContainer === node)
-        return lastSelection = {block_id:block.block_id, start:Array.from(text.slice(0,r.startOffset)).length,
-          end:Array.from(text.slice(0,r.endOffset)).length};
-    }
-    return lastSelection || {block_id:block.block_id, start:0, end:Array.from(text).length};
+  function showSelection(span) {
+    lastSelection = span;
+    element('selection').textContent = span ? 'Aangewezen tekst: ' + selectedText(span) : '';
+    element('add-unit').disabled = !span || !element('role').value;
   }
   function dropdown(box, name, values, value, update) {
     const label = document.createElement('label'), select = document.createElement('select');
@@ -61,7 +55,7 @@
       if(!fromExport) {
         option(element(unit.role==='context'?'context':'applies'),unit.ref,title);
         const remove=document.createElement('button');
-        remove.type='button'; remove.textContent='Vak verwijderen';
+        remove.type='button'; remove.textContent='Annotatie verwijderen';
         remove.onclick=()=>{
           const affected=new Set([unit.ref,...graph.connections.filter(edge=>edge.from===unit.ref||edge.to===unit.ref).map(edge=>edge.ref)]);
           graph.units=graph.units.filter(row=>row!==unit);
@@ -93,20 +87,43 @@
   if(!fromExport) {
     for(const block of blocks) option(element('block'),block.block_id,block.text);
     element('block').onchange=()=>{
-      lastSelection=null;
+      showSelection(null);
       element('passage').textContent=byBlock.get(element('block').value)?.text||'';
     };
-    document.addEventListener('selectionchange', ()=>{
-      if(window.getSelection().anchorNode===element('passage').firstChild && !window.getSelection().isCollapsed) selection();
+    for (const [id, label] of Object.entries(roles)) option(element('role'), id, label);
+    element('role').onchange = () => showSelection(lastSelection);
+    element('whole').onclick = () => {
+      const block = byBlock.get(element('block').value);
+      if (block) showSelection({block_id:block.block_id, start:0, end:Array.from(block.text).length});
+    };
+    document.addEventListener('selectionchange', () => {
+      const selection = window.getSelection();
+      if (!selection.rangeCount || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0), node = element('passage').firstChild;
+      if (range.startContainer === node && range.endContainer === node) {
+        const offset = pos => Array.from(node.textContent.slice(0, pos)).length;
+        showSelection({block_id:element('block').value, start:offset(range.startOffset), end:offset(range.endOffset)});
+      }
     });
     element('block').onchange();
     for(const [id,item] of Object.entries(evidence)) option(element('evidence'),id,item.kind==='graphic' ? ('Pagina '+item.page+' · lijn '+id+' · '+item.bbox.join(', ')) : (item.text || id));
     for(const [id,label] of Object.entries(doubts)) option(element('code'),id,label);
-    element('add-unit').onclick=()=>{ if(!blocks.length)return; graph.units.push({ref:ref('u'),role:'action',entry:false,selection:null,spans:[selection()]}); changed();render(); };
+    element('add-unit').onclick = () => {
+      const role = element('role').value;
+      if (!lastSelection || !role) return;
+      graph.units.push({ref:ref('u'), role, entry:false, selection:role==='question'?'single':null, spans:[lastSelection]});
+      element('role').value = '';
+      showSelection(null);
+      changed(); render();
+    };
     element('add-edge').onclick=()=>{
       if(!graph.units.length)return;
+      if(element('kind').value==='answer' && !lastSelection) {
+        element('status').textContent='Wijs eerst het antwoordlabel in de bron aan.';
+        return;
+      }
       graph.connections.push({ref:ref('c'),from:element('from').value,to:element('to').value||null,kind:element('kind').value,
-        label_span:element('kind').value==='answer'?selection():null,evidence_ids:Array.from(element('evidence').selectedOptions,o=>o.value)});
+        label_span:element('kind').value==='answer'?lastSelection:null,evidence_ids:Array.from(element('evidence').selectedOptions,o=>o.value)});
       changed();render();
     };
     element('bind').onclick=()=>{

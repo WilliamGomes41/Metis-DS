@@ -30,20 +30,22 @@ def tree_card(console, actor_id, envelope):
     content = f'<h1>Beslisboom annoteren</h1><h2>{escape(envelope["title"])}</h2><p><a href="/annotations/original?{query}">Originele bron downloaden</a></p>'
     if not export:
         content += ('<fieldset><legend>Bronselectie</legend><label>Bronpassage <select id="tree-block"></select></label>'
-                    '<p>Selecteer de gewenste tekst in de passage. Zonder selectie gebruik je de hele passage.</p>'
-                    '<p id="tree-passage" tabindex="0"></p><button type="button" id="tree-add-unit">Vak toevoegen</button></fieldset>')
-    content += '<section><h2>Vakken</h2><div id="tree-units"></div></section><section><h2>Verbindingen</h2><ul id="tree-edges"></ul>'
+                    '<p>Wijs de tekst in de bron aan en kies welke rol die in de beslisboom heeft.</p>'
+                    '<p id="tree-passage" tabindex="0"></p><button type="button" id="tree-whole">Hele passage aanwijzen</button>'
+                    '<p id="tree-selection" role="status"></p><label>Rol <select id="tree-role"><option value="">Kies een rol</option></select></label>'
+                    '<button type="button" disabled id="tree-add-unit">Selectie labelen</button></fieldset>')
+    content += '<section><h2>Gelabelde bronpassages</h2><div id="tree-units"></div></section><section><h2>Verbindingen</h2><ul id="tree-edges"></ul>'
     if not export:
-        content += ('<fieldset><legend>Verbinding toevoegen</legend><label>Van <select id="tree-from"></select></label>'
+        content += ('<fieldset><legend>Verbinding aanwijzen</legend><label>Van <select id="tree-from"></select></label>'
                     '<label>Naar <select id="tree-to"></select></label><label>Soort <select id="tree-kind">'
                     '<option value="answer">Antwoord</option><option value="continue">Doorgaande pijl</option>'
                     '<option value="page_transition">Paginaovergang</option></select></label>'
                     '<label>Bronbewijs <select id="tree-evidence" multiple></select></label>'
-                    '<button type="button" id="tree-add-edge">Verbinding met geselecteerd label toevoegen</button></fieldset>'
-                    '<fieldset><legend>Context koppelen</legend><label>Contextvak <select id="tree-context"></select></label>'
+                    '<button type="button" id="tree-add-edge">Verbinding vastleggen</button></fieldset>'
+                    '<fieldset><legend>Context koppelen</legend><label>Contextpassage <select id="tree-context"></select></label>'
                     '<label>Geldt voor <select id="tree-applies" multiple></select></label>'
                     '<button type="button" id="tree-bind">Context koppelen</button></fieldset><ul id="tree-bindings"></ul>'
-                    '<fieldset><legend>Twijfellabel</legend><label>Vak of verbinding <select id="tree-subject"></select></label>'
+                    '<fieldset><legend>Twijfellabel</legend><label>Passage of verbinding <select id="tree-subject"></select></label>'
                     '<label>Reden <select id="tree-code"></select></label><button type="button" id="tree-add-doubt">Twijfel vastleggen</button></fieldset>')
     content += '</section><ul id="tree-doubts"></ul><button id="tree-save" class="btn-primary">Annotatie opslaan</button><p id="tree-status" role="status"></p>'
     if state['can_finalize']:
