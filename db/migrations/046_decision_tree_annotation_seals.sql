@@ -66,3 +66,47 @@ RETURNS BOOLEAN LANGUAGE SQL STABLE SECURITY DEFINER SET search_path=pg_catalog 
           AND a.generation=s.generation AND a.extraction_hash=s.extraction_hash
           AND s.payload->'context'=workflow.annotation_materialization_context(d))
 $body$;
+
+-- Operational storage keeps human proof as producer and pins the graph to that same seal.
+CREATE OR REPLACE FUNCTION workflow.guard_document_input_variant() RETURNS TRIGGER LANGUAGE plpgsql AS $body$
+DECLARE expected TEXT;
+BEGIN
+    expected:=CASE WHEN COALESCE(NEW.refs->'human'<>'null'::jsonb,false) THEN 'human' WHEN COALESCE(NEW.refs->'replay'<>'null'::jsonb,false) THEN 'semantic'
+        WHEN COALESCE(NEW.refs->'tree'<>'null'::jsonb,false) OR COALESCE(NEW.metadata->'decision_graph' NOT IN ('null'::jsonb,'{}'::jsonb,'[]'::jsonb),false)
+            THEN 'tree' ELSE 'absent' END;
+    IF COALESCE(NEW.refs->'tree_route','false'::jsonb) IS DISTINCT FROM COALESCE((SELECT header->'tree_route' FROM workflow.processing_archive_inputs WHERE archive_id=NEW.refs#>>'{tree,archive_id}'),'false'::jsonb) THEN
+        RAISE EXCEPTION 'document_inputs_tree_route_changed';
+    END IF;
+    IF TG_OP='UPDATE' AND OLD.refs->>'formation_variant'='human' AND expected<>'human' THEN
+        RAISE EXCEPTION 'document_inputs_human_binding_changed';
+    END IF;
+    IF expected='human' AND EXISTS(SELECT 1 FROM workflow.documents d WHERE d.snapshot_id=NEW.snapshot_id
+        AND d.formation_evidence_id IS NOT NULL AND d.formation_evidence_id IS DISTINCT FROM NEW.refs#>>'{human,proof_id}') THEN
+        RAISE EXCEPTION 'document_inputs_human_binding_changed';
+    END IF;
+    IF expected='human' AND (NEW.refs->'replay' IS DISTINCT FROM 'null'::jsonb
+        OR NOT EXISTS(SELECT 1 FROM workflow.formation_evidence_roots p
+          WHERE p.proof_id=NEW.refs#>>'{human,proof_id}' AND p.snapshot_id=NEW.snapshot_id AND p.sealed
+            AND p.header->>'layout'='2' AND NEW.refs#>>'{human,layout}'='2'
+            AND p.extraction_hash=NEW.refs->>'extraction_hash'
+            AND EXISTS (
+                SELECT 1 FROM workflow.annotation_seals s
+                WHERE s.seal_id=p.annotation_seal_id AND s.snapshot_id=p.snapshot_id
+                  AND CASE WHEN s.payload->>'route'='decision-tree-annotation-v1' THEN EXISTS (
+                      SELECT 1 FROM workflow.processing_archives a
+                      WHERE a.archive_id=NEW.refs#>>'{tree,archive_id}' AND a.snapshot_id=p.snapshot_id
+                        AND a.kind='tree_formation'
+                        AND a.payload_text::jsonb#>>'{decision_tree_formation,route}'='decision-tree-annotation-v1'
+                        AND a.payload_text::jsonb#>>'{decision_tree_formation,annotation_seal_id}'=s.seal_id
+                        AND a.payload_text::jsonb#>'{decision_tree_formation,model}'='null'::jsonb
+                        AND a.payload_text::jsonb->'decision_graph_evidence'=s.payload#>'{tree_source,inventory}'
+                  ) ELSE NOT COALESCE(NEW.refs->'tree'<>'null'::jsonb,false) END
+            ))) THEN
+        RAISE EXCEPTION 'document_inputs_human_binding_changed';
+    END IF;
+    IF NEW.refs->>'formation_variant' IS DISTINCT FROM expected THEN
+        RAISE EXCEPTION 'document_inputs_formation_variant_changed';
+    END IF;
+    RETURN NEW;
+END
+$body$;

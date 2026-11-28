@@ -15,7 +15,11 @@ from tests.test_human_annotation_build_postgres import closing
 from src.operations_console_v1 import ConsoleError
 
 
-def test_export_tree_publishes_with_only_selection_and_entry_labelled(production_console, tmp_path):
+@pytest.mark.parametrize('storage', ['legacy', 'v1'])
+def test_export_tree_publishes_with_only_selection_and_entry_labelled(production_console, tmp_path, monkeypatch, storage):
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', storage)
+    if storage == 'v1':
+        monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
     console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
     accounts = _accounts(console)
     actor = accounts['researcher']['account_id']
@@ -39,7 +43,7 @@ def test_export_tree_publishes_with_only_selection_and_entry_labelled(production
     receipt = build.finalize(console, actor_id=actor, **closing(overview))
     attempt = native_attempt(console, sid, receipt['attempt_id'])
     console.execute_source_selection(**scope, attempt=attempt)
-    env = console._envelope(sid)
+    env = console._tree_envelope(sid, envelope=console._envelope(sid))
     assert env['decision_tree_formation']['route'] == 'decision-tree-annotation-v1'
     assert env['decision_tree_formation']['model'] is None
     assert env['decision_tree_formation']['annotation_seal_id'] == receipt['seal_id']
@@ -51,7 +55,7 @@ def test_export_tree_publishes_with_only_selection_and_entry_labelled(production
 def publish_reviewed(console, accounts, sid):
     scope = {'actor_id': accounts['researcher']['account_id'], 'snapshot_id': sid}
     def bind(command_id):
-        graph = annotated_graph_for_review(console._envelope(sid), console.snapshot_objects(sid))
+        graph = annotated_graph_for_review(console._tree_envelope(sid, envelope=console._envelope(sid)), console.snapshot_objects(sid))
         assert graph['unresolved'] == []
         console.update_decision_graph(**command(console, accounts, sid, command_id, graph=graph))
     bind('graph')
@@ -67,7 +71,11 @@ def publish_reviewed(console, accounts, sid):
     assert result['status'] == 'PASS', result
 
 
-def test_pdf_tree_publishes_without_a_model(production_console, tmp_path):
+@pytest.mark.parametrize('storage', ['legacy', 'v1'])
+def test_pdf_tree_publishes_without_a_model(production_console, tmp_path, monkeypatch, storage):
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', storage)
+    if storage == 'v1':
+        monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
     from src.vorming.decision_tree_construction_v1 import proposal_inputs
     from src.vorming.human_annotation_decision_tree_v1 import empty_entries
     import fitz
@@ -106,7 +114,7 @@ def test_pdf_tree_publishes_without_a_model(production_console, tmp_path):
         receipt = build.finalize(console, actor_id=actor, **closing(build.overview(console, **scope)))
         console.execute_source_selection(**scope, attempt=native_attempt(console, sid, receipt['attempt_id']))
     save_and_build(0)
-    env = console._envelope(sid)
+    env = console._tree_envelope(sid, envelope=console._envelope(sid))
     assert env['decision_tree_formation']['model'] is None
     ungrounded = annotated_graph_for_review(env, console.snapshot_objects(sid))
     assert ungrounded['unresolved']
