@@ -78,6 +78,36 @@ def pending(console, *, limit=None, after_snapshot=None):
     return found
 
 
+def retire_open_tree_attempts(console):
+    """Close pre-cutover model commands under their ordinary activation lock."""
+    from src.vorming.human_annotation_decision_tree_v1 import RETIRED
+    from src.vorming.processing_retry_v1 import finish
+
+    with console.workflow_document_store._connect() as con:
+        rows = con.execute("""
+            SELECT d.snapshot_id, a.payload->>'attempt_id' AS attempt_id
+              FROM workflow.processing_attempts a JOIN workflow.documents d USING(snapshot_id)
+             WHERE d.class='beslisboom' AND a.payload->>'state'='running'
+               AND a.payload->>'kind' NOT IN ('human_annotation_source','human_annotation_build')
+            UNION
+            SELECT d.snapshot_id, a->>'attempt_id'
+              FROM workflow.documents d CROSS JOIN LATERAL
+                   jsonb_array_elements(COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'), '[]')) a
+             WHERE d.class='beslisboom' AND d.processing_storage_version IS DISTINCT FROM 1
+               AND a->>'state'='running' AND a->>'kind' NOT IN ('human_annotation_source','human_annotation_build')
+        """).fetchall()
+    for row in rows:
+        sid, aid = row['snapshot_id'], row['attempt_id']
+        with console._reprocessing_transaction(sid):
+            envelope = console._processing_command_envelope(sid, attempt_id=aid)
+            active = next((a for a in envelope.get('processing_attempts', []) if a['attempt_id'] == aid), None)
+            if active and active['state'] == 'running':
+                finish(envelope, aid, state='failed', error=ConsoleError(RETIRED))
+                if active.get('dispatch'):
+                    active['dispatch'].update(state='blocked', token=None, blocked_reason=RETIRED)
+                console._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+
+
 class SourceProcessingDispatcher:
     def __init__(self, console, *, shutdown_grace=5):
         self.console = console
@@ -148,6 +178,7 @@ class SourceProcessingDispatcher:
                 LOG.warning("source_dispatch_scan_failed")
 
     async def start(self):
+        await asyncio.to_thread(retire_open_tree_attempts, self.console)
         await self.scan()
         self.poller = asyncio.create_task(self._poll())
 

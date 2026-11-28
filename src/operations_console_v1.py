@@ -1462,6 +1462,10 @@ class OperationsConsole:
         self._require_role(actor_id, "researcher")
         from src.workflows.operational_document_inputs_v1 import admission_requested
         operational_admission=admission_requested()
+        if class_ == "beslisboom":
+            # Direct API ingestion and the upload form register the same immutable
+            # input. Building a tree begins with an explicit annotation command.
+            _receive_only = True
         if operational_admission and not _receive_only:
             return self._ingest_operational(dict(actor_id=actor_id,ingest_kind=ingest_kind,title=title,version=version,
                 date=date,live_url=live_url,class_=class_,family=family,named_reviewers=named_reviewers,
@@ -1701,6 +1705,9 @@ class OperationsConsole:
             # Durable receipt is a separate command. No extractor/provider has
             # run, and no attempt is implicitly authorized by receiving bytes.
             envelope["received_source"] = {"filename": filename, "bytes": len(data)}
+            if class_ == "beslisboom":
+                from src.vorming.human_annotation_decision_tree_v1 import ROUTE
+                envelope["received_source"]["formation_route"] = ROUTE
             envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
             envelope["processing_blocker"] = PROCESSING_NOT_STARTED
             boundary = _registration_boundary or self._store_write_lock
@@ -2156,6 +2163,8 @@ class OperationsConsole:
             envelope = deepcopy(self._processing_command_envelope(snapshot_id,command_id=command_id))
             from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, envelope)
+            from src.vorming.human_annotation_decision_tree_v1 import require_annotation_command
+            require_annotation_command(envelope)
             duplicate = next((a for a in envelope.get("processing_attempts", []) if a["command_id"] == command_id), None)
             if duplicate is None:
                 if not self._can_resume_formation(snapshot_id):
@@ -2371,6 +2380,8 @@ class OperationsConsole:
             envelope = deepcopy(self._processing_command_envelope(snapshot_id))
             from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, envelope)
+            from src.vorming.human_annotation_decision_tree_v1 import require_annotation_command
+            require_annotation_command(envelope)
             if self.snapshot_is_published(snapshot_id):
                 raise ConsoleError("published_objects_must_not_be_rewritten")
             objects, revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
@@ -2413,6 +2424,8 @@ class OperationsConsole:
         with self._reprocessing_transaction(snapshot_id):
             envelope = deepcopy(self._processing_command_envelope(snapshot_id,attempt_id=_attempt_id))
             account = authorize(self, actor_id, envelope)
+            from src.vorming.human_annotation_decision_tree_v1 import require_annotation_command
+            require_annotation_command(envelope)
         if '_document_inputs' in envelope:
             envelope=self.workflow_document_store.processing_execution_input(envelope)
         if _attempt_id is None and envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:

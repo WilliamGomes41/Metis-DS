@@ -93,6 +93,14 @@ def source_recovery_controls(envelope, processing, account, *, draft=None, error
     from src.settings.insight_v1 import _DIAGNOSIS_UNFINISHED_STATES
     blocked = bool(blocking_code) or processing.get('state') in _DIAGNOSIS_UNFINISHED_STATES
     controls = ''
+    if processing.get('error_code') == 'decision_tree_model_route_retired':
+        controls = '<p>De AI-poging is afgesloten omdat beslisbomen voortaan door mensen worden geannoteerd.</p>'
+        if {'researcher', 'reviewer'} <= roles and envelope.get('review_policy'):
+            controls += ('<form method="post" action="/source-selection/annotation-successor">'
+                '<input type="hidden" name="document" value="' + escape(sid, quote=True) + '">'
+                '<input type="hidden" name="command_id" value="' + uuid.uuid4().hex + '">'
+                '<input type="hidden" name="expected_revision" value="' + escape(str(processing.get('objects_revision') or ''), quote=True) + '">'
+                '<button>Nieuwe werkrevisie voor annotatie maken</button></form>')
     if ('publisher' in roles and (account['account_id'] in envelope.get('named_reviewers', [])
             or account['account_id'] == envelope.get('uploader_account_id'))
             and processing.get('reason_code') == 'processing_attempt_limit_reached'
@@ -654,6 +662,8 @@ def install(app, console, require, page, nav, esc):
                     action += f'<a class="btn-secondary" href="/source-selection?{graph}">Beslisstructuur vastleggen</a>'
                 if not review:
                     review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>'
+            if status.get('error_code') == 'decision_tree_model_route_retired':
+                status = {**status, 'objects_revision': console.objects_revision(sid)}
             problems = source_recovery_controls(document, status, actor)
             problems += ('<section class="formation-room" id="formation-problems">' +
                 _formation_problems_html(report, offset=offset, esc=esc, work_revision_url=work_revision_url) + '</section>')
@@ -835,6 +845,20 @@ def install(app, console, require, page, nav, esc):
         return console.reserve_source_selection(actor_id=actor['account_id'], snapshot_id=sid,
                                                 command_id=command, expected_revision=revision)
 
+    @app.post('/source-selection/annotation-successor')
+    async def annotation_successor(request: Request):
+        actor = require(request)
+        form = await request.form()
+        sid = str(form.get('document') or '')
+        status = console.processing_status(sid, actor_id=actor['account_id'])
+        if status.get('error_code') != 'decision_tree_model_route_retired':
+            raise ConsoleError('decision_review_command_required')
+        receipt = await asyncio.to_thread(console.create_review_successor, actor_id=actor['account_id'],
+            snapshot_id=sid, command_id=str(form.get('command_id') or ''),
+            expected_revision=str(form.get('expected_revision') or ''),
+            reason='Menselijke annotatie na afsluiting van de AI-poging.', receive_only=True)
+        return RedirectResponse('/annotations?' + urlencode({'document': receipt['snapshot_id']}), status_code=303)
+
     @app.post('/source-selection/start')
     async def selection_start(request: Request):
         actor = require(request)
@@ -844,6 +868,8 @@ def install(app, console, require, page, nav, esc):
             attempt, fresh = await asyncio.to_thread(reserve_tree, actor, sid,
                 str(form.get('command_id') or ''), str(form.get('expected_revision') or ''))
         except ConsoleError as exc:
+            if exc.code == 'decision_tree_annotation_required':
+                return RedirectResponse('/annotations?' + urlencode({'document': sid}), status_code=303)
             if exc.code != 'processing_attempt_in_progress':
                 raise
             return RedirectResponse('/source-selection?' + urlencode({'document': sid}), status_code=303)

@@ -21,7 +21,6 @@ from src.vorming.decision_tree_construction_v1 import FORMATION_MODE, HUMAN_CONF
 from src.vorming.decision_tree_experiment_v1 import (
     THRESHOLD_KEYS, compare_to_reference, decide, frozen_input, route_output as candidate_arm,
 )
-from src.vorming.decision_tree_route_v1 import request_proposal
 from src.vorming.decision_tree_proposal_v1 import DecisionTreeProposalError
 from src.vorming.knowledge_materialisation_v1 import MaterialisationError, materialise_knowledge_candidates
 
@@ -245,25 +244,6 @@ def test_result_bundles_and_page_transitions_are_source_checked(tmp_path):
     construction = _construct(frozen, wrong)
     assert construction["result_bundle_issues"]
     assert construction["relation_findings"][0]["codes"] == ["page_transition_unverified"]
-
-
-def test_provider_failure_raises_without_any_other_route(tmp_path):
-    from src.vorming.bounded_model_call_v1 import ModelCallLimits
-    from src.operations_console_v1 import ConsoleError
-    frozen = _tree_pdf(tmp_path)
-
-    def timeout(*_args, **_kwargs):
-        raise ConsoleError("pre_review_llm_processing_timeout")
-    with pytest.raises(ConsoleError) as error:
-        request_proposal(frozen, api_key="k", model="m", limits=ModelCallLimits(total=5), post_json=timeout)
-    assert error.value.code == "pre_review_llm_processing_timeout"
-    with pytest.raises(ConsoleError) as error:
-        request_proposal(frozen, api_key="", model="m", limits=ModelCallLimits(total=5), post_json=timeout)
-    assert error.value.code == "pre_review_llm_api_key_required"
-    refused = {"status": "completed", "output": [{"content": [{"type": "refusal", "refusal": "no"}]}]}
-    with pytest.raises(ConsoleError):
-        request_proposal(frozen, api_key="k", model="m", limits=ModelCallLimits(total=5),
-                         post_json=lambda *a: refused)
 
 
 def test_acceptance_comparison_and_preregistered_decision(tmp_path):

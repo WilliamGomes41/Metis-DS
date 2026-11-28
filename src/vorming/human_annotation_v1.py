@@ -74,6 +74,11 @@ def _locked(console, con, actor_id, snapshot_id):
     envelope = console.workflow_document_store.get_envelope(snapshot_id)
     authorize(console, actor_id, envelope)
     console._require_mutable_working_revision(snapshot_id, current=True)
+    if envelope['class'] == 'beslisboom' and not (envelope.get('received_source') or {}).get('formation_route'):
+        from src.vorming.human_annotation_decision_tree_v1 import RETIRED
+        history = console._processing_command_envelope(snapshot_id)
+        if any(a.get('error_code') == RETIRED for a in history.get('processing_attempts', [])):
+            fail(RETIRED)
     if envelope.get('successor_guard'):
         from src.review.decision_successor_v1 import assert_parent_current
         assert_parent_current(console, envelope)

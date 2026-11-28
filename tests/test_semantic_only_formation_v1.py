@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from src.vorming.decision_tree_route_v1 import EXPORT_PROMPT, PROPOSER_PROMPT, prepare, request_input
+from tests.decision_tree_test_support import historical_proposal_input
 from src.vorming.knowledge_materialisation_v1 import (
     MaterialisationError,
     materialise_knowledge_candidates,
@@ -44,14 +44,36 @@ def _data(payload=EXPORT) -> bytes:
 
 
 def _prepare(proposer, data=None, kind="boom"):
-    return prepare(kind, Path("tree.json"), data=data or _data(), document_id="doc", source_id="src",
-                   title="Valrisico", family="valrisico", class_="beslisboom", formation_context=None,
-                   proposer=proposer)
+    """Historical export contract fixture for the mutation and replay assertions."""
+    from src.integrity_kernel import sha256_bytes
+    from src.vorming import decision_tree_route_v1 as route
+    from src.vorming.decision_graph_v1 import export_branches, source_evidence
+    from src.vorming.decision_tree_construction_v1 import construct
+    from src.vorming.decision_tree_proposal_v1 import validate_proposal, DecisionTreeProposalError
+    data = data or _data()
+    fragments = route.source_fragments(kind, Path("tree.json"), data, document_id="doc", source_id="src")
+    inventory = source_evidence(None, data, kind, fragments, sha256_bytes(data))
+    proposal, model = proposer(dict(kind=kind, fragments=fragments, inventory=inventory))
+    try:
+        validate_proposal(proposal, blocks=selection_source_blocks(fragments), inventory=inventory)
+        construction = construct(proposal, document_id="doc", title="Valrisico", family="valrisico",
+            class_="beslisboom", content_kind=kind, fragments=fragments, inventory=inventory, model=model,
+            proposed_types=route.export_types(proposal, fragments))
+        route.verify_export_preserved(construction, data, fragments)
+    except (MaterialisationError, DecisionTreeProposalError) as exc:
+        raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+    valid = {idx for idx, _ in export_branches(data, fragments)}
+    construction["graph_plan"]["unresolved"].extend(f"invalid_export_branch:{idx}"
+        for idx in range(len(json.loads(data)["branches"])) if idx not in valid)
+    route._export_enrichment(construction, fragments, "doc")
+    spec = construction.pop("spec")
+    spec[route.SPEC_KEY] = {"construction":construction, "formation":{"model":model}}
+    return fragments, spec
 
 
 def _faithful(mutate=None):
     def proposer(frozen):
-        proposal = export_tree_proposal(request_input(frozen)[1])
+        proposal = export_tree_proposal(historical_proposal_input(frozen))
         if mutate:
             mutate(proposal)
         return proposal, "test-model"
@@ -191,7 +213,7 @@ def test_export_roles_may_stay_open_or_follow_the_exported_kind() -> None:
 def test_model_cannot_add_words_reorder_spans_or_fabricate_a_block() -> None:
     def proposer(text_change=None, spans_change=None):
         def propose(frozen):
-            proposal = export_tree_proposal(request_input(frozen)[1])
+            proposal = export_tree_proposal(historical_proposal_input(frozen))
             unit = proposal["units"][1]
             if text_change:
                 unit["quoted_text"] = text_change(unit["quoted_text"])
@@ -224,33 +246,11 @@ def test_model_cannot_add_words_reorder_spans_or_fabricate_a_block() -> None:
                                          document_id="doc", fragments=fragments)
 
 
-def test_failing_or_missing_model_never_falls_back_for_exports() -> None:
-    def failing(_frozen):
-        raise ConsoleError("pre_review_llm_timeout")
-    with pytest.raises(ConsoleError) as error:
-        _prepare(failing)
-    assert error.value.code == "pre_review_llm_timeout"
-    with pytest.raises(ConsoleError) as unbound:
-        _prepare(None)
-    assert unbound.value.code == "pre_review_llm_decision_tree_proposer_unbound"
-
-
-def test_export_request_names_export_ids_while_pdf_request_and_recorded_evidence_stay_unchanged() -> None:
-    from src.review.beslisboom_path_v1 import extract_boom_fragments
-    from src.vorming.decision_bundles_v1 import split_bundles
-    from src.vorming.decision_graph_v1 import source_evidence
-    data = _data()
-    fragments = split_bundles(extract_boom_fragments(data, document_id="doc", source_id="src"))
-    inventory = source_evidence(None, data, "boom", fragments, "a" * 64)
-    recorded = deepcopy(inventory)
-    prompt, source = request_input({"kind": "boom", "fragments": fragments, "inventory": inventory})
-    assert prompt == PROPOSER_PROMPT + EXPORT_PROMPT
-    assert inventory == recorded
-    named = {item["record"]["export_id"] for item in source["evidence_items"].values() if item["kind"] == "text"}
-    assert named == {str(f["boom_id"]) for f in fragments}
-    pdf_prompt, pdf_source = request_input({"kind": "pdf", "fragments": fragments, "inventory": recorded})
-    assert pdf_prompt == PROPOSER_PROMPT
-    assert all("record" not in item for item in pdf_source["evidence_items"].values() if item["kind"] == "text")
+def test_decision_tree_model_is_removed_from_production():
+    from src.vorming import decision_tree_route_v1 as route
+    for name in ("llm_proposer", "prepare", "request_proposal", "request_input", "PROPOSER_PROMPT", "EXPORT_PROMPT"):
+        assert not hasattr(route, name)
+    assert all("_decision_tree_proposer" not in p.read_text() for p in (ROOT / "src").rglob("*.py"))
 
 
 def test_no_deterministic_formation_route_or_its_configuration_remains() -> None:
